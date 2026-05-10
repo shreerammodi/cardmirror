@@ -72,8 +72,10 @@ export class NavigationPanel {
   // ---- Selection state (multi-select) ----
   private selectedIds: Set<string> = new Set();
   private selectionAnchorId: string | null = null;
-  /** Type of currently selected entries; selection is type-locked. */
-  private selectionType: string | null = null;
+  /** Outline level of currently selected entries; selection is
+   *  level-locked (so tags + analytics — both level 4 — can be
+   *  selected together, but a tag + a block cannot). */
+  private selectionLevel: number | null = null;
   /** When the user plain-clicks on an entry that's part of a multi-
    *  selection, defer the "replace selection with just this entry"
    *  action to pointerup-without-drag (so the drag uses the multi).
@@ -415,7 +417,7 @@ export class NavigationPanel {
     const onlyMember = wasSize === 1 && this.selectedIds.has(entry.id);
     this.selectedIds = new Set([entry.id]);
     this.selectionAnchorId = entry.id;
-    this.selectionType = entry.type;
+    this.selectionLevel = entry.level;
     if (!onlyMember) this.applySelectionClasses();
   }
 
@@ -423,7 +425,7 @@ export class NavigationPanel {
     if (this.selectedIds.size === 0 && this.selectionAnchorId === null) return;
     this.selectedIds.clear();
     this.selectionAnchorId = null;
-    this.selectionType = null;
+    this.selectionLevel = null;
     this.applySelectionClasses();
   }
 
@@ -433,7 +435,7 @@ export class NavigationPanel {
       this.selectSingle(entry);
       return;
     }
-    if (!this.selectionAnchorId || !this.selectionType) {
+    if (!this.selectionAnchorId || this.selectionLevel == null) {
       this.selectSingle(entry);
       return;
     }
@@ -447,12 +449,14 @@ export class NavigationPanel {
     const lo = Math.min(aIdx, bIdx);
     const hi = Math.max(aIdx, bIdx);
     const next = new Set<string>();
-    // Filter the range to the anchor's type — per the §4 / Phase 2
-    // rule, mixed-type ranges quietly resolve to the type that
-    // matches the existing anchor.
+    // Filter the range to the anchor's outline level. Mixed-level
+    // ranges quietly resolve to the level-consistent subset (e.g. a
+    // shift-click range over a hat keeps just the cards on either
+    // side, dropping the hat). Same level = OK regardless of type:
+    // a tag and an analytic at level 4 group together.
     for (let i = lo; i <= hi; i++) {
       const e = all[i]!;
-      if (e.id != null && e.type === this.selectionType) next.add(e.id);
+      if (e.id != null && e.level === this.selectionLevel) next.add(e.id);
     }
     this.selectedIds = next;
     // Anchor stays where it was so subsequent shift-clicks keep
@@ -462,10 +466,10 @@ export class NavigationPanel {
 
   private handleCtrlClick(entry: HeadingEntry): void {
     if (entry.id == null) return;
-    // Empty selection or type mismatch → replace with just this entry.
+    // Empty selection or level mismatch → replace with just this entry.
     if (
       this.selectedIds.size === 0 ||
-      (this.selectionType !== null && this.selectionType !== entry.type)
+      (this.selectionLevel !== null && this.selectionLevel !== entry.level)
     ) {
       this.selectSingle(entry);
       return;
@@ -475,7 +479,7 @@ export class NavigationPanel {
       this.selectedIds.delete(entry.id);
       if (this.selectedIds.size === 0) {
         this.selectionAnchorId = null;
-        this.selectionType = null;
+        this.selectionLevel = null;
       } else if (this.selectionAnchorId === entry.id) {
         // Anchor was the deselected entry; pick another to be the new
         // anchor (the next remaining one).
@@ -484,7 +488,7 @@ export class NavigationPanel {
     } else {
       this.selectedIds.add(entry.id);
       this.selectionAnchorId = entry.id;
-      this.selectionType = entry.type;
+      this.selectionLevel = entry.level;
     }
     this.applySelectionClasses();
   }
@@ -869,9 +873,17 @@ export class NavigationPanel {
       const label = items[0]!.label.trim() || `(empty ${items[0]!.type})`;
       pill.textContent = label.length > 40 ? label.slice(0, 38) + '…' : label;
     } else {
-      const t = items[0]!.type;
-      const typeLabel = TYPE_LABEL[t] ?? t;
-      pill.textContent = `${items.length} ${typeLabel}s`;
+      // Use a uniform-type label when all items share a type; fall
+      // back to a generic count when types are mixed (e.g. a level-4
+      // selection mixing tags and analytics).
+      const allSameType = items.every((i) => i.type === items[0]!.type);
+      if (allSameType) {
+        const t = items[0]!.type;
+        const typeLabel = TYPE_LABEL[t] ?? t;
+        pill.textContent = `${items.length} ${typeLabel}s`;
+      } else {
+        pill.textContent = `${items.length} headings`;
+      }
     }
     document.body.appendChild(pill);
     this.pickupPill = pill;
