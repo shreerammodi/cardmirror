@@ -247,6 +247,46 @@ describe('backspaceAtTagStart', () => {
     backspaceAtTagStart(state, () => { handled = true; });
     expect(handled).toBe(false);
   });
+
+  it('deletes an empty tag-only card on Backspace (no body)', () => {
+    const doc = makeDoc([
+      paragraph('before'),
+      cardTagOnly(''),
+    ]);
+    const state = stateWithCursor(doc, findTagStart(doc));
+    const next = apply(state, backspaceAtTagStart);
+    expect(next).not.toBe(null);
+    expect(next!.doc.childCount).toBe(1);
+    expect(next!.doc.child(0).type.name).toBe('paragraph');
+  });
+
+  it('does NOT delete an empty tag when its card has a body', () => {
+    const doc = makeDoc([
+      cardWith(
+        tag(''),
+        schema.nodes['card_body']!.create(null, schema.text('body')),
+      ),
+    ]);
+    const state = stateWithCursor(doc, findTagStart(doc));
+    const next = apply(state, backspaceAtTagStart);
+    // No prev paragraph, doesn't auto-delete (childCount === 2). Falls
+    // through; returns false to let default backspace handle.
+    expect(next).toBe(null);
+    // Card is unchanged.
+    expect(state.doc.child(0).childCount).toBe(2);
+  });
+
+  it('replaces empty tag-only card with paragraph when it is the only doc child', () => {
+    const doc = makeDoc([cardTagOnly('')]);
+    const state = stateWithCursor(doc, findTagStart(doc));
+    const next = apply(state, backspaceAtTagStart);
+    expect(next).not.toBe(null);
+    // Doc must have a textblock for cursor to land — we replace with
+    // an empty paragraph rather than leave the doc with zero children.
+    expect(next!.doc.childCount).toBe(1);
+    expect(next!.doc.child(0).type.name).toBe('paragraph');
+    expect(next!.doc.child(0).content.size).toBe(0);
+  });
 });
 
 // ----- Delete at end of tag -----
@@ -313,6 +353,36 @@ describe('deleteAtTagEnd', () => {
     const state = stateWithCursor(doc, findTagEnd(doc));
     // The next paragraph after end-of-tag is the card_body — not a tag.
     expect(apply(state, deleteAtTagEnd)).toBe(null);
+  });
+
+  it('deletes an empty tag-only card on Delete (no body)', () => {
+    const doc = makeDoc([
+      cardTagOnly(''),
+      paragraph('after'),
+    ]);
+    const state = stateWithCursor(doc, findTagEnd(doc));
+    const next = apply(state, deleteAtTagEnd);
+    expect(next).not.toBe(null);
+    expect(next!.doc.childCount).toBe(1);
+    expect(next!.doc.child(0).type.name).toBe('paragraph');
+  });
+
+  it('does NOT delete an empty tag when its card has a body (Delete)', () => {
+    const doc = makeDoc([
+      cardWith(
+        tag(''),
+        schema.nodes['card_body']!.create(null, schema.text('body')),
+      ),
+    ]);
+    const state = stateWithCursor(doc, findTagEnd(doc));
+    // Container has 2 children, so the empty-head shortcut doesn't
+    // fire. The head is also not the last child (body is), so the
+    // forward-delete merge prohibition kicks in.
+    const next = apply(state, deleteAtTagEnd);
+    // Returned true (handled / prohibited) but no dispatch — so apply
+    // returns null. State.doc unchanged.
+    expect(next).toBe(null);
+    expect(state.doc.child(0).childCount).toBe(2);
   });
 });
 

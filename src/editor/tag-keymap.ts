@@ -26,7 +26,7 @@
  * overrides needed.
  */
 
-import { TextSelection, type Command, type EditorState, type Transaction } from 'prosemirror-state';
+import { Selection, TextSelection, type Command, type EditorState, type Transaction } from 'prosemirror-state';
 import { Fragment, type Node as PMNode } from 'prosemirror-model';
 import { schema } from '../schema/index.js';
 import { newHeadingId } from '../schema/ids.js';
@@ -255,20 +255,66 @@ function mergeAdjacentTagContainers(
 }
 
 /**
- * Backspace at the start of a tag/analytic. Three cases:
+ * Shared shortcut for both Backspace and Delete: if the head is empty
+ * AND it's the only child of its card/analytic_unit (no body, no cite,
+ * no undertag — nothing else to preserve), delete the whole container.
+ * Returns true if the command was handled (or would be, when dispatch
+ * is null), false otherwise. Caller is expected to fall through to its
+ * own logic when this returns false.
+ *
+ * If deleting would leave the doc with no children at all, replace the
+ * container with an empty paragraph instead so the editor always has a
+ * valid cursor target.
+ */
+function tryDeleteEmptyHeadContainer(
+  state: EditorState,
+  ctx: TagContext,
+  dispatch: ((tr: Transaction) => void) | undefined,
+): boolean {
+  if (ctx.head.content.size !== 0) return false;
+  if (ctx.container.childCount !== 1) return false;
+
+  if (!dispatch) return true;
+
+  const onlyChildOfDoc = state.doc.childCount === 1;
+  let tr = state.tr;
+  if (onlyChildOfDoc) {
+    // Replace with an empty paragraph so we always have a textblock
+    // for the cursor to land in.
+    const para = schema.nodes['paragraph']!.createAndFill();
+    if (!para) return false;
+    tr = tr.replaceWith(ctx.containerFrom, ctx.containerTo, para);
+    tr = tr.setSelection(TextSelection.create(tr.doc, ctx.containerFrom + 1));
+  } else {
+    tr = tr.delete(ctx.containerFrom, ctx.containerTo);
+    // Land cursor at the position the container used to occupy; PM's
+    // Selection.near picks the nearest valid text position (start of
+    // next sibling, end of prev sibling, etc.).
+    const pos = Math.min(ctx.containerFrom, tr.doc.content.size);
+    tr = tr.setSelection(Selection.near(tr.doc.resolve(pos)));
+  }
+  dispatch(tr.scrollIntoView());
+  return true;
+}
+
+/**
+ * Backspace at the start of a tag/analytic. Cases:
+ *   - Empty head in a head-only container — delete the whole container.
+ *   - Previous paragraph is blank (whitespace-only) — delete it.
+ *     If it's the lone head of a previous container, drop the whole
+ *     container so we don't leave an orphan.
  *   - Previous paragraph is also a tag/analytic (head of a head-only
  *     previous container) — merge the two containers via
  *     `mergeAdjacentTagContainers`. Card body of the next container
  *     is preserved on the surviving (prev) container.
- *   - Previous paragraph is blank (whitespace-only) — delete it.
- *     If it's the lone head of a previous container, drop the whole
- *     container so we don't leave an orphan.
  *   - Anything else — prohibit (swallow the event).
  */
 export const backspaceAtTagStart: Command = (state, dispatch) => {
   const ctx = getTagContext(state);
   if (!ctx) return false;
   if (ctx.cursorOffset !== 0) return false;
+
+  if (tryDeleteEmptyHeadContainer(state, ctx, dispatch)) return true;
 
   const prev = findPrevParagraph(state.doc, ctx.containerFrom);
   if (!prev) return false; // no previous paragraph — let default handle (no-op typically)
@@ -314,15 +360,19 @@ export const backspaceAtTagStart: Command = (state, dispatch) => {
 };
 
 /**
- * Forward Delete at the end of a tag/analytic. Permitted only when
- * the next paragraph is also a tag/analytic; merges the two heads
- * into one and migrates the next container's body/cite/undertags
- * into the surviving container. Otherwise swallows the event.
+ * Forward Delete at the end of a tag/analytic. Cases:
+ *   - Empty head in a head-only container — delete the whole container.
+ *   - Next paragraph is also a tag/analytic — merge the two heads and
+ *     migrate the next container's body/cite/undertags into the
+ *     surviving container.
+ *   - Anything else — prohibit (swallow the event).
  */
 export const deleteAtTagEnd: Command = (state, dispatch) => {
   const ctx = getTagContext(state);
   if (!ctx) return false;
   if (ctx.cursorOffset !== ctx.head.content.size) return false;
+
+  if (tryDeleteEmptyHeadContainer(state, ctx, dispatch)) return true;
 
   // The head must be the LAST child of its container; if there's a
   // sibling after it (undertag / cite / body), forward-delete would
