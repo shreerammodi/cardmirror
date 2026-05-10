@@ -511,6 +511,20 @@ export class NavigationPanel {
   private jumpTo(entry: HeadingEntry): void {
     if (!this.view) return;
 
+    // Place the cursor at the start of the heading's content. entry.pos
+    // is the position right before the heading node; +1 steps inside
+    // its content. Wrap in try/catch in case the doc has shifted out
+    // from under the entry (e.g., after rapid edits).
+    try {
+      const tr = this.view.state.tr.setSelection(
+        TextSelection.create(this.view.state.doc, entry.pos + 1),
+      );
+      this.view.dispatch(tr);
+      this.view.focus();
+    } catch {
+      // Fall through to scroll-only behavior if the position is stale.
+    }
+
     if (entry.id) {
       const target = this.view.dom.querySelector<HTMLElement>(`[data-id="${cssEscape(entry.id)}"]`);
       if (target) {
@@ -520,7 +534,7 @@ export class NavigationPanel {
     }
 
     // Fallback: resolve the doc position and scroll the editor's
-    // closest containing element into view (no selection change).
+    // closest containing element into view.
     const domAtPos = this.view.domAtPos(entry.pos);
     let el: Node | null = domAtPos.node;
     while (el && el.nodeType !== Node.ELEMENT_NODE) el = el.parentNode;
