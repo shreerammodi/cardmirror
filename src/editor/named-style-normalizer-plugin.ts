@@ -1,29 +1,28 @@
 /**
  * Named-style normalizer plugin.
  *
- * Enforces the invariant that underline representation tracks the
- * containing textblock's role:
+ * Two invariants on every transaction (and at import time via the
+ * pure helper below):
  *
- *   - Body-like textblocks (`paragraph`, `card_body`, `cite_paragraph`)
- *     → use `underline_mark` (the named "Underline" character style).
- *     `underline_direct` here would mean direct-formatting underline
- *     in a body, which collides with Verbatim's StyleUnderline
- *     convention. We auto-promote.
+ * 1. **Body vs structural underline representation.**
+ *      - Body-like textblocks (`paragraph`, `card_body`,
+ *        `cite_paragraph`) use `underline_mark` (the named
+ *        "Underline" character style).
+ *      - Structural textblocks (`tag`, `analytic`, `pocket`,
+ *        `hat`, `block`, `undertag`) use `underline_direct` (plain
+ *        `<w:u/>`, no rStyle on export).
+ *    Visually identical; the distinction matters for round-trip
+ *    and for Verbatim's semantic classification.
  *
- *   - Structural textblocks (`tag`, `analytic`, `pocket`, `hat`,
- *     `block`, `undertag`) → use `underline_direct`. `underline_mark`
- *     here would semantically misclassify the heading as "underlined
- *     evidence." We auto-demote.
- *
- * The two marks render visually identical (both produce an underline);
- * the difference is round-trip: `underline_mark` exports as `rStyle=
- * "StyleUnderline"` + direct `<w:u/>`, while `underline_direct`
- * exports as just `<w:u/>` with no rStyle.
- *
- * The flip is unconditional on every transaction — paste, import via
- * editor edits, and any future command that creates these marks all
- * end up in the canonical state without each path needing its own
- * policy logic.
+ * 2. **Cite / emphasis precedence over underline (in body
+ *    contexts).** A character carrying `cite_mark` or `emphasis_mark`
+ *    plus an underline mark gets the underline mark stripped — the
+ *    cite / emphasis style governs the visual underline (or lack of
+ *    it). Active F8 / F9 / F10 commands use `tr.addMark`, which
+ *    auto-strips via schema `excludes`, so this normalization is
+ *    really a safety net for passive coexistence (legacy imports,
+ *    pastes, and any future code path that doesn't go through a
+ *    policy command).
  */
 
 import { Plugin } from 'prosemirror-state';
@@ -42,6 +41,8 @@ export const namedStyleNormalizerPlugin: Plugin = new Plugin({
 
     const directMark = schema.marks['underline_direct']!;
     const namedMark = schema.marks['underline_mark']!;
+    const citeMark = schema.marks['cite_mark']!;
+    const emphasisMark = schema.marks['emphasis_mark']!;
     let tr: Transaction | null = null;
 
     newState.doc.descendants((node, pos, parent) => {
@@ -49,11 +50,33 @@ export const namedStyleNormalizerPlugin: Plugin = new Plugin({
       const parentName = parent.type.name;
       const hasDirect = node.marks.some((m) => m.type === directMark);
       const hasNamed = node.marks.some((m) => m.type === namedMark);
-      if (BODY_TEXTBLOCKS.has(parentName) && hasDirect) {
-        if (!tr) tr = newState.tr;
-        tr.removeMark(pos, pos + node.nodeSize, directMark);
-        if (!hasNamed) tr.addMark(pos, pos + node.nodeSize, namedMark.create());
-      } else if (STRUCTURAL_TEXTBLOCKS.has(parentName) && hasNamed) {
+      const hasCiteOrEmph = node.marks.some(
+        (m) => m.type === citeMark || m.type === emphasisMark,
+      );
+      const isBody = BODY_TEXTBLOCKS.has(parentName);
+      const isStructural = STRUCTURAL_TEXTBLOCKS.has(parentName);
+
+      if (isBody) {
+        if (hasCiteOrEmph) {
+          // Cite or emphasis present → strip any underline marks
+          // (cite/emphasis wins over underline for body text).
+          if (hasNamed) {
+            if (!tr) tr = newState.tr;
+            tr.removeMark(pos, pos + node.nodeSize, namedMark);
+          }
+          if (hasDirect) {
+            if (!tr) tr = newState.tr;
+            tr.removeMark(pos, pos + node.nodeSize, directMark);
+          }
+        } else if (hasDirect) {
+          // No conflict — flip direct → named (body uses the named
+          // style).
+          if (!tr) tr = newState.tr;
+          tr.removeMark(pos, pos + node.nodeSize, directMark);
+          if (!hasNamed) tr.addMark(pos, pos + node.nodeSize, namedMark.create());
+        }
+      } else if (isStructural && hasNamed) {
+        // Structural uses direct underline; flip named → direct.
         if (!tr) tr = newState.tr;
         tr.removeMark(pos, pos + node.nodeSize, namedMark);
         if (!hasDirect) tr.addMark(pos, pos + node.nodeSize, directMark.create());
@@ -82,6 +105,8 @@ export function isStructuralTextblock(node: PMNode): boolean {
 export function normalizeUnderlineMarks(doc: PMNode): PMNode {
   const namedMark = schema.marks['underline_mark']!;
   const directMark = schema.marks['underline_direct']!;
+  const citeMark = schema.marks['cite_mark']!;
+  const emphasisMark = schema.marks['emphasis_mark']!;
 
   function walk(node: PMNode): PMNode {
     if (node.isText) return node;
@@ -100,10 +125,21 @@ export function normalizeUnderlineMarks(doc: PMNode): PMNode {
         let marks = child.marks;
         const hasDirect = marks.some((m) => m.type === directMark);
         const hasNamed = marks.some((m) => m.type === namedMark);
-        if (isBody && hasDirect) {
-          marks = marks.filter((m) => m.type !== directMark);
-          if (!hasNamed) marks = namedMark.create().addToSet(marks);
-          changed = true;
+        const hasCiteOrEmph = marks.some(
+          (m) => m.type === citeMark || m.type === emphasisMark,
+        );
+        if (isBody) {
+          if (hasCiteOrEmph && (hasDirect || hasNamed)) {
+            // Cite / emphasis wins; drop both underline variants.
+            marks = marks.filter(
+              (m) => m.type !== directMark && m.type !== namedMark,
+            );
+            changed = true;
+          } else if (hasDirect) {
+            marks = marks.filter((m) => m.type !== directMark);
+            if (!hasNamed) marks = namedMark.create().addToSet(marks);
+            changed = true;
+          }
         } else if (isStructural && hasNamed) {
           marks = marks.filter((m) => m.type !== namedMark);
           if (!hasDirect) marks = directMark.create().addToSet(marks);

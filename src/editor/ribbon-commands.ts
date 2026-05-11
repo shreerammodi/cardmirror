@@ -521,10 +521,6 @@ export function applyUnderline(): Command {
     const { from, to, empty } = state.selection;
     const namedMark = schema.marks['underline_mark']!;
     const directMark = schema.marks['underline_direct']!;
-    const conflictTypes = new Set([
-      schema.marks['cite_mark']!.name,
-      schema.marks['emphasis_mark']!.name,
-    ]);
 
     let runStart = from;
     let runEnd = to;
@@ -581,9 +577,15 @@ export function applyUnderline(): Command {
       tr.removeMark(runStart, runEnd, namedMark);
       tr.removeMark(runStart, runEnd, directMark);
     } else {
-      // Toggle on: add the appropriate mark per parent textblock,
-      // skipping characters that already have one of the underline
-      // marks. Walk by textblock so we know which variant to use.
+      // Toggle on: add the appropriate mark per parent textblock.
+      // For body textblocks `underline_mark` carries `excludes:
+      // 'cite_mark underline_mark emphasis_mark'`, so `tr.addMark`
+      // auto-strips conflicting named-style marks in the range. For
+      // structural textblocks `underline_direct` has no excludes
+      // (cite/emphasis shouldn't appear there anyway). We also strip
+      // the *wrong-context* underline variant explicitly so mixed
+      // ranges (e.g., text that imported as underline_mark inside a
+      // tag) end up canonical.
       const segments: { from: number; to: number; structural: boolean }[] = [];
       state.doc.nodesBetween(runStart, runEnd, (node, pos) => {
         if (!node.isTextblock) return true;
@@ -602,17 +604,6 @@ export function applyUnderline(): Command {
       });
       for (const seg of segments) {
         const markType = seg.structural ? directMark : namedMark;
-        if (!seg.structural) {
-          // Body: strip the conflicting named-style marks (cite,
-          // emphasis) so the policy "at most one of cite / underline
-          // / emphasis on a body character" stays true.
-          for (const t of conflictTypes) {
-            tr.removeMark(seg.from, seg.to, schema.marks[t]!);
-          }
-        }
-        // Strip whichever underline variant the wrong-context one is,
-        // then add the right one — ensures even mixed ranges end up
-        // with the correct mark for their parent.
         const otherMark = seg.structural ? namedMark : directMark;
         tr.removeMark(seg.from, seg.to, otherMark);
         tr.addMark(seg.from, seg.to, markType.create());

@@ -155,3 +155,102 @@ describe('cite classifier plugin', () => {
     expect(once.eq(twice)).toBe(true);
   });
 });
+
+// ---- named-style normalizer ----
+
+import { normalizeUnderlineMarks } from '../../src/editor/named-style-normalizer-plugin.js';
+
+function cited2(text: string) {
+  return schema.text(text, [schema.marks['cite_mark']!.create()]);
+}
+function underlined(text: string) {
+  return schema.text(text, [schema.marks['underline_mark']!.create()]);
+}
+function directUnderlined(text: string) {
+  return schema.text(text, [schema.marks['underline_direct']!.create()]);
+}
+function citedAndUnderlined(text: string) {
+  return schema.text(text, [
+    schema.marks['cite_mark']!.create(),
+    schema.marks['underline_mark']!.create(),
+  ]);
+}
+
+describe('named-style normalizer', () => {
+  it('promotes underline_direct → underline_mark in a body textblock', () => {
+    const doc = makeDoc(
+      cardWith(tagNode('T'), bodyOf(directUnderlined('hello'))),
+    );
+    const result = normalizeUnderlineMarks(doc);
+    const body = result.firstChild!.child(1);
+    expect(
+      body.firstChild!.marks.some((m) => m.type.name === 'underline_mark'),
+    ).toBe(true);
+    expect(
+      body.firstChild!.marks.some((m) => m.type.name === 'underline_direct'),
+    ).toBe(false);
+  });
+
+  it('demotes underline_mark → underline_direct in a structural textblock', () => {
+    const tag = schema.nodes['tag']!.create({ id: newHeadingId() }, underlined('tag text'));
+    const doc = makeDoc(schema.nodes['card']!.createChecked(null, [tag]));
+    const result = normalizeUnderlineMarks(doc);
+    const tagOut = result.firstChild!.firstChild!;
+    expect(
+      tagOut.firstChild!.marks.some((m) => m.type.name === 'underline_direct'),
+    ).toBe(true);
+    expect(
+      tagOut.firstChild!.marks.some((m) => m.type.name === 'underline_mark'),
+    ).toBe(false);
+  });
+
+  it('cite_mark + underline_mark in body: cite wins, underline dropped', () => {
+    const doc = makeDoc(
+      cardWith(tagNode('T'), bodyOf(citedAndUnderlined('Author 24'))),
+    );
+    const result = normalizeUnderlineMarks(doc);
+    const body = result.firstChild!.child(1);
+    const text = body.firstChild!;
+    expect(text.marks.some((m) => m.type.name === 'cite_mark')).toBe(true);
+    expect(text.marks.some((m) => m.type.name === 'underline_mark')).toBe(false);
+    expect(text.marks.some((m) => m.type.name === 'underline_direct')).toBe(false);
+  });
+
+  it('cite_mark + underline_direct in body: cite wins, direct underline dropped', () => {
+    const mixed = schema.text('mixed', [
+      schema.marks['cite_mark']!.create(),
+      schema.marks['underline_direct']!.create(),
+    ]);
+    const doc = makeDoc(cardWith(tagNode('T'), bodyOf(mixed)));
+    const result = normalizeUnderlineMarks(doc);
+    const text = result.firstChild!.child(1).firstChild!;
+    expect(text.marks.some((m) => m.type.name === 'cite_mark')).toBe(true);
+    expect(text.marks.some((m) => m.type.name === 'underline_direct')).toBe(false);
+  });
+});
+
+// ---- schema excludes (mutual exclusion on add) ----
+
+describe('mutual exclusion of named-style marks via schema excludes', () => {
+  it('adding underline_mark via tr.addMark strips cite_mark in the same range', async () => {
+    const { EditorState: ES } = await import('prosemirror-state');
+    const doc = makeDoc(cardWith(tagNode('T'), bodyOf(cited2('Author 24'))));
+    const state = ES.create({ doc });
+    const start = -1;
+    let from = -1;
+    let to = -1;
+    state.doc.descendants((n, p) => {
+      if (n.isText && n.text === 'Author 24') {
+        from = p;
+        to = p + n.nodeSize;
+      }
+    });
+    void start;
+    const tr = state.tr.addMark(from, to, schema.marks['underline_mark']!.create());
+    const next = state.apply(tr);
+    const text = next.doc.firstChild!.child(1).firstChild!;
+    expect(text.marks.some((m) => m.type.name === 'underline_mark')).toBe(true);
+    // cite stripped because underline_mark.excludes includes cite_mark.
+    expect(text.marks.some((m) => m.type.name === 'cite_mark')).toBe(false);
+  });
+});

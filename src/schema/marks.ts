@@ -35,16 +35,21 @@ export const marks: { [name: string]: MarkSpec } = {
 
   cite_mark: {
     ...namedStyleMark(),
-    // Mutually exclusive with the other named-style "evidence" marks
+    // The three named-style "evidence" marks are mutually exclusive
     // — at most one of {cite, underline, emphasis} on any character.
-    excludes: 'underline_mark emphasis_mark',
+    // Symmetric so that whichever mark is being added via tr.addMark
+    // strips the others automatically. For passive coexistence
+    // (legacy import data carrying overlapping marks), the named-
+    // style normalizer plugin enforces cite/emphasis precedence over
+    // underline.
+    excludes: 'cite_mark underline_mark emphasis_mark',
     parseDOM: [{ tag: 'span.pmd-cite' }],
     toDOM: () => ['span', { class: 'pmd-cite' }, 0],
   },
 
   underline_mark: {
     ...namedStyleMark(),
-    excludes: 'cite_mark emphasis_mark',
+    excludes: 'cite_mark underline_mark emphasis_mark',
     parseDOM: [{ tag: 'span.pmd-underline' }],
     toDOM: () => ['span', { class: 'pmd-underline' }, 0],
   },
@@ -66,7 +71,7 @@ export const marks: { [name: string]: MarkSpec } = {
 
   emphasis_mark: {
     ...namedStyleMark(),
-    excludes: 'cite_mark underline_mark',
+    excludes: 'cite_mark underline_mark emphasis_mark',
     parseDOM: [{ tag: 'span.pmd-emphasis' }],
     toDOM: () => ['span', { class: 'pmd-emphasis' }, 0],
   },

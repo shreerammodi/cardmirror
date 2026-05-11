@@ -636,12 +636,40 @@ future "Keyboard shortcuts" settings UI. `DEFAULT_RIBBON_KEYS` now
 admits `string | string[]` per command, and `buildRibbonKeymap`
 binds every key in the array to the command.
 
-Schema-level `excludes` between the three named-style marks was
-considered and rejected: it breaks importing legacy Verbatim docs
-that legitimately carry both rStyle="StyleUnderline" and
-rStyle="Cite" on the same run (`createChecked` would reject), and
-the command-level strip is precise (only fires on user action) and
-audit-friendly. The runtime invariant is policy, not schema.
+## 2026-05-10: Mutual exclusion of cite / underline / emphasis via schema `excludes`
+
+(Supersedes the earlier rejection of schema-level excludes.)
+
+The three named-style "evidence" marks — `cite_mark`,
+`underline_mark`, `emphasis_mark` — are now symmetrically mutually
+exclusive at the schema level: each mark's `excludes` lists all
+three (including itself, which is a harmless no-op since
+`Mark.addToSet` short-circuits on `this.eq(other)`).
+
+The earlier rejection rationale was wrong. `createChecked` and
+`schema.text` do *not* validate `excludes`; that property only
+affects `Mark.addToSet`, `tr.addMark`, and `toggleMark`. So
+importing legacy data with overlapping marks works regardless —
+schema construction just stores whatever marks are passed in.
+
+Effects of the change:
+
+- **Active commands** (`tr.addMark` for the chosen mark) auto-strip
+  the other two in the affected range. F8 / F9 / future F10 don't
+  need their own `removeMark` calls for the other named-style marks.
+- **Passive coexistence** (somehow both marks end up on the same
+  character without going through a policy command — e.g., legacy
+  Verbatim docs that paired rStyle="Cite" with direct `<w:u/>`)
+  isn't resolved by the schema alone. The named-style-normalizer
+  plugin gained a precedence rule: in a body textblock, if a
+  character carries `cite_mark` or `emphasis_mark` plus any
+  underline mark, drop the underline mark — cite / emphasis wins,
+  the visual underline (if any) is governed by the cite-style /
+  emphasis-style display settings rather than a separate mark.
+- **F9 → underline on cite-marked text** still works: `tr.addMark`
+  with `underline_mark` strips cite because `underline_mark` lists
+  `cite_mark` in its excludes too. The active-command-wins
+  semantics of `Mark.addToSet`.
 
 The undertag analog of the same question is also resolved without
 new code:
