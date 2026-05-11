@@ -158,13 +158,16 @@ body {
 }
 
 /* Formatting panel — Verbatim-style apply-paragraph-style buttons.
-   Two-row grid: top row Pocket/Hat/Block (outline-level headings),
-   bottom row Tag/Analytic (leaf-level items). Sits to the right of
-   the Open/Save stack, separated by a thin divider. */
+   3×2 grid laid out column-major (grid-auto-flow: column), so the HTML
+   order Pocket / Tag / Hat / Block / Analytic / Undertag renders as:
+     Pocket  Hat    Analytic
+     Tag     Block  Undertag
+   Sits to the right of the Open/Save stack, separated by a divider. */
 .ribbon-formatting-panel {
   display: grid;
   grid-template-columns: repeat(3, auto);
   grid-template-rows: repeat(2, auto);
+  grid-auto-flow: column;
   gap: 2px 3px;
   align-content: center;
   padding-left: 0.5rem;
@@ -208,6 +211,25 @@ body {
 
 #ribbon .ribbon-formatting-panel.style-preview .formatting-panel-analytic {
   color: var(--pmd-color-analytic);
+}
+
+/* Undertag — color always follows --pmd-color-undertag; italic and
+   bold are gated on the same flags the editor's undertag rendering
+   uses (mirrored onto documentElement by applyDisplayTypography).
+   Default to non-bold/non-italic so the rule we add below is what
+   actually toggles them on. */
+#ribbon .ribbon-formatting-panel.style-preview .formatting-panel-undertag {
+  color: var(--pmd-color-undertag);
+  font-weight: normal;
+  font-style: normal;
+}
+
+.pmd-undertag-italic #ribbon .ribbon-formatting-panel.style-preview .formatting-panel-undertag {
+  font-style: italic;
+}
+
+.pmd-undertag-bold #ribbon .ribbon-formatting-panel.style-preview .formatting-panel-undertag {
+  font-weight: bold;
 }
 
 #app {

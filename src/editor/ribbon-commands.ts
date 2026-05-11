@@ -204,6 +204,89 @@ export function setAnalytic(): Command {
   };
 }
 
+/**
+ * Mod-F8 — convert the current paragraph to an undertag.
+ *
+ * Undertag is a body-level type (no outline level, no id) that's
+ * valid both at doc root and inside card / analytic_unit. So unlike
+ * setTag/setAnalytic, cursors inside card_body / cite_paragraph
+ * stay in place: just the node type changes, the card structure is
+ * preserved. Cursors at a tag or analytic anchor still dissolve
+ * the surrounding container, since [undertag, …] isn't valid as
+ * card / analytic_unit content.
+ */
+export function setUndertag(): Command {
+  return (state, dispatch) => {
+    if (!state.selection.empty) {
+      return applyStructuralToSelection(state, dispatch, { mode: 'undertag' });
+    }
+    const $from = state.selection.$from;
+
+    if ($from.depth === 1) {
+      const parent = $from.parent;
+      const pname = parent.type.name;
+      if (pname === 'undertag') return true;
+      if (pname !== 'paragraph' && !DOC_HEADINGS.has(pname)) return false;
+      if (!dispatch) return true;
+      const tr = state.tr.setNodeMarkup(
+        $from.before(1),
+        schema.nodes['undertag']!,
+        null,
+      );
+      dispatch(tr.scrollIntoView());
+      return true;
+    }
+
+    if ($from.depth === 2) {
+      const pname = $from.parent.type.name;
+      if (pname === 'undertag') return true;
+      if (pname === 'card_body' || pname === 'cite_paragraph') {
+        if (!dispatch) return true;
+        const tr = state.tr.setNodeMarkup(
+          $from.before(2),
+          schema.nodes['undertag']!,
+          null,
+        );
+        dispatch(tr.scrollIntoView());
+        return true;
+      }
+      if (pname === 'tag' || pname === 'analytic') {
+        return dissolveContainerToUndertag(state, dispatch);
+      }
+    }
+
+    return false;
+  };
+}
+
+function dissolveContainerToUndertag(
+  state: EditorState,
+  dispatch: ((tr: Transaction) => void) | undefined,
+): boolean {
+  const $from = state.selection.$from;
+  const head = $from.parent;
+  const container = $from.node(1);
+  if (container.firstChild !== head) return false;
+  if (container.type.name === 'card' && head.type.name !== 'tag') return false;
+  if (container.type.name === 'analytic_unit' && head.type.name !== 'analytic') return false;
+  if (!dispatch) return true;
+
+  const undertagNode = schema.nodes['undertag']!.create(null, head.content);
+  const lifted: PMNode[] = [undertagNode];
+  container.forEach((child, _offset, index) => {
+    if (index === 0) return;
+    lifted.push(liftCardChild(child));
+  });
+
+  const from = $from.before(1);
+  const to = $from.after(1);
+  let tr = state.tr.replaceWith(from, to, Fragment.fromArray(lifted));
+  const cursorPos = from + 1 + Math.min($from.parentOffset, head.content.size);
+  tr = tr.setSelection(TextSelection.create(tr.doc, cursorPos));
+  dispatch(tr.scrollIntoView());
+  return true;
+}
+
 function convertCardToAnalyticUnit(
   state: EditorState,
   dispatch: ((tr: Transaction) => void) | undefined,
@@ -387,7 +470,8 @@ function convertAnalyticUnitToCard(
 type StructuralMode =
   | { mode: 'heading'; headingType: HeadingTypeName }
   | { mode: 'tag' }
-  | { mode: 'analytic' };
+  | { mode: 'analytic' }
+  | { mode: 'undertag' };
 
 /**
  * Apply a structural-style command to every paragraph the selection
@@ -517,6 +601,11 @@ function asTransformed(child: PMNode, opts: StructuralMode): PMNode {
     typeof child.attrs['id'] === 'string' && child.attrs['id']
       ? (child.attrs['id'] as string)
       : null;
+  if (opts.mode === 'undertag') {
+    // Undertag has no id and no wrapping container — at doc level it
+    // sits as a sibling, inside a card it sits among the body slots.
+    return schema.nodes['undertag']!.create(null, child.content);
+  }
   const id = existingId ?? newHeadingId();
   if (opts.mode === 'heading') {
     return schema.nodes[opts.headingType]!.create({ id }, child.content);
@@ -545,7 +634,8 @@ export type StructuralRibbonCommandId =
   | 'setHat'
   | 'setBlock'
   | 'setTag'
-  | 'setAnalytic';
+  | 'setAnalytic'
+  | 'setUndertag';
 
 export type RibbonCommandId =
   | StructuralRibbonCommandId
@@ -558,6 +648,7 @@ export const STRUCTURAL_RIBBON_COMMAND_IDS: StructuralRibbonCommandId[] = [
   'setBlock',
   'setTag',
   'setAnalytic',
+  'setUndertag',
 ];
 
 export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
@@ -572,6 +663,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   setBlock: 'Apply Block style',
   setTag: 'Apply Tag style',
   setAnalytic: 'Apply Analytic style',
+  setUndertag: 'Apply Undertag style',
   toggleBold: 'Bold',
   toggleItalic: 'Italic',
 };
@@ -587,6 +679,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string> = {
   setBlock: 'F6',
   setTag: 'F7',
   setAnalytic: 'Mod-F7',
+  setUndertag: 'Mod-F8',
   toggleBold: 'Mod-b',
   toggleItalic: 'Mod-i',
 };
@@ -597,6 +690,7 @@ const COMMAND_FACTORIES: Record<RibbonCommandId, () => Command> = {
   setBlock: () => setHeading('block'),
   setTag: () => setTag(),
   setAnalytic: () => setAnalytic(),
+  setUndertag: () => setUndertag(),
   toggleBold: () => toggleMark(schema.marks['bold']!),
   toggleItalic: () => toggleMark(schema.marks['italic']!),
 };

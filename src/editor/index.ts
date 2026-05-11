@@ -88,6 +88,7 @@ const FORMATTING_PANEL_BUTTONS: Record<StructuralRibbonCommandId, string> = {
   setBlock: 'style-block-btn',
   setTag: 'style-tag-btn',
   setAnalytic: 'style-analytic-btn',
+  setUndertag: 'style-undertag-btn',
 };
 const FORMATTING_PANEL_SHORT_LABEL: Record<StructuralRibbonCommandId, string> = {
   setPocket: 'Pocket',
@@ -95,6 +96,7 @@ const FORMATTING_PANEL_SHORT_LABEL: Record<StructuralRibbonCommandId, string> = 
   setBlock: 'Block',
   setTag: 'Tag',
   setAnalytic: 'Analytic',
+  setUndertag: 'Undertag',
 };
 const formattingPanelEl = document.getElementById('formatting-panel') as HTMLElement | null;
 const formattingPanelBtnRefs: { id: StructuralRibbonCommandId; btn: HTMLButtonElement }[] = [];
@@ -174,6 +176,11 @@ function applyDisplayTypography(t: DisplayTypography): void {
   editorEl.classList.toggle('pmd-undertag-italic', t.undertagItalic);
   editorEl.classList.toggle('pmd-undertag-bold', t.undertagBold);
   editorEl.style.setProperty('--pmd-emphasis-box-size', `${t.emphasisBoxSize}pt`);
+  // Mirror the undertag flags to documentElement so the ribbon's
+  // formatting-panel preview (which lives outside #editor) can react
+  // to the same settings.
+  document.documentElement.classList.toggle('pmd-undertag-italic', t.undertagItalic);
+  document.documentElement.classList.toggle('pmd-undertag-bold', t.undertagBold);
 }
 
 /**

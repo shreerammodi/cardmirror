@@ -10,6 +10,7 @@ import {
   setHeading,
   setTag,
   setAnalytic,
+  setUndertag,
   buildRibbonKeymap,
   DEFAULT_RIBBON_KEYS,
   RIBBON_COMMAND_IDS,
@@ -689,6 +690,87 @@ describe('setHeading on a multi-paragraph selection', () => {
     expect(cardTypes).toEqual(['tag', 'undertag']);
     const docTypes = next!.doc.content.content.map((c) => c.type.name);
     expect(docTypes).toEqual(['card', 'hat', 'paragraph']);
+  });
+});
+
+describe('setUndertag', () => {
+  it('converts a doc-level paragraph to an undertag in place', () => {
+    const doc = makeDoc([paragraph('annotation')]);
+    const state = cursorIn(doc, (n) => n.type.name === 'paragraph');
+    const next = apply(state, setUndertag());
+    expect(next).not.toBeNull();
+    expect(next!.doc.firstChild!.type.name).toBe('undertag');
+    expect(next!.doc.firstChild!.textContent).toBe('annotation');
+  });
+
+  it('converts a doc-level heading to an undertag and drops the id', () => {
+    const doc = makeDoc([pocket('annotation', 'orig-id')]);
+    const state = cursorIn(doc, (n) => n.type.name === 'pocket');
+    const next = apply(state, setUndertag());
+    expect(next!.doc.firstChild!.type.name).toBe('undertag');
+    expect(next!.doc.firstChild!.attrs['id']).toBeUndefined();
+  });
+
+  it('converts a card_body to an undertag IN PLACE — card structure preserved', () => {
+    const doc = makeDoc([
+      schema.nodes['card']!.createChecked(null, [
+        tag('T'),
+        cardBody('b1'),
+        cardBody('b2'),
+      ]),
+    ]);
+    const state = cursorAtCardBody(doc, 0); // b1
+    const next = apply(state, setUndertag());
+    expect(next).not.toBeNull();
+    expect(next!.doc.childCount).toBe(1); // still one card, no split
+    const card = next!.doc.firstChild!;
+    const types: string[] = [];
+    card.forEach((c) => types.push(c.type.name));
+    expect(types).toEqual(['tag', 'undertag', 'card_body']);
+    expect(card.child(1).textContent).toBe('b1');
+  });
+
+  it('cite_paragraph cursor: in-place conversion to undertag', () => {
+    const doc = makeDoc([
+      schema.nodes['card']!.createChecked(null, [
+        tag('T'),
+        citePara('Source 2024'),
+        cardBody('body'),
+      ]),
+    ]);
+    // cursor inside the cite_paragraph
+    let pos = -1;
+    doc.descendants((n, p) => {
+      if (n.type.name === 'cite_paragraph' && pos === -1) pos = p + 1;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    const next = apply(state, setUndertag());
+    const card = next!.doc.firstChild!;
+    const types: string[] = [];
+    card.forEach((c) => types.push(c.type.name));
+    expect(types).toEqual(['tag', 'undertag', 'card_body']);
+  });
+
+  it('dissolves a card when the cursor is in the tag', () => {
+    const doc = makeDoc([
+      schema.nodes['card']!.createChecked(null, [tag('T'), cardBody('b')]),
+    ]);
+    const state = cursorIn(doc, (n) => n.type.name === 'tag');
+    const next = apply(state, setUndertag());
+    const types = next!.doc.content.content.map((c) => c.type.name);
+    expect(types).toEqual(['undertag', 'paragraph']);
+    expect(next!.doc.content.content[0]!.textContent).toBe('T');
+  });
+
+  it('accepts no-op when cursor is already in an undertag', () => {
+    const doc = makeDoc([
+      schema.nodes['card']!.createChecked(null, [tag('T'), undertag('sub')]),
+    ]);
+    const state = cursorIn(doc, (n) => n.type.name === 'undertag');
+    const next = apply(state, setUndertag());
+    expect(next === null || next.doc.eq(doc)).toBe(true);
   });
 });
 
