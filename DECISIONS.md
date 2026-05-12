@@ -1229,3 +1229,57 @@ gap to appear in. A continuous emphasis run is still ONE
 phantom borders. This also matches Word's character-border rendering
 more closely (Word's borders hug the text rather than reserving
 internal padding).
+
+## 2026-05-12: Mixed-font paragraphs — bare-text inline decoration
+
+Previously the font-size-class plugin bailed (`if (stats.hasBare)
+return`) the moment any text in a paragraph was missing a `font_size`
+mark. Rationale at the time: shrinking the paragraph's font-size to
+the smallest font_size mark would cascade-shrink bare text too, since
+bare text has nothing pinning its size.
+
+The cost: mixed-font paragraphs (the common case — 11pt body + 8pt
+citation runs) never got the per-paragraph strut shrink, so every
+line in those paragraphs sat at the body's 13.2pt strut. CSS's
+block-strut rule means the 8pt lines occupied the same 13.2pt of
+vertical space as the 11pt lines — visibly looser than Verbatim,
+which sizes each line to its own content.
+
+**Fix:** Always shrink the paragraph to the minimum font_size found
+on it (no `hasBare` bail). For each text node in the paragraph that
+carries NEITHER a `font_size` mark nor any named-style mark
+(cite_mark / underline_mark / emphasis_mark / undertag_mark /
+analytic_mark), emit a `Decoration.inline` over its range with
+`style: "font-size: 11pt; line-height: var(--pmd-line-height)"` —
+pinning bare text to the body default. Named-style marks are
+self-protecting via existing `.pmd-fs-shrunk .pmd-*` CSS rules and
+don't need additional decoration.
+
+Result per-line:
+- All small-font_size text → line strut = paragraph strut
+  (e.g., 8pt × 1.1 = 8.8pt). Tight.
+- Contains bare/named-style text → inline strut (11pt × 1.2 or
+  the named style's pinned size) dominates → ~13.2pt+. Body-like.
+- Mixed → max of the two, same as Word's "single" line spacing.
+
+This restores Word/Verbatim's per-line line-height behavior while
+keeping bare text readable at its intended size.
+
+## 2026-05-12: Cite paragraph + tag + analytic line-height = 1.1
+
+`#editor` carries `--pmd-line-height: 1.2` as the body default,
+which for `.pmd-cite` text (13pt) produced a 15.6pt line strut —
+visibly looser than Verbatim's tight cite rendering. Same applied
+to tags and analytics (also 13pt).
+
+Set `line-height: 1.1` directly on `.pmd-cite-para`, `.pmd-tag`, and
+`#editor .pmd-analytic`. At 13pt × 1.1 = 14.3pt line strut, these
+elements now match Verbatim's compact heading + cite look while body
+paragraphs keep their 1.2 multiplier. The bare-text inline decoration
+inside shrunk paragraphs still resolves `var(--pmd-line-height)` to
+1.2, so mixed-font body paragraphs render correctly.
+
+Trade-off acknowledged: the 1.1 here is a CSS literal rather than a
+variable, so if we later expose body line-height as a user setting
+those structural elements won't track it. Refactoring to a "tight"
+companion variable can wait for that surfacing.

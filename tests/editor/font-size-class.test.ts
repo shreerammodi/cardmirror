@@ -97,7 +97,7 @@ function decorationsForBodyPara(
   return result;
 }
 
-describe('font-size-class plugin — mixed-bare-text shrink suppression', () => {
+describe('font-size-class plugin — mixed-bare-text decoration', () => {
   it('applies pmd-fs-shrunk when ALL text has explicit small font_size', () => {
     const p = bodyPara(
       schema.text('all 8pt body', [fontSize(HP_8PT)]),
@@ -106,28 +106,50 @@ describe('font-size-class plugin — mixed-bare-text shrink suppression', () => 
     const shrunk = decos.find((d) => d.class === 'pmd-fs-shrunk');
     expect(shrunk).toBeDefined();
     expect(shrunk!.style).toContain('font-size: 8pt');
+    // No bare text → no inline bare-protection decorations.
+    expect(decos.find((d) => d.style?.includes('font-size: 11pt'))).toBeUndefined();
   });
 
-  it('does NOT apply pmd-fs-shrunk when bare (no font_size) text is mixed with shrunk text', () => {
-    // After a condense merge, a paragraph may end up with some text
-    // from a non-shrunk source (no font_size mark) alongside text
-    // from a shrunken source (font_size 8pt). The plugin's strut-
-    // shrinkage would lower the paragraph's font-size, and the bare
-    // text — having no explicit mark — would cascade to the small
-    // size visually. Skipping the optimization keeps bare text at
-    // body default.
+  it('shrinks AND emits inline bare-protection decoration when bare text is mixed with shrunk text', () => {
+    // After a condense merge (or a manual font_size selection), a
+    // paragraph may end up with some bare text alongside text marked
+    // 8pt. The plugin shrinks the paragraph's own font-size to 8pt
+    // so 8pt-only lines collapse, and emits an inline decoration
+    // over each bare range that pins it back to 11pt + the body
+    // line-height — so mixed lines (or lines that wrap to contain
+    // only bare text) still render at body size.
     const p = bodyPara(
       schema.text('plain bare text '), // no font_size mark
       schema.text('shrunk piece', [fontSize(HP_8PT)]),
     );
     const decos = decorationsForBodyPara(p);
-    expect(decos.find((d) => d.class === 'pmd-fs-shrunk')).toBeUndefined();
+    const shrunk = decos.find((d) => d.class === 'pmd-fs-shrunk');
+    expect(shrunk).toBeDefined();
+    expect(shrunk!.style).toContain('font-size: 8pt');
+    const bare = decos.find((d) => d.style?.includes('font-size: 11pt'));
+    expect(bare).toBeDefined();
+    expect(bare!.style).toContain('line-height: var(--pmd-line-height)');
   });
 
   it('does NOT apply pmd-fs-shrunk for a fully-bare default-size paragraph (no marks)', () => {
-    // Already covered by the >= default check, but good to lock in.
     const p = bodyPara(schema.text('Lorem ipsum'));
     const decos = decorationsForBodyPara(p);
     expect(decos.find((d) => d.class === 'pmd-fs-shrunk')).toBeUndefined();
+    expect(decos.find((d) => d.style?.includes('font-size: 11pt'))).toBeUndefined();
+  });
+
+  it('does NOT emit a bare-protection decoration for text carrying a named-style mark', () => {
+    // Underline-marked text already gets its font-size pinned by
+    // `.pmd-fs-shrunk .pmd-underline`, so an extra inline decoration
+    // would be redundant (and would override the user's custom
+    // --pmd-size-underline if they set one).
+    const underline = schema.marks['underline_mark']!.create();
+    const p = bodyPara(
+      schema.text('underlined ', [underline]),
+      schema.text('then 8pt', [fontSize(HP_8PT)]),
+    );
+    const decos = decorationsForBodyPara(p);
+    expect(decos.find((d) => d.class === 'pmd-fs-shrunk')).toBeDefined();
+    expect(decos.find((d) => d.style?.includes('font-size: 11pt'))).toBeUndefined();
   });
 });
