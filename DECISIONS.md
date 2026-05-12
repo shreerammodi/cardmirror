@@ -1076,3 +1076,127 @@ in two ways:
    `undertag` / `card_body` / `cite_paragraph` directly, so no
    per-child rewriting is needed. When there's no eligible previous
    sibling the existing lift-to-doc-level fallback still runs.
+
+## 2026-05-11: `font_size` moved to outermost mark rank
+
+Bug: in a paragraph at body default (11pt), scaling a span up via a
+`font_size` mark left the surrounding emphasis box / highlight band
+sized for 11pt — glyphs rendered at the larger size poked out
+above and below the box. Same pattern for strikethrough, undertag,
+analytic, link.
+
+Cause: an inline element's `background` and `border` paint on a box
+whose height comes from *its own* `font-size`, not from any
+descendant. The DOM nesting was
+
+```
+<span class="pmd-emphasis">       ← inherited 11pt → 11pt-tall box
+  <span class="pmd-highlight">    ← inherited 11pt → 11pt-tall band
+    <span style="font-size: 26pt">← 26pt glyphs
+```
+
+because `font_size` was the highest-ranked mark in `marks.ts` and
+therefore the innermost DOM wrapper. (Not related to
+`font-size-class-plugin`'s `.pmd-fs-shrunk` pin — that plugin bails
+out on paragraphs containing any bare text, which is most of them.)
+
+Fix: define `font_size` as the FIRST mark in `marks.ts`, making it
+the outermost wrapper. Now `<span style="font-size: 26pt">`
+contains the named-style / highlight / shading / strikethrough
+wrappers, those wrappers inherit 26pt, and their boxes match the
+text. Word treats direct `<w:sz>` as overriding a character style's
+size, so this also matches the OOXML semantic.
+
+OOXML round-trip is unaffected — mark order within a run doesn't
+change which `<w:rPr>` children get emitted, and `Mark.setFrom`
+re-sorts mark sets by rank regardless of insertion order. The 13
+mark-fidelity and 21 real-doc round-trip tests all still pass.
+
+## 2026-05-11: F2 — Paste Text + tag/analytic-paste auto-split
+
+Two paste-handling interventions, both housed in
+`src/editor/paste-plugin.ts`.
+
+### F2 → armed plain-paste mode
+
+First pass at F2 used `navigator.clipboard.readText()` to read the
+clipboard programmatically. Both Chromium and Firefox show a "Paste"
+prompt for that call regardless of user gesture, and Firefox
+explicitly refuses to offer a persistent grant for `clipboard-read`.
+That's a UX dead end for a one-keystroke F2.
+
+The user's `paste` event (Ctrl/Cmd+V), on the other hand, exposes
+`event.clipboardData` directly — no prompt, no chip. So F2 became a
+**toggle for a "next paste is plain" flag** kept in the paste
+plugin's state. The flow:
+
+1. User presses F2 (or clicks the "T" toggle in the ribbon's
+   doc-ops panel, stacked below the ¶ Paragraph-Integrity button).
+   Plugin state flips to `plainPasteArmed: true`; the ribbon button
+   reflects the armed state via `aria-pressed="true"` (same pressed-
+   look as the ¶ toggle and the paintbrush color buttons).
+2. Every subsequent Ctrl/Cmd+V is intercepted by `handlePaste`:
+   reads `event.clipboardData.getData('text/plain')`, replaces the
+   selection with a slice from `buildPlainTextSlice` (newline-
+   delimited, no marks), clears stored marks. The flag stays on —
+   this is a **sticky toggle**, not a single-shot arm.
+3. If `condenseOnPaste` is on, runs the F3 default condense
+   immediately after each paste — Branch C if `paragraphIntegrity`,
+   else `condenseMerge` with the live pilcrow / heading-mode
+   settings.
+4. Pressing F2 again (or clicking the ribbon button) toggles the
+   flag back off; subsequent pastes fall through to PM's default
+   formatted-paste behavior.
+
+`buildPlainTextSlice` shape: single line → `Slice(Fragment(text), 0,
+0)`; multi-line → `Slice([paragraph(line₀), …], 1, 1)` so the
+slice's open ends merge into the surrounding block on insertion.
+Recognises `\r\n`, `\r`, and `\n` as paragraph separators.
+
+### Tag / analytic paste → split the destination container
+
+PM's default "fit pasted content into the schema" behavior strips
+heading wrappers that don't match the destination's content rule.
+Pasting a copied tag into a card_body produced an inline-text
+insertion (tag style lost). User wanted the structural type
+preserved — and the natural action when a tag lands inside another
+card is the same as F7: **split the destination card at the cursor,
+new card starts with the pasted tag**.
+
+`tryPasteSplitContainer` fires when:
+
+- The pasted slice has exactly one top-level node AND that node is a
+  `tag` or `analytic`.
+- The cursor is at depth 2, inside a body slot (`card_body` |
+  `cite_paragraph` | `undertag`) of a `card` | `analytic_unit`.
+
+It then splits:
+
+- Original container keeps `[head, …pre-cursor children, body(pre-
+  cursor text)]`. Empty pre-body is dropped.
+- New container (`card` for a pasted tag, `analytic_unit` for a
+  pasted analytic) gets `[pastedHead, body(post-cursor text),
+  …following children]`. Empty post-body is dropped. When the new
+  container is an `analytic_unit` and a following child was an
+  `analytic` (cite-position alternative inside a card), it's re-
+  wrapped as `card_body` since analytic_unit only permits one
+  analytic head.
+- Cursor lands at the end of the pasted head's text — same
+  convention as F7 (setTag), so the user can immediately edit the
+  heading name.
+
+Multi-node slices, non-head first-children, doc-level cursors, and
+head-cursor positions all fall through to PM's default paste
+handling — the auto-split is a precise targeted intervention, not a
+general paste rewrite.
+
+### Plumbing
+
+- `RibbonContext` gained `condenseOnPaste: () => boolean` (consumed
+  by the paste plugin, not by any Command directly).
+- The global keydown handler in `index.ts` now passes `view` as the
+  third Command argument so a future async-needing command could
+  still dispatch from outside the editor's focus.
+- Status-bar HTML gained `<div id="plain-paste-indicator">` (hidden
+  by default); the paste plugin's `onArmedChange` callback toggles
+  its `hidden` attribute.

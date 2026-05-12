@@ -44,6 +44,7 @@ import {
   uncondense,
   toggleCase,
 } from './condense.js';
+import { togglePlainPaste } from './paste-plugin.js';
 
 type HeadingTypeName = 'pocket' | 'hat' | 'block';
 
@@ -914,6 +915,24 @@ export function copyPreviousCite(): Command {
   };
 }
 
+/**
+ * F2 — Paste Text. Browsers won't let a web app read the clipboard
+ * silently (Chrome and Firefox both show a "Paste" prompt on
+ * `navigator.clipboard.readText`, and Firefox doesn't even offer a
+ * persistent grant), so F2 can't be a one-keystroke paste in the
+ * browser. Instead F2 toggles a "plain paste armed" flag in the
+ * `paste-plugin`; the next real `paste` event (Ctrl/Cmd+V) consumes
+ * the flag, strips formatting, and disarms. See
+ * `src/editor/paste-plugin.ts` for the consumer side.
+ *
+ * The Command here is purely the flag-toggle. All the actual paste
+ * work happens in the plugin's `handlePaste` prop where the browser
+ * has already produced clipboard data via the user's Ctrl+V.
+ */
+export function pasteAsText(): Command {
+  return togglePlainPaste();
+}
+
 function findPreviousCites(doc: PMNode, $from: ResolvedPos): PMNode[] {
   // Phase 1: look in the cursor's enclosing card for cites whose end
   // is before the cursor.
@@ -1236,7 +1255,8 @@ export type RibbonCommandId =
   | 'condenseNoIntegrityWithPilcrows'
   | 'uncondense'
   | 'toggleCase'
-  | 'copyPreviousCite';
+  | 'copyPreviousCite'
+  | 'pasteAsText';
 
 export const STRUCTURAL_RIBBON_COMMAND_IDS: StructuralRibbonCommandId[] = [
   'setPocket',
@@ -1262,6 +1282,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'uncondense',
   'toggleCase',
   'copyPreviousCite',
+  'pasteAsText',
 ];
 
 export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
@@ -1284,6 +1305,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   uncondense: 'Uncondense',
   toggleCase: 'Toggle case',
   copyPreviousCite: 'Copy previous cite',
+  pasteAsText: 'Paste Text (plain)',
 };
 
 /**
@@ -1314,6 +1336,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   uncondense: 'Mod-Alt-Shift-F3',
   toggleCase: 'Shift-F3',
   copyPreviousCite: 'Alt-F8',
+  pasteAsText: 'F2',
 };
 
 /**
@@ -1334,6 +1357,8 @@ export interface RibbonContext {
   /** How selection-based condense treats structural elements. See
    *  `condense.ts` and `settings.ts` for the rule table. */
   headingMode: () => 'strict' | 'respect' | 'demolish';
+  /** Whether F2 (Paste Text) runs the default condense pass after pasting. */
+  condenseOnPaste: () => boolean;
 }
 
 const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
@@ -1342,6 +1367,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   paragraphIntegrity: () => true,
   usePilcrows: () => false,
   headingMode: () => 'respect',
+  condenseOnPaste: () => false,
 };
 
 function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
@@ -1381,6 +1407,8 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
     case 'uncondense': return uncondense();
     case 'toggleCase': return toggleCase();
     case 'copyPreviousCite': return copyPreviousCite();
+    case 'pasteAsText':
+      return pasteAsText();
   }
 }
 

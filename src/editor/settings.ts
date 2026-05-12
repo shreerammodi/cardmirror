@@ -235,6 +235,15 @@ export interface Settings {
   paragraphIntegrity: boolean;
   usePilcrows: boolean;
   headingMode: HeadingMode;
+  /**
+   * When true, F2 (Paste Text) runs the default condense pass on the
+   * card after pasting. Mirrors Verbatim's `CondenseOnPaste` flag —
+   * off by default; useful for users who almost always paste a long
+   * blob of text that needs to be tightened up. The condense it runs
+   * is the same one F3 invokes (respects `paragraphIntegrity` /
+   * `usePilcrows` / `headingMode`).
+   */
+  condenseOnPaste: boolean;
 }
 
 export type HeadingMode = 'strict' | 'respect' | 'demolish';
@@ -258,7 +267,7 @@ const DEFAULTS: Settings = {
   displayTypography: { ...DEFAULT_DISPLAY_TYPOGRAPHY },
   displayColors: { ...DEFAULT_DISPLAY_COLORS },
   bodyFont: 'Calibri',
-  lineHeight: 1.4,
+  lineHeight: 1.2,
   formattingPanelMode: 'labels',
   formattingPanelPreview: true,
   lastHighlightColor: 'yellow',
@@ -267,6 +276,7 @@ const DEFAULTS: Settings = {
   paragraphIntegrity: true,
   usePilcrows: false,
   headingMode: 'respect',
+  condenseOnPaste: false,
 };
 
 /**
@@ -371,13 +381,20 @@ export const SETTING_METADATA: SettingMeta[] = [
     kind: 'toggle',
   },
   {
+    key: 'condenseOnPaste',
+    label: 'Condense after Paste Text (F2)',
+    description:
+      'When on, F2 (Paste Text) runs the default condense pass immediately after pasting. Useful if you almost always paste long blobs that need to be tightened. Off by default — matches Verbatim. The condense it runs is the same one F3 invokes (respects Paragraph Integrity, Use Pilcrows, and the heading-handling setting).',
+    kind: 'toggle',
+  },
+  {
     key: 'headingMode',
     label: 'Condense: heading handling',
     description:
       'How selection-based condense (Alt-F3 / Mod-Alt-F3 / F3 when integrity is off) treats structural elements (headings, cite paragraphs, undertags) inside the selection. "Strict" no-ops when the selection touches structural elements — safest. "Respect" (default) keeps structural elements as their own paragraphs and merges only the body runs between them. "Demolish" treats the selection as sovereign — everything merges into one textblock; cards / analytic_units whose head was touched dissolve and their body slots absorb into the receiving container.',
     kind: 'headingMode',
   },
-  // Note: `lineHeight` is wired through (defaults to 1.4, applied to
+  // Note: `lineHeight` is wired through (defaults to 1.2, applied to
   // #editor via --pmd-line-height) but isn't exposed in the settings
   // UI — the configurable version had a known interaction bug. Once
   // that's fixed, add a `kind: 'lineHeight'` metadata entry here to
@@ -472,7 +489,7 @@ function sanitize(s: Settings): Settings {
     displayColors: sanitizeDisplayColors(s.displayColors),
     bodyFont: sanitizeBodyFont(s.bodyFont),
     lineHeight: clamp(
-      Number.isFinite(s.lineHeight) ? Math.round(s.lineHeight * 20) / 20 : 1.4,
+      Number.isFinite(s.lineHeight) ? Math.round(s.lineHeight * 20) / 20 : 1.2,
       1.0,
       2.0,
     ),
@@ -506,6 +523,10 @@ function sanitize(s: Settings): Settings {
     headingMode: HEADING_MODES.includes(s.headingMode as HeadingMode)
       ? (s.headingMode as HeadingMode)
       : DEFAULTS.headingMode,
+    condenseOnPaste:
+      s.condenseOnPaste === undefined
+        ? DEFAULTS.condenseOnPaste
+        : !!s.condenseOnPaste,
   };
 }
 

@@ -977,6 +977,21 @@ through one overrides surface):
   heading↔heading conversions.
 - **Mod-B / Mod-I.** Toggle the `bold` / `italic` direct-formatting
   marks via `toggleMark`. Standard Word semantics.
+- **F2 — Paste Text (armed mode).** Browsers won't let a web app
+  read the clipboard programmatically without a permission prompt
+  (Chromium's "Paste" chip, Firefox's "Paste" popup with no
+  persistent grant), so F2 can't be a one-keystroke action. Instead
+  F2 toggles a flag in `paste-plugin.ts`; the next real
+  Ctrl/Cmd+V paste consumes the flag, strips all marks, inserts
+  via `buildPlainTextSlice` (paragraph breaks on `\r\n` / `\r` /
+  `\n`), and disarms. Status-bar pill shows the armed state. When
+  the `condenseOnPaste` setting is on (default off), runs the same
+  condense F3 invokes immediately after the paste lands. The paste
+  plugin also auto-splits the destination container when the
+  pasted slice is a single `tag` or `analytic` node and the cursor
+  sits in a body slot of a card / analytic_unit — preserving the
+  structural type instead of falling back to PM's "fit inline
+  content" behavior which would otherwise strip the heading wrapper.
 - **F8 — apply Cite character style.** Applies `cite_mark` to text in
   the selection but skips structural blocks (tag, analytic, pocket,
   hat, block, undertag); a span across a tag-bracketed body region

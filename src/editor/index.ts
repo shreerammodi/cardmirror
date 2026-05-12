@@ -31,6 +31,7 @@ import { absorbPlugin } from './absorb-plugin.js';
 import { citeClassifierPlugin } from './cite-classifier-plugin.js';
 import { namedStyleNormalizerPlugin } from './named-style-normalizer-plugin.js';
 import { fontSizeClassPlugin } from './font-size-class-plugin.js';
+import { buildPastePlugin, togglePlainPaste } from './paste-plugin.js';
 import { editorDragSurface } from './drag-editor-surface.js';
 import {
   backspaceAtTagStart,
@@ -65,6 +66,12 @@ const settingsBtn = document.getElementById('settings-btn') as HTMLButtonElement
 const readModeBtn = document.getElementById('read-mode-btn') as HTMLButtonElement;
 const wordCountBtn = document.getElementById('word-count-btn') as HTMLButtonElement;
 const wordCountText = document.getElementById('word-count-text')!;
+const plainPasteToggleBtn = document.getElementById('plain-paste-toggle-btn') as HTMLButtonElement | null;
+
+function updatePlainPasteIndicator(armed: boolean): void {
+  if (!plainPasteToggleBtn) return;
+  plainPasteToggleBtn.setAttribute('aria-pressed', armed ? 'true' : 'false');
+}
 const zoomOutBtn = document.getElementById('zoom-out-btn') as HTMLButtonElement;
 const zoomInBtn = document.getElementById('zoom-in-btn') as HTMLButtonElement;
 const zoomResetBtn = document.getElementById('zoom-reset-btn') as HTMLButtonElement;
@@ -85,6 +92,7 @@ const ribbonContext: RibbonContext = {
   paragraphIntegrity: () => settings.get('paragraphIntegrity'),
   usePilcrows: () => settings.get('usePilcrows'),
   headingMode: () => settings.get('headingMode'),
+  condenseOnPaste: () => settings.get('condenseOnPaste'),
 };
 
 openBtn.addEventListener('click', () => dropzone.click());
@@ -286,32 +294,39 @@ applyBodyFont(settings.get('bodyFont'));
 applyLineHeight(settings.get('lineHeight'));
 applyFormattingPanel(settings.get('formattingPanelMode'), settings.get('formattingPanelPreview'));
 
-// Claim browser F-keys for our hotkeys. F3 (Find), F5 (Reload), F7
-// (Caret Browse), F11 (Fullscreen) and others normally trigger browser
-// UI. We listen in the BUBBLE phase (no `{ capture: true }`) so the
-// editor's PM keymap on `view.dom` gets first crack at the event —
-// PM bails out via `eventBelongsToView` if `event.defaultPrevented`
-// is already set, so a capture-phase preventDefault would silently
-// disable our own keymap. By the time this handler fires:
+// Claim browser shortcuts for every ribbon binding. F3 (Find), F5
+// (Reload), F7 (Caret Browse), F11 (Fullscreen), Mod-U (View Source),
+// and others normally trigger browser UI. We listen in the BUBBLE
+// phase (no `{ capture: true }`) so the editor's PM keymap on
+// `view.dom` gets first crack at the event — PM bails out via
+// `eventBelongsToView` if `event.defaultPrevented` is already set,
+// so a capture-phase preventDefault would silently disable our own
+// keymap. By the time this handler fires:
 //   - If PM matched a binding it already called preventDefault, and
 //     we skip (avoids double-firing the command).
 //   - If PM didn't match (binding absent OR editor unfocused), we
 //     preventDefault to block the browser's built-in action and, if
 //     the editor exists, dispatch the matching ribbon command
 //     manually.
+// We look up the key string against the ribbon registry up-front and
+// only preventDefault when it's actually bound — so plain typing,
+// Mod-Z, and other PM/browser defaults that we don't claim pass
+// through untouched.
 // Some keys are un-preventable in some browsers (F11 in Firefox; F5 /
 // F12 in some Chromium builds) — those are an OS/browser issue our
 // future Electron build will sidestep entirely.
 window.addEventListener('keydown', (e) => {
-  if (!/^F([3-9]|1[01])$/.test(e.key)) return;
   if (e.defaultPrevented) return;
-  e.preventDefault();
-  if (!view) return;
+  // Cheap early bail for typing: no modifier and not an F-key means
+  // it can't be one of ours.
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && !/^F\d+$/.test(e.key)) return;
   const keyString = ribbonKeyStringFor(e);
   const cmdId = ribbonCommandForKey(keyString);
   if (!cmdId) return;
+  e.preventDefault();
+  if (!view) return;
   const cmd = getRibbonCommand(cmdId, ribbonContext);
-  cmd(view.state, view.dispatch.bind(view));
+  cmd(view.state, view.dispatch.bind(view), view);
 });
 
 // Wire the color panel (split buttons + swatch pickers). Pass a ref
@@ -334,6 +349,17 @@ function syncParagraphIntegrityBtn(): void {
   paragraphIntegrityBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
 }
 syncParagraphIntegrityBtn();
+
+// Plain Paste toggle — clicking flips the paste-plugin's armed flag,
+// same as pressing F2. The plugin's `onArmedChange` callback mirrors
+// the new state back into `aria-pressed` (via updatePlainPasteIndicator).
+if (plainPasteToggleBtn) {
+  plainPasteToggleBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  plainPasteToggleBtn.addEventListener('click', () => {
+    if (!view) return;
+    togglePlainPaste()(view.state, view.dispatch.bind(view));
+  });
+}
 
 function refreshWordCount(): void {
   if (!view) {
@@ -459,6 +485,13 @@ function mountView(doc: PMNode): void {
       citeClassifierPlugin,
       namedStyleNormalizerPlugin,
       fontSizeClassPlugin,
+      buildPastePlugin({
+        condenseOnPaste: () => settings.get('condenseOnPaste'),
+        paragraphIntegrity: () => settings.get('paragraphIntegrity'),
+        usePilcrows: () => settings.get('usePilcrows'),
+        headingMode: () => settings.get('headingMode'),
+        onArmedChange: (armed) => updatePlainPasteIndicator(armed),
+      }),
     ],
   });
   view = new EditorView(editorEl, {

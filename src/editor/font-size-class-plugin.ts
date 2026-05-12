@@ -153,15 +153,15 @@ function computeFontSizeStats(para: PMNode): FontSizeStats {
 
 /**
  * Line-height multiplier scaled by the shrunk size. Smaller text packs
- * tighter; sizes near the default ease toward the regular 1.4. Mixed
+ * tighter; sizes near the default ease toward the body's 1.2. Mixed
  * lines (containing larger named-style content) aren't affected — the
  * larger spans' own line-height dictates the line-box.
  */
 function lineHeightFor(hp: number): number {
   if (hp <= 12) return 1;     // ≤ 6pt
-  if (hp <= 14) return 1.1;   // 7pt
-  if (hp <= 16) return 1.2;   // 8pt
-  if (hp <= 18) return 1.3;   // 9pt
-  if (hp <= 20) return 1.35;  // 10pt
-  return 1.4;                 // ≥ 11pt (shouldn't hit; default isn't decorated)
+  if (hp <= 14) return 1.05;  // 7pt
+  if (hp <= 16) return 1.1;   // 8pt
+  if (hp <= 18) return 1.15;  // 9pt
+  if (hp <= 20) return 1.2;   // 10pt
+  return 1.2;                 // ≥ 11pt (shouldn't hit; default isn't decorated)
 }

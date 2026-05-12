@@ -31,6 +31,50 @@ function namedStyleMark(): MarkSpec {
 }
 
 export const marks: { [name: string]: MarkSpec } = {
+  // -------- Outermost: per-run font size --------
+  // `font_size` is listed first so it renders as the OUTERMOST DOM
+  // wrapper. CSS paints an inline element's background/border on a box
+  // sized by its OWN font-size, not its descendants'. Putting font_size
+  // outermost means visible wrappers (emphasis box, highlight band,
+  // strikethrough line, etc.) inherit the per-run size and size their
+  // boxes correctly when the user scales text up or down. Order within
+  // this object literal sets mark rank: earlier = lower rank = outer
+  // DOM. Word treats direct `<w:sz>` as overriding a character style's
+  // size, so this also matches OOXML semantics.
+
+  font_size: {
+    inclusive: true,
+    attrs: {
+      // Half-points (OOXML convention): 22 = 11pt, 24 = 12pt, 26 = 13pt, etc.
+      halfPoints: {
+        default: 22,
+        validate: (v: unknown) =>
+          typeof v === 'number' && Number.isInteger(v) && v > 0,
+      },
+    },
+    parseDOM: [
+      {
+        tag: 'span[data-half-points]',
+        getAttrs: (dom: HTMLElement) => {
+          const v = dom.getAttribute('data-half-points');
+          const n = v ? parseInt(v, 10) : 22;
+          return { halfPoints: Number.isFinite(n) ? n : 22 };
+        },
+      },
+    ],
+    toDOM: (mark) => {
+      const hp = Number(mark.attrs['halfPoints'] ?? 22);
+      return [
+        'span',
+        {
+          style: `font-size: ${hp / 2}pt`,
+          'data-half-points': String(hp),
+        },
+        0,
+      ];
+    },
+  },
+
   // -------- Named-style emphasis marks --------
 
   cite_mark: {
@@ -261,39 +305,6 @@ export const marks: { [name: string]: MarkSpec } = {
       },
       0,
     ],
-  },
-
-  font_size: {
-    inclusive: true,
-    attrs: {
-      // Half-points (OOXML convention): 22 = 11pt, 24 = 12pt, 26 = 13pt, etc.
-      halfPoints: {
-        default: 22,
-        validate: (v: unknown) =>
-          typeof v === 'number' && Number.isInteger(v) && v > 0,
-      },
-    },
-    parseDOM: [
-      {
-        tag: 'span[data-half-points]',
-        getAttrs: (dom: HTMLElement) => {
-          const v = dom.getAttribute('data-half-points');
-          const n = v ? parseInt(v, 10) : 22;
-          return { halfPoints: Number.isFinite(n) ? n : 22 };
-        },
-      },
-    ],
-    toDOM: (mark) => {
-      const hp = Number(mark.attrs['halfPoints'] ?? 22);
-      return [
-        'span',
-        {
-          style: `font-size: ${hp / 2}pt`,
-          'data-half-points': String(hp),
-        },
-        0,
-      ];
-    },
   },
 
   /**

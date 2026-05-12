@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import type { Command } from 'prosemirror-state';
+import { Fragment, Slice } from 'prosemirror-model';
 import { schema, newHeadingId } from '../../src/schema/index.js';
 import {
   setHeading,
@@ -23,6 +24,7 @@ import {
   DEFAULT_RIBBON_KEYS,
   RIBBON_COMMAND_IDS,
 } from '../../src/editor/ribbon-commands.js';
+import { buildPlainTextSlice, tryPasteSplitContainer } from '../../src/editor/paste-plugin.js';
 
 // ---- Doc builders ----
 
@@ -2229,5 +2231,232 @@ describe('schema mark ordering for visual stacking', () => {
     ]);
     const names = m.marks.map((mm) => mm.type.name);
     expect(names.indexOf('shading')).toBeLessThan(names.indexOf('highlight'));
+  });
+});
+
+describe('buildPlainTextSlice (F2 Paste Text)', () => {
+  it('single line: inline content, no opens', () => {
+    const slice = buildPlainTextSlice('hello world');
+    expect(slice.openStart).toBe(0);
+    expect(slice.openEnd).toBe(0);
+    expect(slice.content.childCount).toBe(1);
+    expect(slice.content.firstChild!.type.name).toBe('text');
+    expect(slice.content.firstChild!.text).toBe('hello world');
+    expect(slice.content.firstChild!.marks).toEqual([]);
+  });
+
+  it('empty string: empty slice, no opens', () => {
+    const slice = buildPlainTextSlice('');
+    expect(slice.openStart).toBe(0);
+    expect(slice.openEnd).toBe(0);
+    expect(slice.content.childCount).toBe(0);
+  });
+
+  it('multi-line LF: one paragraph per line, openStart/End = 1', () => {
+    const slice = buildPlainTextSlice('first\nsecond\nthird');
+    expect(slice.openStart).toBe(1);
+    expect(slice.openEnd).toBe(1);
+    expect(slice.content.childCount).toBe(3);
+    const types: string[] = [];
+    const texts: string[] = [];
+    slice.content.forEach((c) => {
+      types.push(c.type.name);
+      texts.push(c.textContent);
+    });
+    expect(types).toEqual(['paragraph', 'paragraph', 'paragraph']);
+    expect(texts).toEqual(['first', 'second', 'third']);
+  });
+
+  it('handles CRLF and CR alongside LF', () => {
+    const slice = buildPlainTextSlice('a\r\nb\rc\nd');
+    expect(slice.content.childCount).toBe(4);
+    const texts: string[] = [];
+    slice.content.forEach((c) => texts.push(c.textContent));
+    expect(texts).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('blank line in the middle stays as an empty paragraph', () => {
+    const slice = buildPlainTextSlice('a\n\nb');
+    expect(slice.content.childCount).toBe(3);
+    expect(slice.content.child(1).textContent).toBe('');
+    expect(slice.content.child(1).type.name).toBe('paragraph');
+  });
+
+  it('inserts into a paragraph cleanly via replaceSelection (cursor in mid-text)', () => {
+    const doc = makeDoc([paragraph('abc def')]);
+    let pos = -1;
+    doc.descendants((n, p) => { if (n.isText) pos = p + 4; return true; }); // between 'abc ' and 'def'
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    const slice = buildPlainTextSlice('X\nY');
+    const next = state.apply(state.tr.replaceSelection(slice));
+    const docTypes = next.doc.content.content.map((c) => c.type.name);
+    expect(docTypes).toEqual(['paragraph', 'paragraph']);
+    expect(next.doc.firstChild!.textContent).toBe('abc X');
+    expect(next.doc.lastChild!.textContent).toBe('Ydef');
+  });
+
+  it('inside a card_body, the split halves keep card_body type', () => {
+    // The slice's paragraph splits cause the enclosing block to split.
+    // Inside a card, PM may lift the trailing half out as a doc-level
+    // paragraph; the runtime absorb-plugin then re-absorbs it as a
+    // card_body. Test scope here is just: the split halves of the
+    // cursor's BODY each carry the original text on the right side.
+    const doc = makeDoc([
+      schema.nodes['card']!.createChecked(null, [tag('T'), cardBody('hello')]),
+    ]);
+    let pos = -1;
+    doc.descendants((n, p) => { if (n.isText && n.text === 'hello') pos = p + 4; return true; });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    const slice = buildPlainTextSlice('A\nB');
+    const next = state.apply(state.tr.replaceSelection(slice));
+    // First doc child: card with [tag, card_body('helA')].
+    const card = next.doc.firstChild!;
+    expect(card.type.name).toBe('card');
+    expect(card.lastChild!.type.name).toBe('card_body');
+    // Cursor at offset 4 in 'hello' splits as 'hell' + 'o'.
+    expect(card.lastChild!.textContent).toBe('hellA');
+    // The trailing 'Bo' lands somewhere; the absorb plugin in the
+    // running editor will re-claim it as a sibling card_body.
+    expect(next.doc.textContent).toContain('Bo');
+  });
+});
+
+describe('tryPasteSplitContainer (paste tag/analytic into a container body)', () => {
+  function tagSlice(text: string) {
+    return new Slice(Fragment.from(tag(text)), 0, 0);
+  }
+  function analyticSlice(text: string) {
+    return new Slice(Fragment.from(analytic(text)), 0, 0);
+  }
+
+  function stateInBody(card: ReturnType<typeof cardWith>, bodyText: string, offset: number): EditorState {
+    const doc = makeDoc([card]);
+    let pos = -1;
+    doc.descendants((n, p) => { if (n.isText && n.text === bodyText) pos = p + offset; return true; });
+    const base = EditorState.create({ doc });
+    return base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+  }
+
+  it('tag pasted into a card_body in the middle splits the card', () => {
+    const card = cardWith(tag('Original'), cardBody('foobar'));
+    const state = stateInBody(card, 'foobar', 3); // cursor: 'foo|bar'
+    const tr = tryPasteSplitContainer(state, tagSlice('Pasted'));
+    expect(tr).not.toBeNull();
+    const next = state.apply(tr!);
+    expect(next.doc.childCount).toBe(2);
+    const c1 = next.doc.firstChild!;
+    const c2 = next.doc.lastChild!;
+    expect(c1.type.name).toBe('card');
+    expect(c2.type.name).toBe('card');
+    const c1kids: { type: string; text: string }[] = [];
+    c1.forEach((c) => c1kids.push({ type: c.type.name, text: c.textContent }));
+    expect(c1kids).toEqual([
+      { type: 'tag', text: 'Original' },
+      { type: 'card_body', text: 'foo' },
+    ]);
+    const c2kids: { type: string; text: string }[] = [];
+    c2.forEach((c) => c2kids.push({ type: c.type.name, text: c.textContent }));
+    expect(c2kids).toEqual([
+      { type: 'tag', text: 'Pasted' },
+      { type: 'card_body', text: 'bar' },
+    ]);
+  });
+
+  it('cursor at start of body: original card keeps no pre-body, new card holds the full body', () => {
+    const card = cardWith(tag('T'), cardBody('content'));
+    const state = stateInBody(card, 'content', 0);
+    const tr = tryPasteSplitContainer(state, tagSlice('New'));
+    const next = state.apply(tr!);
+    const c1Kids: string[] = [];
+    next.doc.firstChild!.forEach((c) => c1Kids.push(c.type.name));
+    expect(c1Kids).toEqual(['tag']);
+    const c2Kids: { type: string; text: string }[] = [];
+    next.doc.lastChild!.forEach((c) => c2Kids.push({ type: c.type.name, text: c.textContent }));
+    expect(c2Kids).toEqual([
+      { type: 'tag', text: 'New' },
+      { type: 'card_body', text: 'content' },
+    ]);
+  });
+
+  it('cursor at end of body: new card has just the pasted tag, no post-body', () => {
+    const card = cardWith(tag('T'), cardBody('content'));
+    const state = stateInBody(card, 'content', 'content'.length);
+    const tr = tryPasteSplitContainer(state, tagSlice('New'));
+    const next = state.apply(tr!);
+    const c1Kids: { type: string; text: string }[] = [];
+    next.doc.firstChild!.forEach((c) => c1Kids.push({ type: c.type.name, text: c.textContent }));
+    expect(c1Kids).toEqual([
+      { type: 'tag', text: 'T' },
+      { type: 'card_body', text: 'content' },
+    ]);
+    const c2Kids: string[] = [];
+    next.doc.lastChild!.forEach((c) => c2Kids.push(c.type.name));
+    expect(c2Kids).toEqual(['tag']);
+    expect(next.doc.lastChild!.firstChild!.textContent).toBe('New');
+  });
+
+  it('following bodies move to the new card', () => {
+    const card = cardWith(
+      tag('T'),
+      cardBody('a'),
+      cardBody('b'),
+      cardBody('c'),
+    );
+    // cursor at end of 'b' (the middle body)
+    const state = stateInBody(card, 'b', 1);
+    const tr = tryPasteSplitContainer(state, tagSlice('NewTag'));
+    const next = state.apply(tr!);
+    expect(next.doc.childCount).toBe(2);
+    const c1Texts: string[] = [];
+    next.doc.firstChild!.forEach((c) => c1Texts.push(c.textContent));
+    expect(c1Texts).toEqual(['T', 'a', 'b']);
+    const c2Texts: string[] = [];
+    next.doc.lastChild!.forEach((c) => c2Texts.push(c.textContent));
+    // No post-body (cursor at end of 'b'), so just NewTag + the trailing 'c'.
+    expect(c2Texts).toEqual(['NewTag', 'c']);
+  });
+
+  it('analytic pasted into a card_body splits into card + analytic_unit', () => {
+    const card = cardWith(tag('T'), cardBody('foobar'));
+    const state = stateInBody(card, 'foobar', 3);
+    const tr = tryPasteSplitContainer(state, analyticSlice('Pasted'));
+    expect(tr).not.toBeNull();
+    const next = state.apply(tr!);
+    expect(next.doc.firstChild!.type.name).toBe('card');
+    expect(next.doc.lastChild!.type.name).toBe('analytic_unit');
+    expect(next.doc.lastChild!.firstChild!.type.name).toBe('analytic');
+    expect(next.doc.lastChild!.firstChild!.textContent).toBe('Pasted');
+  });
+
+  it('returns null when the slice has multiple children', () => {
+    const card = cardWith(tag('T'), cardBody('foobar'));
+    const state = stateInBody(card, 'foobar', 3);
+    const slice = new Slice(Fragment.from([tag('A'), cardBody('B')]), 0, 0);
+    expect(tryPasteSplitContainer(state, slice)).toBeNull();
+  });
+
+  it("returns null when the slice's first child isn't a tag/analytic", () => {
+    const card = cardWith(tag('T'), cardBody('foobar'));
+    const state = stateInBody(card, 'foobar', 3);
+    const slice = new Slice(Fragment.from(cardBody('X')), 0, 0);
+    expect(tryPasteSplitContainer(state, slice)).toBeNull();
+  });
+
+  it('returns null when the cursor is at doc level (not in a container body)', () => {
+    const doc = makeDoc([paragraph('something')]);
+    const state = cursorIn(doc, (n) => n.type.name === 'paragraph');
+    expect(tryPasteSplitContainer(state, tagSlice('X'))).toBeNull();
+  });
+
+  it('returns null when the cursor is in the head (tag), not a body slot', () => {
+    const card = cardWith(tag('Original'), cardBody('body'));
+    const doc = makeDoc([card]);
+    let pos = -1;
+    doc.descendants((n, p) => { if (n.isText && n.text === 'Original') pos = p + 1; return true; });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    expect(tryPasteSplitContainer(state, tagSlice('X'))).toBeNull();
   });
 });

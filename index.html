@@ -63,17 +63,25 @@
           </div>
         </div>
         <div id="doc-ops-panel" class="ribbon-doc-ops-panel" role="group" aria-label="Document operations">
-          <!-- Reserved for doc-level operations. Currently just the
-               Paragraph Integrity toggle (drives F3's default behavior).
-               More buttons will land here over time. -->
+          <!-- Doc-level toggles, stacked vertically. ¶ on top drives
+               F3's default condense behavior; T below arms F2's plain-
+               paste mode (next Ctrl/Cmd+V strips formatting). -->
           <button id="paragraph-integrity-btn" class="ribbon-doc-ops-btn" type="button"
                   aria-pressed="true" title="Paragraph Integrity">¶</button>
+          <button id="plain-paste-toggle-btn" class="ribbon-doc-ops-btn" type="button"
+                  aria-pressed="false" title="Paste Text (F2) — when on, Ctrl/Cmd+V pastes as unformatted text">T</button>
+        </div>
+        <div id="view-ops-panel" class="ribbon-doc-ops-panel" role="group" aria-label="View tools">
+          <!-- View tools stacked vertically. Read mode toggle on top,
+               word-count selection-summary trigger below. Same 2-row
+               grid layout as the doc-ops panel so they line up. -->
+          <button id="read-mode-btn" class="ribbon-doc-ops-btn" type="button"
+                  title="Read mode" aria-label="Read mode">👁</button>
+          <button id="word-count-btn" class="ribbon-doc-ops-btn" type="button"
+                  title="Word Count Selection" aria-label="Word count">Σ</button>
         </div>
       </div>
-      <div class="ribbon-section ribbon-center">
-        <button id="read-mode-btn" type="button" title="Read mode" aria-label="Read mode">👁</button>
-        <button id="word-count-btn" type="button" title="Word Count Selection" aria-label="Word count">Σ</button>
-      </div>
+      <div class="ribbon-section ribbon-center"></div>
       <div class="ribbon-section ribbon-right">
         <button id="settings-btn" type="button" title="Settings" aria-label="Settings">⚙</button>
       </div>

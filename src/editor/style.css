@@ -220,10 +220,19 @@ body {
 }
 .ribbon-color-panel.hidden { display: none; }
 
+/* The split-button wrapper. Carries the white background and outer
+   border so the whole assembly matches the other ribbon buttons
+   (`#ribbon button`'s white field). Inner halves stay transparent
+   so they blend into the wrapper while keeping individual hover /
+   focus / armed-paintbrush states. */
 .ribbon-color-control {
   display: inline-flex;
   align-items: stretch;
   height: 1.45rem;
+  background: var(--pmd-c-bg);
+  border: 1px solid var(--pmd-c-border);
+  border-radius: 3px;
+  box-sizing: border-box;
 }
 
 /* All .ribbon-color-control button selectors are prefixed with
@@ -253,12 +262,20 @@ body {
   outline-offset: -2px;
 }
 
-#ribbon .ribbon-color-main {
+/* Specificity note: the parent `#ribbon .ribbon-color-control button`
+   rule (1,1,1) sets `width: auto` to release the generic
+   `#ribbon button` 1.7rem default. We need (1,2,1) here to beat it,
+   hence the wrapper class is included in the selector. The same
+   trap applied to the previous 1.6rem default and the .ribbon-color-
+   arrow width — those weren't taking effect either before this fix. */
+#ribbon .ribbon-color-control button.ribbon-color-main {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 1.6rem;
+  /* A hair narrower than the Open / Save 2rem — wide enough to show
+     the white field around the glyph but not stretched for no reason. */
+  width: 1.75rem;
   gap: 0;
   padding: 0;
 }
@@ -282,7 +299,7 @@ body {
 
 /* Arrow is intentionally narrower than the main button — visually
    subordinate — but wide enough to be a comfortable click target. */
-#ribbon .ribbon-color-arrow {
+#ribbon .ribbon-color-control button.ribbon-color-arrow {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -308,16 +325,20 @@ body {
    1.45rem vertical rhythm as the other panels so the buttons align
    with the formatting panel's rows. */
 .ribbon-doc-ops-panel {
-  display: flex;
-  align-items: center;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: auto;
+  grid-template-rows: 1.45rem 1.45rem;
+  align-content: center;
+  /* Same row/column gap as the cite + color panels so the two stacked
+     buttons line up horizontally with rows in the neighbouring panels. */
+  gap: 2px 3px;
   padding-left: 0.5rem;
   margin-left: 0.25rem;
   border-left: 1px solid var(--pmd-c-border-soft);
 }
 .ribbon-doc-ops-panel.hidden { display: none; }
 
-/* Single-button height matching the formatting panel's row. */
+/* Single-button cell matching the formatting panel's row height. */
 #ribbon .ribbon-doc-ops-btn {
   height: 1.45rem;
   width: 1.6rem;
@@ -605,7 +626,7 @@ code {
      multiplier (settings.lineHeight). All updated at runtime. */
   --pmd-emphasis-box-size: 1pt;
   --pmd-body-font: "Calibri";
-  --pmd-line-height: 1.4;
+  --pmd-line-height: 1.2;
 
   background: var(--pmd-c-bg);
   flex: 1 1 auto;
@@ -830,24 +851,25 @@ code {
    inline `font-size: Xpt` on the <p>), pin the named-style mark
    wrappers to their declared sizes via the --pmd-size-* variables.
    Without this, .pmd-underline et al. would inherit the small size
-   from the shrunk paragraph and visible content would shrink too. The
-   line-height: 1.4 restores comfortable spacing for readable runs even
-   though the surrounding (shrunk) paragraph uses a tighter value. */
+   from the shrunk paragraph and visible content would shrink too.
+   The line-height restores comfortable spacing for readable runs
+   even though the surrounding (shrunk) paragraph uses a tighter
+   value — same as the body default. */
 .pmd-fs-shrunk .pmd-underline {
   font-size: var(--pmd-size-underline);
-  line-height: 1.4;
+  line-height: 1.2;
 }
 .pmd-fs-shrunk .pmd-emphasis {
   font-size: var(--pmd-size-emphasis);
-  line-height: 1.4;
+  line-height: 1.2;
 }
 .pmd-fs-shrunk .pmd-undertag-mark {
   font-size: var(--pmd-size-undertag);
-  line-height: 1.4;
+  line-height: 1.2;
 }
 .pmd-fs-shrunk .pmd-analytic-mark {
   font-size: var(--pmd-size-analytic);
-  line-height: 1.4;
+  line-height: 1.2;
 }
 
 /* Word's 15 named highlight colors with the OOXML-canonical saturated
