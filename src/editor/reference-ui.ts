@@ -74,7 +74,7 @@ const GROUPS: ShortcutGroup[] = [
   },
   {
     title: 'Cleanup',
-    commands: ['removeHyperlinks'],
+    commands: ['convertAnalyticsToTags', 'removeHyperlinks'],
   },
 ];
 

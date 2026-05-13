@@ -1963,6 +1963,69 @@ export function pasteAsText(): Command {
  * CSS overriding that, the user-agent blue/underline came from being
  * inside an anchor and disappears with the wrapper).
  */
+/**
+ * Verbatim's `ConvertAnalyticsToTags` — bulk swap every
+ * `analytic_unit` in scope to a `card` (and its `analytic` heading
+ * to a `tag`). Selection-sensitive:
+ *
+ *   - Non-empty selection → only units that intersect the selection.
+ *   - Empty selection → every unit in the doc.
+ *
+ * The heading's `id`, inline content, and marks survive — this is
+ * a same-tier swap (the existing per-cursor Mod-F7 path uses the
+ * same shape; see DECISIONS 2026-05-12 "Style apply strips direct
+ * formatting" for why this category is exempt from the promotion
+ * strip). Body slots (`card_body` / `cite_paragraph` / `undertag`)
+ * pass through untouched — they're legal in both containers.
+ *
+ * No-op (returns false) when no `analytic_unit` exists in scope.
+ */
+export function convertAnalyticsToTags(): Command {
+  return (state, dispatch) => {
+    const sel = state.selection;
+    const from = sel.empty ? 0 : sel.from;
+    const to = sel.empty ? state.doc.content.size : sel.to;
+
+    const units: { node: PMNode; pos: number }[] = [];
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (node.type.name === 'analytic_unit') {
+        units.push({ node, pos });
+        // Analytic_units don't nest, so no need to recurse.
+        return false;
+      }
+      return true;
+    });
+    if (units.length === 0) return false;
+    if (!dispatch) return true;
+
+    const tr = state.tr;
+    // Reverse-doc order so an earlier unit's position stays valid
+    // through later replacements. analytic_unit ↔ card and analytic
+    // ↔ tag are same-size swaps anyway (each side wraps with a
+    // single open + close), but processing in reverse is the safer
+    // default for multi-replace transactions.
+    for (let i = units.length - 1; i >= 0; i--) {
+      const { node: unit, pos } = units[i]!;
+      const analytic = unit.firstChild;
+      if (!analytic || analytic.type.name !== 'analytic') continue;
+      const tagId =
+        (analytic.attrs['id'] as string | null) ?? newHeadingId();
+      const tagNode = schema.nodes['tag']!.create(
+        { id: tagId },
+        analytic.content,
+      );
+      const rest: PMNode[] = [];
+      unit.forEach((child, _offset, idx) => {
+        if (idx > 0) rest.push(child);
+      });
+      const cardNode = schema.nodes['card']!.create(null, [tagNode, ...rest]);
+      tr.replaceWith(pos, pos + unit.nodeSize, cardNode);
+    }
+    dispatch(tr);
+    return true;
+  };
+}
+
 export function removeHyperlinks(): Command {
   return (state, dispatch) => {
     const linkType = schema.marks['link']!;
@@ -2334,7 +2397,8 @@ export type RibbonCommandId =
   | 'openShortcutsReference'
   | 'selectSimilar'
   | 'selectSimilarScoped'
-  | 'removeHyperlinks';
+  | 'removeHyperlinks'
+  | 'convertAnalyticsToTags';
 
 export const STRUCTURAL_RIBBON_COMMAND_IDS: StructuralRibbonCommandId[] = [
   'setPocket',
@@ -2375,6 +2439,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'selectSimilar',
   'selectSimilarScoped',
   'removeHyperlinks',
+  'convertAnalyticsToTags',
 ];
 
 export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
@@ -2412,6 +2477,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   selectSimilar: 'Select Similar Formatting',
   selectSimilarScoped: 'Select Similar Formatting (Scoped)',
   removeHyperlinks: 'Remove Hyperlinks',
+  convertAnalyticsToTags: 'Convert Analytics to Tags',
 };
 
 /**
@@ -2459,6 +2525,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   selectSimilar: '',
   selectSimilarScoped: '',
   removeHyperlinks: '',
+  convertAnalyticsToTags: '',
 };
 
 /**
@@ -2643,6 +2710,8 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return selectSimilarScoped();
     case 'removeHyperlinks':
       return removeHyperlinks();
+    case 'convertAnalyticsToTags':
+      return convertAnalyticsToTags();
   }
 }
 

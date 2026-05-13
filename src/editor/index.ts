@@ -194,6 +194,10 @@ if (docMenuBtn) {
         title: 'Cleanup',
         items: [
           {
+            label: 'Convert Analytics to Tags',
+            run: () => runRibbon('convertAnalyticsToTags'),
+          },
+          {
             label: 'Remove Hyperlinks',
             run: () => runRibbon('removeHyperlinks'),
           },

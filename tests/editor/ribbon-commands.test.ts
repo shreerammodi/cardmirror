@@ -21,6 +21,7 @@ import {
   setFontColor,
   copyPreviousCite,
   removeHyperlinks,
+  convertAnalyticsToTags,
   buildRibbonKeymap,
   DEFAULT_RIBBON_KEYS,
   RIBBON_COMMAND_IDS,
@@ -2842,5 +2843,134 @@ describe('removeHyperlinks', () => {
     expect(children[0]!.marks.some((m) => m.type.name === 'link')).toBe(false);
     expect(children[1]!.text).toBe('world');
     expect(children[1]!.marks.some((m) => m.type.name === 'link')).toBe(true);
+  });
+});
+
+// ---- convertAnalyticsToTags ----
+
+describe('convertAnalyticsToTags', () => {
+  function analyticUnit(headingText: string, bodyText: string, id = newHeadingId()) {
+    const analytic = schema.nodes['analytic']!.create(
+      { id },
+      schema.text(headingText),
+    );
+    const body = schema.nodes['card_body']!.create(null, schema.text(bodyText));
+    return schema.nodes['analytic_unit']!.create(null, [analytic, body]);
+  }
+  function cardWith(tagText: string, bodyText: string, id = newHeadingId()) {
+    const tag = schema.nodes['tag']!.create({ id }, schema.text(tagText));
+    const body = schema.nodes['card_body']!.create(null, schema.text(bodyText));
+    return schema.nodes['card']!.create(null, [tag, body]);
+  }
+
+  it('is a no-op when the doc has no analytic_units', () => {
+    const doc = schema.nodes['doc']!.createChecked(null, [
+      cardWith('Tag', 'body'),
+    ]);
+    const state = EditorState.create({ doc, schema });
+    expect(convertAnalyticsToTags()(state, undefined)).toBe(false);
+  });
+
+  it('with empty selection, converts every analytic_unit in the doc', () => {
+    const doc = schema.nodes['doc']!.createChecked(null, [
+      analyticUnit('A1', 'body1'),
+      cardWith('CardTag', 'cardBody'),
+      analyticUnit('A2', 'body2'),
+    ]);
+    const state = EditorState.create({ doc, schema });
+    let next: EditorState | null = null;
+    convertAnalyticsToTags()(state, (tr) => { next = state.apply(tr); });
+    expect(next).not.toBeNull();
+    expect(next!.doc.childCount).toBe(3);
+    const types = [
+      next!.doc.child(0).type.name,
+      next!.doc.child(1).type.name,
+      next!.doc.child(2).type.name,
+    ];
+    expect(types).toEqual(['card', 'card', 'card']);
+    // Each card's first child should be a tag, and the heading text
+    // should survive the swap.
+    expect(next!.doc.child(0).firstChild!.type.name).toBe('tag');
+    expect(next!.doc.child(0).firstChild!.textContent).toBe('A1');
+    expect(next!.doc.child(2).firstChild!.textContent).toBe('A2');
+    // The middle (already a card) is untouched.
+    expect(next!.doc.child(1).firstChild!.textContent).toBe('CardTag');
+  });
+
+  it('preserves the heading id when converting', () => {
+    const id = newHeadingId();
+    const doc = schema.nodes['doc']!.createChecked(null, [
+      analyticUnit('Heading', 'body', id),
+    ]);
+    const state = EditorState.create({ doc, schema });
+    let next: EditorState | null = null;
+    convertAnalyticsToTags()(state, (tr) => { next = state.apply(tr); });
+    expect(next!.doc.firstChild!.firstChild!.attrs['id']).toBe(id);
+  });
+
+  it('with non-empty selection, only converts analytic_units the selection touches', () => {
+    const a1 = analyticUnit('First', 'b1');
+    const a2 = analyticUnit('Second', 'b2');
+    const a3 = analyticUnit('Third', 'b3');
+    const doc = schema.nodes['doc']!.createChecked(null, [a1, a2, a3]);
+    const state0 = EditorState.create({ doc, schema });
+
+    // Select inside a2's body. Doc layout:
+    //   <doc>
+    //     <analytic_unit>… (a1.nodeSize)
+    //     <analytic_unit>… (a2.nodeSize)
+    //     <analytic_unit>… (a3.nodeSize)
+    //   </doc>
+    const a2Start = a1.nodeSize;
+    // Position somewhere inside a2 (a2's first child is analytic at +1,
+    // body starts after analytic). Anywhere within suffices.
+    const selPos = a2Start + 3;
+    const state = state0.apply(
+      state0.tr.setSelection(TextSelection.create(state0.doc, selPos)),
+    );
+    let next: EditorState | null = null;
+    // Selection is empty (collapsed). Per our spec, empty selection
+    // means doc-wide — so this isn't a useful test of the
+    // "intersect-selection" branch. Set a NON-empty selection.
+    const expanded = state.apply(
+      state.tr.setSelection(TextSelection.create(state.doc, selPos, selPos + 1)),
+    );
+    convertAnalyticsToTags()(expanded, (tr) => { next = expanded.apply(tr); });
+    expect(next).not.toBeNull();
+    // Only a2 was touched → card; a1 + a3 remain analytic_units.
+    expect(next!.doc.child(0).type.name).toBe('analytic_unit');
+    expect(next!.doc.child(1).type.name).toBe('card');
+    expect(next!.doc.child(2).type.name).toBe('analytic_unit');
+  });
+
+  it('preserves body slots (card_body / cite_paragraph / undertag)', () => {
+    const id = newHeadingId();
+    const analytic = schema.nodes['analytic']!.create(
+      { id },
+      schema.text('H'),
+    );
+    const body = schema.nodes['card_body']!.create(null, schema.text('body'));
+    const cite = schema.nodes['cite_paragraph']!.create(
+      null,
+      schema.text('the cite', [schema.marks['cite_mark']!.create()]),
+    );
+    const undertag = schema.nodes['undertag']!.create(
+      null,
+      schema.text('undertag text'),
+    );
+    const unit = schema.nodes['analytic_unit']!.create(null, [
+      analytic, body, cite, undertag,
+    ]);
+    const doc = schema.nodes['doc']!.createChecked(null, [unit]);
+    const state = EditorState.create({ doc, schema });
+    let next: EditorState | null = null;
+    convertAnalyticsToTags()(state, (tr) => { next = state.apply(tr); });
+    const card = next!.doc.firstChild!;
+    expect(card.type.name).toBe('card');
+    expect(card.childCount).toBe(4);
+    expect(card.child(0).type.name).toBe('tag');
+    expect(card.child(1).type.name).toBe('card_body');
+    expect(card.child(2).type.name).toBe('cite_paragraph');
+    expect(card.child(3).type.name).toBe('undertag');
   });
 });
