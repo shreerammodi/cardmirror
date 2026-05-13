@@ -26,6 +26,18 @@ import {
 const NAV_WIDTH_MIN = 150;
 const NAV_WIDTH_MAX = 800;
 
+/**
+ * Whether the user is holding the platform's "copy" modifier during
+ * a drag. File-manager convention: Ctrl on Windows/Linux, Option (Alt)
+ * on macOS. Treating both as equivalent is harmless — neither has a
+ * conflicting drag semantic on its non-native platform.
+ */
+function isCopyModifier(
+  e: { ctrlKey: boolean; altKey: boolean },
+): boolean {
+  return e.ctrlKey || e.altKey;
+}
+
 function applyNavWidthCss(px: number): void {
   const clamped = Math.max(NAV_WIDTH_MIN, Math.min(NAV_WIDTH_MAX, px));
   document.documentElement.style.setProperty('--nav-width', `${clamped}px`);
@@ -84,6 +96,7 @@ export class NavigationPanel {
   private boundOnDragMove = (e: PointerEvent) => this.onDragMove(e);
   private boundOnDragUp = (e: PointerEvent) => this.onDragUp(e);
   private boundOnDragKey = (e: KeyboardEvent) => this.onDragKey(e);
+  private boundOnDragKeyUp = (e: KeyboardEvent) => this.onDragKey(e);
 
   private get maxLevel(): number {
     return settings.get('navMaxLevel');
@@ -221,6 +234,11 @@ export class NavigationPanel {
         this.maybeAutoExpand(hovered);
         this.maybeRestoreAutoExpanded(hovered);
         this.maybeAutoScroll(y);
+        // Keep the pickup pill's copy badge in sync with the
+        // controller's copy-mode flag. The flag is updated by drag-
+        // source pointer/key handlers; this is how the badge picks up
+        // a key-only toggle (Ctrl held without pointer movement).
+        this.syncPickupPillCopyBadge();
       }
     });
   }
@@ -482,6 +500,9 @@ export class NavigationPanel {
       document.addEventListener('pointermove', this.boundOnDragMove);
       document.addEventListener('pointerup', this.boundOnDragUp);
       document.addEventListener('keydown', this.boundOnDragKey);
+      // keyup so the copy-modifier indicator clears the moment the
+      // user releases Ctrl/Option mid-drag without moving the pointer.
+      document.addEventListener('keyup', this.boundOnDragKeyUp);
       this.dragHandlersAttached = true;
     }
   }
@@ -596,6 +617,7 @@ export class NavigationPanel {
     if (!dragController.isActive()) return;
 
     dragController.setPointer(e.clientX, e.clientY);
+    dragController.setCopyMode(isCopyModifier(e));
     this.updatePickupPill(e.clientX, e.clientY);
     dragController.dispatchHit(e.clientX, e.clientY);
 
@@ -606,10 +628,12 @@ export class NavigationPanel {
   }
 
   private onDragUp(e: PointerEvent): void {
-    void e;
     let committed = false;
     if (dragController.isActive()) {
-      committed = dragController.commit(); // no-ops if no hover target
+      // Read the modifier off the pointerup event so the user's final
+      // intent at release time is what matters (Ctrl/Option held →
+      // copy; otherwise → move).
+      committed = dragController.commit({ copy: isCopyModifier(e) });
     } else if (this.dragStartEntry) {
       // No drag occurred. Finalize the click action:
       // - Plain click on a multi-selected entry (deferred): single-select
@@ -634,6 +658,14 @@ export class NavigationPanel {
       e.preventDefault();
       dragController.cancel();
       this.cleanupDrag(false);
+      return;
+    }
+    // Any other key event (down or up) while dragging: refresh the
+    // copy-mode flag so the pickup pill reflects whether Ctrl/Option
+    // is currently held. KeyboardEvent's ctrlKey/altKey reflect the
+    // post-event state, which is what we want for both directions.
+    if (dragController.isActive()) {
+      dragController.setCopyMode(isCopyModifier(e));
     }
   }
 
@@ -726,6 +758,7 @@ export class NavigationPanel {
       document.removeEventListener('pointermove', this.boundOnDragMove);
       document.removeEventListener('pointerup', this.boundOnDragUp);
       document.removeEventListener('keydown', this.boundOnDragKey);
+      document.removeEventListener('keyup', this.boundOnDragKeyUp);
       this.dragHandlersAttached = false;
     }
     this.dragStartLi = null;
@@ -954,9 +987,15 @@ export class NavigationPanel {
     this.removePickupPill();
     const pill = document.createElement('div');
     pill.className = 'pmd-nav-pickup-pill';
+    // Wrap the text in an inner span so text-overflow / ellipsis can
+    // clip JUST the text. The copy-mode `+` badge attaches to the
+    // pill itself via `::after` and overflows past its bounds — if
+    // the clip lived on the pill, the badge would get cropped too.
+    const text = document.createElement('span');
+    text.className = 'pmd-nav-pickup-pill-text';
     if (items.length === 1) {
       const label = items[0]!.label.trim() || `(empty ${items[0]!.type})`;
-      pill.textContent = label.length > 40 ? label.slice(0, 38) + '…' : label;
+      text.textContent = label.length > 40 ? label.slice(0, 38) + '…' : label;
     } else {
       // Use a uniform-type label when all items share a type; fall
       // back to a generic count when types are mixed (e.g. a level-4
@@ -965,11 +1004,12 @@ export class NavigationPanel {
       if (allSameType) {
         const t = items[0]!.type;
         const typeLabel = TYPE_LABEL[t] ?? t;
-        pill.textContent = `${items.length} ${typeLabel}s`;
+        text.textContent = `${items.length} ${typeLabel}s`;
       } else {
-        pill.textContent = `${items.length} headings`;
+        text.textContent = `${items.length} headings`;
       }
     }
+    pill.appendChild(text);
     document.body.appendChild(pill);
     this.pickupPill = pill;
   }
@@ -978,6 +1018,15 @@ export class NavigationPanel {
     if (!this.pickupPill) return;
     this.pickupPill.style.left = `${x + 12}px`;
     this.pickupPill.style.top = `${y + 12}px`;
+    this.syncPickupPillCopyBadge();
+  }
+
+  private syncPickupPillCopyBadge(): void {
+    if (!this.pickupPill) return;
+    this.pickupPill.classList.toggle(
+      'pmd-nav-pickup-pill-copy',
+      dragController.isCopyMode(),
+    );
   }
 
   private removePickupPill(): void {

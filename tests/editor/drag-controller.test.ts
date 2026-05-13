@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { EditorState } from 'prosemirror-state';
 import { schema, newHeadingId } from '../../src/schema/index.js';
-import { buildMoveTransaction, type DragItem } from '../../src/editor/drag-controller.js';
+import {
+  buildMoveTransaction,
+  buildCopyTransaction,
+  type DragItem,
+} from '../../src/editor/drag-controller.js';
 
 function pocket(text: string) {
   return schema.nodes['pocket']!.create({ id: newHeadingId() }, schema.text(text));
@@ -235,5 +239,100 @@ describe('buildMoveTransaction', () => {
     // Target inside B's range.
     const tr = buildMoveTransaction(state, items, bFrom + 1);
     expect(tr).toBeNull();
+  });
+});
+
+describe('buildCopyTransaction', () => {
+  it('duplicates a card and inserts the clone, leaving the original', () => {
+    const card1 = cardWith('First', 'body 1');
+    const card2 = cardWith('Second', 'body 2');
+    const doc = makeDoc(card1, card2);
+    const state = EditorState.create({ doc, schema });
+
+    const card1End = card1.nodeSize;
+    const card2End = card1End + card2.nodeSize;
+    const item = dragItemForRange(card1End, card2End, 'card', 4);
+    // Drop right after card2 → expect [card1, card2, copy-of-card2].
+    const tr = buildCopyTransaction(state, [item], card2End);
+    expect(tr).not.toBeNull();
+    const newDoc = tr!.doc;
+    expect(newDoc.childCount).toBe(3);
+    expect(newDoc.child(0).firstChild!.textContent).toBe('First');
+    expect(newDoc.child(1).firstChild!.textContent).toBe('Second');
+    expect(newDoc.child(2).firstChild!.textContent).toBe('Second');
+  });
+
+  it('rewrites heading IDs in the clone so they do not collide', () => {
+    const card1 = cardWith('Original');
+    const doc = makeDoc(card1);
+    const state = EditorState.create({ doc, schema });
+
+    const originalTagId = card1.firstChild!.attrs['id'];
+    const item = dragItemForRange(0, card1.nodeSize, 'card', 4);
+    const tr = buildCopyTransaction(state, [item], card1.nodeSize);
+    expect(tr).not.toBeNull();
+    const newDoc = tr!.doc;
+    expect(newDoc.childCount).toBe(2);
+    const cloneTagId = newDoc.child(1).firstChild!.attrs['id'];
+    expect(typeof cloneTagId).toBe('string');
+    expect(cloneTagId).not.toBe(originalTagId);
+    // Original is untouched.
+    expect(newDoc.child(0).firstChild!.attrs['id']).toBe(originalTagId);
+  });
+
+  it('rewrites heading IDs nested inside a copied subtree', () => {
+    // A pocket containing a card containing a tag — copying the pocket
+    // should rewrite IDs on the pocket, the card has none, but the
+    // tag inside should get a fresh id.
+    const tagId = newHeadingId();
+    const innerCard = schema.nodes['card']!.createChecked(null, [
+      schema.nodes['tag']!.create({ id: tagId }, schema.text('inner')),
+    ]);
+    const pocketId = newHeadingId();
+    const pocketNode = schema.nodes['pocket']!.create(
+      { id: pocketId },
+      schema.text('pocket'),
+    );
+    // Doc shape: [pocketNode, innerCard] — drag the pocket only.
+    // Actually we want a pocket containing nested headings. Schema-
+    // wise pockets contain inline only; cards live at doc level.
+    // Construct: doc = [pocketNode, innerCard], drag both.
+    const doc = makeDoc(pocketNode, innerCard);
+    const state = EditorState.create({ doc, schema });
+
+    const item = dragItemForRange(
+      0,
+      pocketNode.nodeSize + innerCard.nodeSize,
+      'mixed',
+      1,
+    );
+    const tr = buildCopyTransaction(
+      state,
+      [item],
+      pocketNode.nodeSize + innerCard.nodeSize,
+    );
+    expect(tr).not.toBeNull();
+    const newDoc = tr!.doc;
+    // Original 2 + cloned 2 = 4 children.
+    expect(newDoc.childCount).toBe(4);
+    expect(newDoc.child(2).attrs['id']).not.toBe(pocketId);
+    expect(newDoc.child(3).firstChild!.attrs['id']).not.toBe(tagId);
+    // And the originals stay put.
+    expect(newDoc.child(0).attrs['id']).toBe(pocketId);
+    expect(newDoc.child(1).firstChild!.attrs['id']).toBe(tagId);
+  });
+
+  it('returns null when the insert position is strictly inside a source range', () => {
+    const card1 = cardWith('A');
+    const doc = makeDoc(card1);
+    const state = EditorState.create({ doc, schema });
+    const item = dragItemForRange(0, card1.nodeSize, 'card', 4);
+    expect(buildCopyTransaction(state, [item], 1)).toBeNull();
+  });
+
+  it('returns null for an empty items list', () => {
+    const doc = makeDoc(cardWith('A'));
+    const state = EditorState.create({ doc, schema });
+    expect(buildCopyTransaction(state, [], 0)).toBeNull();
   });
 });

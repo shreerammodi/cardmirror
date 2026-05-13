@@ -19,6 +19,8 @@
 
 import type { EditorView } from 'prosemirror-view';
 import type { EditorState, Transaction } from 'prosemirror-state';
+import { Fragment, type Node as PMNode, Slice } from 'prosemirror-model';
+import { newHeadingId } from '../schema/ids.js';
 
 export interface DragItem {
   /** Doc position range covering the dragged unit (heading + its
@@ -76,6 +78,7 @@ class DragControllerImpl {
   private hoverTarget: DropTarget | null = null;
   private pointerX = 0;
   private pointerY = 0;
+  private copyMode = false;
   private listeners: Set<Listener> = new Set();
   private surfaces: Set<DragSurface> = new Set();
 
@@ -95,9 +98,23 @@ class DragControllerImpl {
     return { x: this.pointerX, y: this.pointerY };
   }
 
+  /** Whether the active drag is in "copy" mode (Ctrl on Windows/Linux,
+   *  Option on macOS held by the user). Refreshed by the drag source
+   *  on pointermove + key events so visuals can track in real time. */
+  isCopyMode(): boolean {
+    return this.copyMode;
+  }
+
+  setCopyMode(copy: boolean): void {
+    if (this.copyMode === copy) return;
+    this.copyMode = copy;
+    this.notify('move');
+  }
+
   begin(session: DragSession): void {
     this.session = session;
     this.hoverTarget = null;
+    this.copyMode = false;
     this.notify('begin');
   }
 
@@ -116,8 +133,12 @@ class DragControllerImpl {
   /**
    * Apply the drop. Returns true on success, false on no-op (e.g.,
    * drop-on-self). Cancels and returns false if no hover target.
+   *
+   * `opts.copy` (default false) duplicates the source instead of
+   * moving — the original stays in place, a clone with fresh heading
+   * IDs lands at the drop target.
    */
-  commit(): boolean {
+  commit(opts: { copy?: boolean } = {}): boolean {
     if (!this.session) return false;
     if (!this.hoverTarget) {
       this.cancel();
@@ -133,7 +154,9 @@ class DragControllerImpl {
       return false;
     }
 
-    const tr = buildMoveTransaction(srcView.state, items, insertPos);
+    const tr = opts.copy
+      ? buildCopyTransaction(srcView.state, items, insertPos)
+      : buildMoveTransaction(srcView.state, items, insertPos);
     if (!tr) {
       this.cancel();
       return false;
@@ -142,6 +165,7 @@ class DragControllerImpl {
 
     this.session = null;
     this.hoverTarget = null;
+    this.copyMode = false;
     this.notify('end');
     return true;
   }
@@ -150,6 +174,7 @@ class DragControllerImpl {
     if (!this.session) return;
     this.session = null;
     this.hoverTarget = null;
+    this.copyMode = false;
     this.notify('end');
   }
 
@@ -250,4 +275,76 @@ export function buildMoveTransaction(
     target += slice.content.size;
   }
   return tr;
+}
+
+/**
+ * Build a single transaction that duplicates the source range(s) and
+ * inserts the clone(s) at `insertPos`. The original stays in place.
+ * Heading IDs in the cloned subtree are rewritten with fresh values
+ * via `rewriteHeadingIds` so the workspace's id-uniqueness invariant
+ * (per ARCHITECTURE §4 / §12) holds after the duplicate lands. Used
+ * by the nav-pane copy-drag (Ctrl on Windows/Linux, Option on macOS).
+ *
+ * Returns null on a no-op (`insertPos` strictly inside a source range
+ * — "copy into self" recurses indefinitely). Boundary positions are
+ * still rejected because the hit-test surfaces don't produce them
+ * anyway and rejecting keeps the same predicate as the move path.
+ */
+export function buildCopyTransaction(
+  state: EditorState,
+  items: DragItem[],
+  insertPos: number,
+): Transaction | null {
+  if (items.length === 0) return null;
+  for (const item of items) {
+    if (insertPos > item.from && insertPos < item.to) return null;
+  }
+
+  const ascending = [...items].sort((a, b) => a.from - b.from);
+  const slices = ascending.map((item) =>
+    rewriteHeadingIds(state.doc.slice(item.from, item.to)),
+  );
+
+  const tr = state.tr;
+  let target = insertPos;
+  for (const slice of slices) {
+    tr.insert(target, slice.content);
+    target += slice.content.size;
+  }
+  return tr;
+}
+
+/** Walk a slice and replace every non-null `attrs.id` with a fresh
+ *  `newHeadingId()`. Only nodes whose schema declares an `id` attr
+ *  populated with a string get rewritten (pocket / hat / block / tag /
+ *  analytic — see `headingAttrs` in `schema/nodes.ts`). Nodes without
+ *  an id attr or with a default-null id pass through unchanged. */
+function rewriteHeadingIds(slice: Slice): Slice {
+  return new Slice(
+    rewriteFragment(slice.content),
+    slice.openStart,
+    slice.openEnd,
+  );
+}
+
+function rewriteFragment(frag: Fragment): Fragment {
+  const children: PMNode[] = [];
+  frag.forEach((child) => children.push(rewriteNode(child)));
+  return Fragment.fromArray(children);
+}
+
+function rewriteNode(node: PMNode): PMNode {
+  // Text nodes are immutable and can't be reconstructed via
+  // `type.create` — and they never carry an id attr anyway, so leave
+  // them alone. Inline leaves (image) likewise have no id.
+  if (node.isText) return node;
+  const newContent = node.isLeaf
+    ? node.content
+    : rewriteFragment(node.content);
+  const hasIdAttr =
+    node.attrs && typeof node.attrs['id'] === 'string' && node.attrs['id'];
+  const nextAttrs = hasIdAttr
+    ? { ...node.attrs, id: newHeadingId() }
+    : node.attrs;
+  return node.type.create(nextAttrs, newContent, node.marks);
 }

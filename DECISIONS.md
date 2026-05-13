@@ -1616,3 +1616,49 @@ moved.
   `primaryKeyFor(id, settings.get('ribbonKeyOverrides'))`.
 - Reference (cheat-sheet) modal — reads overrides at render time so
   the displayed keys match the user's customizations.
+
+## 2026-05-13: Copy-drag in the nav pane
+
+File-manager convention: drag with **Ctrl** on Windows/Linux or
+**Option** on macOS to copy instead of move. We support this for
+nav-pane drags only (editor-sourced drag already requires a
+Ctrl+Alt+Shift chord, so layering a "copy" modifier on top isn't
+ergonomic). Force-move (the OS default modifier) and shortcut/symlink
+aren't supported; the latter is the obvious shape for a future
+transclusion gesture.
+
+### Controller
+
+`DragControllerImpl.commit(opts: { copy?: boolean })` branches between
+`buildMoveTransaction` and the new `buildCopyTransaction`. Copy:
+slice the source range(s), rewrite every heading-bearing node's `id`
+attr to a fresh `newHeadingId()`, then insert at the drop target
+without deleting the source. ID rewriting walks the slice's fragment
+tree; text nodes (immutable, no id attr anyway) and inline leaves
+are left intact.
+
+The controller also tracks a `copyMode` flag, refreshed by the drag
+source on pointermove / keydown / keyup. Subscribers (the pickup
+pill) read it via `isCopyMode()` and update visuals without needing
+their own modifier listeners. The flag resets to false on `begin`
+and on `commit` / `cancel`.
+
+### Nav pane
+
+`isCopyModifier(e)` = `e.ctrlKey || e.altKey`. Accepting both
+unconditionally is friendlier than platform-detecting — on macOS,
+Ctrl-drag has no built-in conflicting semantic; on Windows/Linux,
+Alt-drag is conventionally unused.
+
+`onDragUp` reads the modifier off the pointerup event (final intent
+at release time). `onDragMove` / `onDragKey` update the controller's
+`copyMode` flag as the user holds or releases the modifier mid-drag,
+so the pickup pill's copy badge tracks live. A `keyup` listener
+mirrors the `keydown` listener so a release with no pointer motion
+clears the badge.
+
+### Visual
+
+Pickup pill gets a `.pmd-nav-pickup-pill-copy` class while in copy
+mode; a small green `+` badge renders in the bottom-right corner via
+`::after`, echoing the OS file-manager copy-cursor pattern.
