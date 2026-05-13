@@ -41,9 +41,11 @@ import { newHeadingId } from '../schema/ids.js';
 import {
   condenseBranchC,
   condenseMerge,
+  condenseWithWarning,
   uncondense,
   toggleCase,
 } from './condense.js';
+import type { CondenseWarningDelimiter } from './settings.js';
 import { togglePlainPaste } from './paste-plugin.js';
 
 type HeadingTypeName = 'pocket' | 'hat' | 'block';
@@ -1543,15 +1545,24 @@ function applyClearToNormalPartial(tr: Transaction, from: number, to: number): v
 // existing size — the point of Shrink is to compress the connective
 // text while leaving the highlighted argument-text readable.
 //
-// Bracketed-Omitted spans (`[…Omitted…]`, `[[…Omitted…]]`,
-// `<…Omitted…>`, `<<…Omitted…>>`, case-insensitive) get optional
-// special treatment, gated by the `shrinkRestoresOmissionsToNormal`
-// setting (default off). When the setting is ON: omission text is
-// excluded from the size-cycle decision (otherwise an omission stuck
-// at Normal would make `sizes.size !== 1` and reset the cycle to 8pt,
-// stranding the rest of the text) AND is restored to Normal at the
-// end so it stays readable. When the setting is OFF: omissions are
-// shrunk along with everything else.
+// Two kinds of "protected" ranges get optional special treatment,
+// both gated by the same `shrinkRestoresOmissionsToNormal` setting
+// (default off):
+//   1. Bracketed-Omitted spans (`[…Omitted…]`, `[[…Omitted…]]`,
+//      `<…Omitted…>`, `<<…Omitted…>>`, case-insensitive).
+//   2. "Condense with warning" markers — `<open>PARAGRAPH INTEGRITY
+//      (PAUSES|RESUMES)<close>` for all 6 delimiter variants
+//      (`[`/`[[`/`<`/`<<`/`{`/`{{`), case-insensitive. We match every
+//      variant regardless of the current `condenseWarningDelimiter`
+//      setting so changing the delimiter mid-doc still protects older
+//      markers.
+//
+// When the setting is ON: protected text is excluded from the size-
+// cycle decision (otherwise a protected span stuck at Normal would
+// make `sizes.size !== 1` and reset the cycle to 8pt, stranding the
+// rest of the text) AND is restored to Normal at the end so it stays
+// readable. When the setting is OFF: protected text is shrunk along
+// with everything else.
 //
 // Scope:
 //   - Empty selection, cursor inside a `card` (anywhere) → all
@@ -1575,11 +1586,26 @@ const SHRINK_NORMAL_TO_SMALL_PT = 8;
 // so each bracket pair stops at the nearest closer within the same
 // paragraph. Double-bracket variants come first so the longer match
 // wins when both shapes overlap.
-const OMISSION_REGEXES = [
+const PROTECTED_RANGE_REGEXES = [
+  // Omissions. Double-bracket variants first so the longer match wins
+  // when both shapes overlap; the post-sort+merge in
+  // findProtectedRanges collapses any residual overlap.
   /\[\[.*?Omitted.*?\]\]/gi,
   /<<.*?Omitted.*?>>/gi,
+  /\{\{.*?Omitted.*?\}\}/gi,
   /\[.*?Omitted.*?\]/gi,
   /<.*?Omitted.*?>/gi,
+  /\{.*?Omitted.*?\}/gi,
+  // "Condense with warning" markers — all 6 delimiter variants, doubles
+  // first. Matched regardless of the current `condenseWarningDelimiter`
+  // setting so older markers (or markers from another user's setting
+  // choice) stay protected after the setting changes.
+  /\[\[PARAGRAPH INTEGRITY (?:PAUSES|RESUMES)\]\]/gi,
+  /<<PARAGRAPH INTEGRITY (?:PAUSES|RESUMES)>>/gi,
+  /\{\{PARAGRAPH INTEGRITY (?:PAUSES|RESUMES)\}\}/gi,
+  /\[PARAGRAPH INTEGRITY (?:PAUSES|RESUMES)\]/gi,
+  /<PARAGRAPH INTEGRITY (?:PAUSES|RESUMES)>/gi,
+  /\{PARAGRAPH INTEGRITY (?:PAUSES|RESUMES)\}/gi,
 ] as const;
 
 const SHRINK_EXEMPT_MARK_NAMES = new Set([
@@ -1597,18 +1623,18 @@ export function shrinkText(
     const ranges = computeShrinkScope(state);
     if (ranges.length === 0) return false;
 
-    // If the omission-restore setting is on, identify omission ranges
-    // up front so they can be excluded from both the size-cycle
-    // decision and the size mutation. Otherwise treat omissions as
-    // regular text.
-    const omissionRanges = restoreOmissions()
-      ? findOmissionRanges(state.doc, ranges)
+    // If the protect-restore setting is on, identify omission spans
+    // and warning markers up front so they can be excluded from both
+    // the size-cycle decision and the size mutation. Otherwise treat
+    // them as regular text.
+    const protectedRanges = restoreOmissions()
+      ? findProtectedRanges(state.doc, ranges)
       : [];
 
     // Walk eligible (non-exempt) text nodes inside each range to
     // collect their effective sizes and the per-text-node sub-ranges
     // that the size change should touch. Within each text node, drop
-    // any portion that overlaps an omission range.
+    // any portion that overlaps a protected range.
     const eligible: { from: number; to: number }[] = [];
     const sizes = new Set<number>();
     for (const range of ranges) {
@@ -1620,14 +1646,14 @@ export function shrinkText(
         const start = Math.max(range.from, pos);
         const end = Math.min(range.to, pos + node.nodeSize);
         if (start >= end) return true;
-        const subRanges = subtractRanges(start, end, omissionRanges);
+        const subRanges = subtractRanges(start, end, protectedRanges);
         if (subRanges.length === 0) return true;
         for (const sub of subRanges) eligible.push(sub);
         sizes.add(effectivePt(node, parent));
         return true;
       });
     }
-    if (eligible.length === 0 && omissionRanges.length === 0) return false;
+    if (eligible.length === 0 && protectedRanges.length === 0) return false;
 
     const normal = normalPt();
     const newSize = nextShrinkSize(sizes, normal);
@@ -1641,10 +1667,10 @@ export function shrinkText(
       tr.addMark(from, to, fontSizeType.create({ halfPoints: newHp }));
     }
 
-    // Force omission ranges to Normal size. Done after the eligible
+    // Force protected ranges to Normal size. Done after the eligible
     // pass so they overwrite any pre-existing font_size mark.
     const normalHp = Math.round(normal * 2);
-    for (const { from, to } of omissionRanges) {
+    for (const { from, to } of protectedRanges) {
       tr.removeMark(from, to, fontSizeType);
       tr.addMark(from, to, fontSizeType.create({ halfPoints: normalHp }));
     }
@@ -1713,20 +1739,22 @@ function computeShrinkScope(state: import('prosemirror-state').EditorState): { f
 }
 
 /**
- * Find all bracketed-Omitted spans within the given doc ranges,
- * returned as sorted, merged doc-position [from, to) ranges.
+ * Find all protected spans (omissions + "Condense with warning"
+ * markers) within the given doc ranges, returned as sorted, merged
+ * doc-position [from, to) ranges.
  *
  * Each scope range gets its text gathered with a per-char back-map to
  * doc positions so regex matches can be translated back into the doc.
- * Double-bracket variants are checked first so the longer match wins
- * on overlap; final sort+merge collapses any residual overlap between
- * variants (e.g. `[[…Omitted…]]` also matches the inner `[…Omitted…]`).
+ * Double-bracket variants are listed first in PROTECTED_RANGE_REGEXES
+ * so the longer match wins on overlap; final sort+merge collapses any
+ * residual overlap between variants (e.g. `[[…Omitted…]]` also
+ * matches the inner `[…Omitted…]`).
  */
-function findOmissionRanges(
+function findProtectedRanges(
   doc: PMNode,
   ranges: { from: number; to: number }[],
 ): { from: number; to: number }[] {
-  const omissions: { from: number; to: number }[] = [];
+  const matches: { from: number; to: number }[] = [];
   for (const range of ranges) {
     const charPos: number[] = [];
     let text = '';
@@ -1740,21 +1768,21 @@ function findOmissionRanges(
       text += slice;
       return true;
     });
-    for (const re of OMISSION_REGEXES) {
+    for (const re of PROTECTED_RANGE_REGEXES) {
       re.lastIndex = 0;
       let m: RegExpExecArray | null;
       while ((m = re.exec(text)) !== null) {
         const matchFrom = charPos[m.index];
         const matchTo = charPos[m.index + m[0].length - 1];
         if (matchFrom == null || matchTo == null) continue;
-        omissions.push({ from: matchFrom, to: matchTo + 1 });
+        matches.push({ from: matchFrom, to: matchTo + 1 });
       }
     }
   }
-  if (omissions.length === 0) return omissions;
-  omissions.sort((a, b) => a.from - b.from || b.to - a.to);
+  if (matches.length === 0) return matches;
+  matches.sort((a, b) => a.from - b.from || b.to - a.to);
   const merged: { from: number; to: number }[] = [];
-  for (const r of omissions) {
+  for (const r of matches) {
     const last = merged[merged.length - 1];
     if (last && r.from <= last.to) {
       last.to = Math.max(last.to, r.to);
@@ -1768,7 +1796,7 @@ function findOmissionRanges(
 /**
  * Return [start, end) minus any portions covered by `excludes`.
  * `excludes` must be sorted by `from` and non-overlapping (which
- * `findOmissionRanges` guarantees).
+ * `findProtectedRanges` guarantees).
  */
 function subtractRanges(
   start: number,
@@ -2188,6 +2216,7 @@ export type RibbonCommandId =
   | 'condenseDefault'
   | 'condenseNoIntegrity'
   | 'condenseNoIntegrityWithPilcrows'
+  | 'condenseWithWarning'
   | 'uncondense'
   | 'toggleCase'
   | 'copyPreviousCite'
@@ -2216,6 +2245,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'condenseDefault',
   'condenseNoIntegrity',
   'condenseNoIntegrityWithPilcrows',
+  'condenseWithWarning',
   'uncondense',
   'toggleCase',
   'copyPreviousCite',
@@ -2241,6 +2271,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   condenseDefault: 'Condense',
   condenseNoIntegrity: 'Condense without paragraph integrity',
   condenseNoIntegrityWithPilcrows: 'Condense without paragraph integrity (with pilcrows)',
+  condenseWithWarning: 'Condense with warning',
   uncondense: 'Uncondense',
   toggleCase: 'Toggle case',
   copyPreviousCite: 'Copy previous cite',
@@ -2274,6 +2305,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   condenseDefault: 'F3',
   condenseNoIntegrity: 'Alt-F3',
   condenseNoIntegrityWithPilcrows: 'Mod-Alt-F3',
+  condenseWithWarning: '',
   uncondense: 'Mod-Alt-Shift-F3',
   toggleCase: 'Shift-F3',
   copyPreviousCite: 'Alt-F8',
@@ -2313,9 +2345,13 @@ export interface RibbonContext {
   /** Body "Normal" size in pt — the size Shrink jumps back to at the
    *  bottom of its cycle. */
   normalPt: () => number;
-  /** Whether Shrink (Mod-8) excludes bracketed-Omitted spans from the
-   *  cycle and pins them at Normal size. Off by default. */
+  /** Whether Shrink (Mod-8) excludes bracketed-Omitted spans AND the
+   *  PARAGRAPH INTEGRITY PAUSES/RESUMES markers from the cycle and
+   *  pins them at Normal size. Off by default. */
   shrinkRestoresOmissionsToNormal: () => boolean;
+  /** Open delimiter for "Condense with warning" markers — one of
+   *  `[`, `[[`, `<`, `<<`, `{`, `{{`. */
+  condenseWarningDelimiter: () => CondenseWarningDelimiter;
 }
 
 const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
@@ -2329,6 +2365,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   effectivePtForNode: () => 11,
   normalPt: () => 11,
   shrinkRestoresOmissionsToNormal: () => false,
+  condenseWarningDelimiter: () => '[',
 };
 
 function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
@@ -2365,6 +2402,8 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       // Mod-Alt-F3: force no integrity + pilcrows regardless of settings.
       return (state, dispatch) =>
         condenseMerge({ withPilcrows: true, headingMode: ctx.headingMode() })(state, dispatch);
+    case 'condenseWithWarning':
+      return condenseWithWarning(ctx.condenseWarningDelimiter);
     case 'uncondense': return uncondense();
     case 'toggleCase': return toggleCase();
     case 'copyPreviousCite': return copyPreviousCite();

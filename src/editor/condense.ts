@@ -23,6 +23,10 @@
 import { Fragment, type Node as PMNode, type Mark, type NodeType } from 'prosemirror-model';
 import { TextSelection, type Command, type EditorState, type Transaction } from 'prosemirror-state';
 import { schema } from '../schema/index.js';
+import {
+  condenseWarningCloseFor,
+  type CondenseWarningDelimiter,
+} from './settings.js';
 
 // ---------- Pilcrow primitives ----------
 
@@ -956,6 +960,106 @@ export function toggleCase(): Command {
       return true;
     });
 
+    dispatch(tr);
+    return true;
+  };
+}
+
+// ---------- Condense with warning ----------
+
+/** Label text inside the warning markers — kept here so Shrink's
+ *  protection regex can reuse the exact phrasing. */
+export const CONDENSE_WARNING_PAUSE_LABEL = 'PARAGRAPH INTEGRITY PAUSES';
+export const CONDENSE_WARNING_RESUME_LABEL = 'PARAGRAPH INTEGRITY RESUMES';
+
+/**
+ * "Condense with warning" — selection-only condense limited to a
+ * single card. Parallels Create Reference in scope validation:
+ *
+ *   - Selection must be non-empty.
+ *   - Every textblock the selection touches must be a `card_body`.
+ *   - All touched paragraphs must share the same parent `card`.
+ *
+ * Behavior: merges the touched paragraphs into a single `card_body`
+ * (Branch A — no paragraph integrity, no pilcrows) and wraps the
+ * merged paragraph with two new `card_body` markers:
+ *
+ *   `<open>PARAGRAPH INTEGRITY PAUSES<close>`
+ *       <merged paragraph>
+ *   `<open>PARAGRAPH INTEGRITY RESUMES<close>`
+ *
+ * The open/close come from the `condenseWarningDelimiter` setting
+ * (one of `[`, `[[`, `<`, `<<`, `{`, `{{` with the mirrored close).
+ *
+ * No-op on empty selection, non-card-body content, multiple cards,
+ * or when no card_body is actually touched.
+ */
+export function condenseWithWarning(
+  getDelimiter: () => CondenseWarningDelimiter,
+): Command {
+  return (state, dispatch) => {
+    const { from, to, empty } = state.selection;
+    if (empty) return false;
+
+    let parentCardPos: number | null = null;
+    const paragraphs: { node: PMNode; pos: number }[] = [];
+    let invalid = false;
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (invalid) return false;
+      if (!node.isTextblock) return true;
+      if (node.type.name !== 'card_body') {
+        invalid = true;
+        return false;
+      }
+      const $start = state.doc.resolve(pos + 1);
+      if ($start.depth < 2) {
+        invalid = true;
+        return false;
+      }
+      const cardDepth = $start.depth - 1;
+      const card = $start.node(cardDepth);
+      const cardPos = $start.before(cardDepth);
+      if (card.type.name !== 'card') {
+        invalid = true;
+        return false;
+      }
+      if (parentCardPos === null) {
+        parentCardPos = cardPos;
+      } else if (cardPos !== parentCardPos) {
+        invalid = true;
+        return false;
+      }
+      paragraphs.push({ node, pos });
+      return false;
+    });
+    if (invalid || paragraphs.length === 0) return false;
+    if (!dispatch) return true;
+
+    const open = getDelimiter();
+    const close = condenseWarningCloseFor(open);
+    const cardBodyType = schema.nodes['card_body']!;
+
+    const pausePara = cardBodyType.create(
+      null,
+      schema.text(`${open}${CONDENSE_WARNING_PAUSE_LABEL}${close}`),
+    );
+    const resumePara = cardBodyType.create(
+      null,
+      schema.text(`${open}${CONDENSE_WARNING_RESUME_LABEL}${close}`),
+    );
+    const mergedPara =
+      paragraphs.length === 1
+        ? cleanedTextblock(paragraphs[0]!.node)
+        : mergeRun(paragraphs.map((p) => p.node), false, cardBodyType);
+
+    const first = paragraphs[0]!;
+    const last = paragraphs[paragraphs.length - 1]!;
+    const tr = state.tr;
+    tr.replaceWith(
+      first.pos,
+      last.pos + last.node.nodeSize,
+      Fragment.fromArray([pausePara, mergedPara, resumePara]),
+    );
     dispatch(tr);
     return true;
   };

@@ -704,6 +704,9 @@ describe('buildRibbonKeymap', () => {
       const spec = DEFAULT_RIBBON_KEYS[id];
       const keys = Array.isArray(spec) ? spec : [spec];
       for (const key of keys) {
+        // Empty-string defaults mean "command exists but is intentionally
+        // unbound" (e.g. menu-only items like condenseWithWarning).
+        if (!key) continue;
         expect(km[key]).toBeTypeOf('function');
       }
     }

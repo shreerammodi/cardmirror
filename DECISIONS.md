@@ -1378,29 +1378,80 @@ connective text while leaving the highlighted argument-text readable).
   generic `paragraph` paragraphs. Tags, undertags, cite paragraphs,
   and headings within the selection are skipped.
 
-### Omission handling
+### Protected-range handling
 
-Bracketed "Omitted" spans (`[…Omitted…]`, `[[…Omitted…]]`, `<…Omitted…>`,
-`<<…Omitted…>>`, all case-insensitive via `gi`; bracket pairs stop at
-the nearest closer in the same paragraph because JS `.` doesn't cross
-newlines) get optional special treatment, gated by the new setting
-`shrinkRestoresOmissionsToNormal` (default **off**).
+Two kinds of bracketed spans get optional special treatment, gated by
+the new setting `shrinkRestoresOmissionsToNormal` (default **off**):
+
+1. **Omissions** — `[…Omitted…]`, `[[…Omitted…]]`, `<…Omitted…>`,
+   `<<…Omitted…>>`, `{…Omitted…}`, `{{…Omitted…}}`.
+2. **"Condense with warning" markers** —
+   `<open>PARAGRAPH INTEGRITY (PAUSES|RESUMES)<close>` for every one
+   of the 6 delimiter variants (`[`/`[[`/`<`/`<<`/`{`/`{{`), regardless
+   of the current `condenseWarningDelimiter` setting — so changing the
+   delimiter mid-doc doesn't strand older markers.
+
+All patterns are `gi` (case-insensitive, global); `.*?` is non-greedy
+and JS `.` doesn't cross newlines, so bracket pairs stop at the
+nearest closer in the same paragraph.
 
 When **on**:
 
-- Omission ranges are computed up front from the scope and **excluded
-  from the cycle-decision input**. Without this exclusion, an omission
-  that had been pinned at Normal in a prior cycle would make the size-
-  set size > 1 on the next press, forcing the rest of the text back to
-  8 pt and stranding the cycle.
-- Omission ranges are also excluded from the size mutation; eligible
+- Protected ranges are computed up front from the scope and **excluded
+  from the cycle-decision input**. Without this exclusion, a protected
+  span pinned at Normal from a prior cycle would make the size-set
+  size > 1 on the next press, forcing the rest of the text back to 8
+  pt and stranding the cycle.
+- Protected ranges are also excluded from the size mutation; eligible
   text-node intervals are split around them via `subtractRanges`.
-- After the eligible pass, omission ranges are forced to Normal size
+- After the eligible pass, protected ranges are forced to Normal size
   so they remain visible in the shrunken output (regardless of any
   pre-existing `font_size` mark).
 
-When **off**, omissions are treated as ordinary text: shrunk with the
-surrounding body, no exclusion, no restore. The default is off because
-the default doc style already keeps Omitted text readable in normal
-view; the restore behavior is a power-user feature for users who shrink
-aggressively but want omissions preserved as landmarks.
+When **off**, omissions and warning markers are treated as ordinary
+text: shrunk with the surrounding body, no exclusion, no restore. The
+default is off because the default doc style already keeps these spans
+readable in normal view; the restore behavior is a power-user feature
+for users who shrink aggressively but want their landmark text
+preserved.
+
+## 2026-05-12: Condense with warning (Card menu)
+
+A selection-only, single-card variant of `condenseNoIntegrity` (Branch
+A — merge with spaces, no pilcrows) that bookends its result with
+explicit human-readable markers. Inspired by debate-community
+convention for marking a condensed segment so a reader (or a later
+editor) knows the source paragraphs were merged.
+
+### Behavior
+
+Validates the same shape as Create Reference: non-empty selection,
+every touched textblock is `card_body`, all in a single parent `card`
+(no-op otherwise — including selections that touch a tag, undertag,
+cite paragraph, or content in another card). On match:
+
+1. Merge the touched `card_body` paragraphs into one (cleaned
+   whitespace; single-space joins between source paragraphs).
+2. Replace the original `[first.pos, last.pos + last.nodeSize)` range
+   with three `card_body` paragraphs:
+   - `<open>PARAGRAPH INTEGRITY PAUSES<close>`
+   - the merged paragraph
+   - `<open>PARAGRAPH INTEGRITY RESUMES<close>`
+
+Open / close come from the new `condenseWarningDelimiter` setting —
+one of `[`, `[[`, `<`, `<<`, `{`, `{{` (close is the mirror), default
+`[`. The setting is a radio-list editor in the Settings dialog.
+
+### Surfacing
+
+Lives in the Card menu's Condense subsection (alphabetically positioned
+between "Condense with pilcrows" and "Uncondense"). No keyboard
+binding — the registry entry has `''` for its default key, which
+`buildRibbonKeymap` silently skips. The reference (cheat-sheet) modal
+shows it under Condense with `—` for its key.
+
+### Shrink interaction
+
+The warning markers are scanned by Shrink alongside omissions and
+governed by the same `shrinkRestoresOmissionsToNormal` toggle. See the
+"Protected-range handling" section of the Shrink entry above.

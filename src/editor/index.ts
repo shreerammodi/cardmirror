@@ -115,6 +115,7 @@ const ribbonContext: RibbonContext = {
   normalPt: () => settings.get('displaySizes').normal,
   shrinkRestoresOmissionsToNormal: () =>
     settings.get('shrinkRestoresOmissionsToNormal'),
+  condenseWarningDelimiter: () => settings.get('condenseWarningDelimiter'),
 };
 
 openBtn.addEventListener('click', () => dropzone.click());
@@ -198,7 +199,7 @@ if (cardMenuBtn) {
               ),
           },
           {
-            label: 'Condense without paragraph integrity (with pilcrows)',
+            label: 'Condense with pilcrows',
             run: (v) =>
               getRibbonCommand(
                 'condenseNoIntegrityWithPilcrows',
@@ -206,17 +207,17 @@ if (cardMenuBtn) {
               )(v.state, v.dispatch.bind(v)),
           },
           {
-            label: 'Uncondense',
+            label: 'Condense with warning',
             run: (v) =>
-              getRibbonCommand('uncondense', ribbonContext)(
+              getRibbonCommand('condenseWithWarning', ribbonContext)(
                 v.state,
                 v.dispatch.bind(v),
               ),
           },
           {
-            label: 'Toggle case',
+            label: 'Uncondense',
             run: (v) =>
-              getRibbonCommand('toggleCase', ribbonContext)(
+              getRibbonCommand('uncondense', ribbonContext)(
                 v.state,
                 v.dispatch.bind(v),
               ),

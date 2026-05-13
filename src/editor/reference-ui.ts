@@ -39,6 +39,7 @@ const GROUPS: ShortcutGroup[] = [
       'condenseDefault',
       'condenseNoIntegrity',
       'condenseNoIntegrityWithPilcrows',
+      'condenseWithWarning',
       'uncondense',
       'toggleCase',
     ],

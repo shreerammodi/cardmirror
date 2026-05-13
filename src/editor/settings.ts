@@ -278,12 +278,38 @@ export interface Settings {
    *  in Gray-50% (#808080) instead of black. Heading line stays
    *  black either way. */
   forReferenceUseGray50: boolean;
-  /** When true, Shrink (Mod-8) treats bracketed "Omitted" spans
-   *  specially: their existing size is excluded from the cycle
-   *  decision, and after the size pass each omission is restored to
-   *  Normal so it remains visible in the shrunken output. When off,
-   *  omissions are shrunk along with the surrounding text. */
+  /** When true, Shrink (Mod-8) treats bracketed "Omitted" spans AND
+   *  the `[PARAGRAPH INTEGRITY PAUSES/RESUMES]` markers emitted by
+   *  "Condense with warning" specially: their existing size is
+   *  excluded from the cycle decision, and after the size pass they're
+   *  restored to Normal so they remain visible in the shrunken output.
+   *  When off, both are shrunk along with the surrounding text. */
   shrinkRestoresOmissionsToNormal: boolean;
+  /**
+   * Open delimiter used by "Condense with warning" to bracket the
+   * `PARAGRAPH INTEGRITY PAUSES/RESUMES` markers. One of `[`, `[[`,
+   * `<`, `<<`, `{`, `{{`. The close delimiter is the mirror. Default
+   * `[` matches the most common convention in user docs.
+   */
+  condenseWarningDelimiter: CondenseWarningDelimiter;
+}
+
+/** Open-delimiter options for "Condense with warning" markers. */
+export type CondenseWarningDelimiter = '[' | '[[' | '<' | '<<' | '{' | '{{';
+const CONDENSE_WARNING_DELIMITERS: CondenseWarningDelimiter[] = [
+  '[', '[[', '<', '<<', '{', '{{',
+];
+
+/** Return the mirror close delimiter for a given open. */
+export function condenseWarningCloseFor(d: CondenseWarningDelimiter): string {
+  switch (d) {
+    case '[': return ']';
+    case '[[': return ']]';
+    case '<': return '>';
+    case '<<': return '>>';
+    case '{': return '}';
+    case '{{': return '}}';
+  }
 }
 
 export type HeadingMode = 'strict' | 'respect' | 'demolish';
@@ -326,6 +352,7 @@ const DEFAULTS: Settings = {
   clearFormattingOnNamedStyleToggleOff: true,
   forReferenceUseGray50: false,
   shrinkRestoresOmissionsToNormal: false,
+  condenseWarningDelimiter: '[',
 };
 
 /** Public read-only view of the built-in defaults — handy for any UI
@@ -352,7 +379,8 @@ export interface SettingMeta {
     | 'bodyFont'
     | 'lineHeights'
     | 'formattingPanelMode'
-    | 'headingMode';
+    | 'headingMode'
+    | 'condenseWarningDelimiter';
 }
 
 export const SETTING_METADATA: SettingMeta[] = [
@@ -461,10 +489,17 @@ export const SETTING_METADATA: SettingMeta[] = [
   },
   {
     key: 'shrinkRestoresOmissionsToNormal',
-    label: 'Shrink keeps omissions at Normal size',
+    label: 'Shrink keeps omissions and warnings at Normal size',
     description:
-      'When on, Shrink (Mod-8) leaves bracketed "Omitted" spans at Normal size so they stay visible in the shrunken output. When off, omissions are shrunk along with the rest of the text.',
+      'When on, Shrink (Mod-8) leaves bracketed "Omitted" spans and the PARAGRAPH INTEGRITY PAUSES/RESUMES markers from "Condense with warning" at Normal size so they stay visible in the shrunken output. When off, both are shrunk along with the rest of the text.',
     kind: 'toggle',
+  },
+  {
+    key: 'condenseWarningDelimiter',
+    label: 'Condense with warning: marker delimiter',
+    description:
+      'Which bracket style wraps the PARAGRAPH INTEGRITY PAUSES / RESUMES markers added by "Condense with warning" (Card menu).',
+    kind: 'condenseWarningDelimiter',
   },
   {
     key: 'lineHeight',
@@ -618,6 +653,11 @@ function sanitize(s: Settings): Settings {
       s.shrinkRestoresOmissionsToNormal === undefined
         ? DEFAULTS.shrinkRestoresOmissionsToNormal
         : !!s.shrinkRestoresOmissionsToNormal,
+    condenseWarningDelimiter: CONDENSE_WARNING_DELIMITERS.includes(
+      s.condenseWarningDelimiter as CondenseWarningDelimiter,
+    )
+      ? (s.condenseWarningDelimiter as CondenseWarningDelimiter)
+      : DEFAULTS.condenseWarningDelimiter,
   };
 }
 

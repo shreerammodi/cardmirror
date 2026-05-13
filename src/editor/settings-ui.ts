@@ -20,6 +20,8 @@ import {
   type DisplayColors,
   type FormattingPanelMode,
   type HeadingMode,
+  type CondenseWarningDelimiter,
+  condenseWarningCloseFor,
 } from './settings.js';
 import { isFontAvailable } from './font-detect.js';
 
@@ -196,6 +198,10 @@ class SettingsModal {
     } else if (meta.kind === 'headingMode') {
       row.appendChild(text);
       row.appendChild(buildHeadingModeEditor());
+      return row;
+    } else if (meta.kind === 'condenseWarningDelimiter') {
+      row.appendChild(text);
+      row.appendChild(buildCondenseWarningDelimiterEditor());
       return row;
     }
 
@@ -748,6 +754,33 @@ function buildHeadingModeEditor(): HTMLElement {
     text.className = 'pmd-heading-mode-row-label';
     text.textContent = o.label;
     row.appendChild(text);
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+function buildCondenseWarningDelimiterEditor(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'pmd-condense-warning-delimiter-editor';
+  const opens: CondenseWarningDelimiter[] = ['[', '[[', '<', '<<', '{', '{{'];
+  const groupName = `pmd-cw-delim-${Math.random().toString(36).slice(2, 8)}`;
+  for (const open of opens) {
+    const close = condenseWarningCloseFor(open);
+    const row = document.createElement('label');
+    row.className = 'pmd-condense-warning-delimiter-row';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = groupName;
+    input.value = open;
+    input.checked = open === settings.get('condenseWarningDelimiter');
+    input.addEventListener('change', () => {
+      if (input.checked) settings.set('condenseWarningDelimiter', open);
+    });
+    row.appendChild(input);
+    const sample = document.createElement('span');
+    sample.className = 'pmd-condense-warning-delimiter-sample';
+    sample.textContent = `${open}PARAGRAPH INTEGRITY PAUSES${close}`;
+    row.appendChild(sample);
     wrap.appendChild(row);
   }
   return wrap;

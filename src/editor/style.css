@@ -2057,6 +2057,34 @@ body.pmd-nav-resize-active {
   flex: 1 1 auto;
 }
 
+/* Condense-with-warning delimiter picker: radio rows showing a sample
+   `<open>PARAGRAPH INTEGRITY PAUSES<close>` line in a monospace font
+   so the brackets are visually distinct. */
+.pmd-condense-warning-delimiter-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.pmd-condense-warning-delimiter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.pmd-condense-warning-delimiter-row input[type="radio"] {
+  flex: 0 0 auto;
+}
+
+.pmd-condense-warning-delimiter-sample {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
 /* ---------------------------------------------- Reference (cheat-sheet) modal */
 
 .pmd-reference-overlay {
