@@ -2050,6 +2050,14 @@ export function fixFormattingGaps(): Command {
 
     type Add = { from: number; to: number; marks: Mark[] };
     const adds: Add[] = [];
+    // Temporary diagnostics — bridges report per-textblock so the
+    // user can pin down whether a particular textblock's marks
+    // actually have the structure I expect.
+    let totalMatches = 0;
+    let totalBookendBoth = 0;
+    let totalNeither = 0;
+    let totalMixed = 0;
+    const sample: { text: string; firstMarks: string[]; lastMarks: string[]; addedMarks: string[] }[] = [];
 
     state.doc.nodesBetween(from, to, (node, pos) => {
       if (!node.isTextblock) return true;
@@ -2087,6 +2095,7 @@ export function fixFormattingGaps(): Command {
       let m: RegExpExecArray | null;
       while ((m = gapRegex.exec(text)) !== null) {
         if (m[0].length < 3) continue; // need at least 1 gap char between bookends
+        totalMatches++;
         const firstIdx = m.index;
         const lastIdx = firstIdx + m[0].length - 1;
         const fromPos = charDocPos[firstIdx];
@@ -2120,10 +2129,49 @@ export function fixFormattingGaps(): Command {
         }
 
         if (marksToAdd.length > 0) {
+          totalBookendBoth++;
           adds.push({ from: fromPos, to: toPos + 1, marks: marksToAdd });
+        } else if (fm.length === 0 && lm.length === 0) {
+          totalNeither++;
+        } else {
+          totalMixed++;
+        }
+
+        // Capture a sample of the first 12 matches so the user can
+        // see exactly what the bookends look like.
+        if (sample.length < 12) {
+          sample.push({
+            text: m[0],
+            firstMarks: fm.map((mk) => {
+              const attrSummary =
+                mk.attrs && Object.keys(mk.attrs).length > 0
+                  ? `(${JSON.stringify(mk.attrs)})`
+                  : '';
+              return mk.type.name + attrSummary;
+            }),
+            lastMarks: lm.map((mk) => {
+              const attrSummary =
+                mk.attrs && Object.keys(mk.attrs).length > 0
+                  ? `(${JSON.stringify(mk.attrs)})`
+                  : '';
+              return mk.type.name + attrSummary;
+            }),
+            addedMarks: marksToAdd.map((mk) => mk.type.name),
+          });
         }
       }
       return false;
+    });
+
+    // eslint-disable-next-line no-console
+    console.log('[fixFormattingGaps]', {
+      scope: { from, to },
+      totalMatches,
+      totalBookendBoth,
+      totalNeither,
+      totalMixed,
+      addsToDispatch: adds.length,
+      sample,
     });
 
     if (adds.length === 0) return false;
