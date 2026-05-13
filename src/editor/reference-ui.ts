@@ -47,7 +47,28 @@ const GROUPS: ShortcutGroup[] = [
   },
   {
     title: 'Editing utilities',
-    commands: ['pasteAsText', 'clearToNormal', 'shrink', 'copyPreviousCite'],
+    commands: [
+      'pasteAsText',
+      'clearToNormal',
+      'shrink',
+      'copyPreviousCite',
+      'createReference',
+    ],
+  },
+  {
+    title: 'Highlight tools',
+    commands: [
+      'standardizeHighlight',
+      'standardizeHighlightSelection',
+      'standardizeShading',
+      'standardizeShadingSelection',
+      'highlightToShading',
+      'shadingToHighlight',
+    ],
+  },
+  {
+    title: 'View',
+    commands: ['toggleReadMode', 'wordCountSelection', 'openShortcutsReference'],
   },
 ];
 

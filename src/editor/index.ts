@@ -55,13 +55,10 @@ import {
   ribbonCommandForKey,
   setFontSize,
   adjustFontSize,
-  uniHighlight,
-  uniShade,
-  highlightToShading,
-  shadingToHighlight,
   RIBBON_COMMAND_LABELS,
   type StructuralRibbonCommandId,
   type RibbonContext,
+  type RibbonCommandId,
 } from './ribbon-commands.js';
 import { openWordCount } from './word-count-ui.js';
 import { wireColorPanel } from './color-panel.js';
@@ -116,11 +113,42 @@ const ribbonContext: RibbonContext = {
   shrinkRestoresOmissionsToNormal: () =>
     settings.get('shrinkRestoresOmissionsToNormal'),
   condenseWarningDelimiter: () => settings.get('condenseWarningDelimiter'),
+  runCreateReference: () => {
+    if (!view) return;
+    void createReference(
+      view.state,
+      effectivePtForNode,
+      settings.get('forReferenceUseGray50'),
+    ).then((ok) => {
+      if (ok) showToast('Copied!');
+    });
+  },
+  openWordCountDialog: () => {
+    if (view) openWordCount(view);
+  },
+  toggleReadMode: () => {
+    settings.set('readMode', !settings.get('readMode'));
+  },
+  openShortcutsReference: () => openReference(),
 };
 
 openBtn.addEventListener('click', () => dropzone.click());
 settingsBtn.addEventListener('click', () => openSettings());
-if (referenceBtn) referenceBtn.addEventListener('click', () => openReference());
+/**
+ * Tiny adapter to invoke a `RibbonCommandId` against the active view
+ * with the live context. Used by every menu item and ribbon button so
+ * a single user-defined keybinding fires the exact same code path
+ * as clicking the UI — and so binding/unbinding a command never leaves
+ * the UI orphaned.
+ */
+function runRibbon(id: RibbonCommandId): void {
+  if (!view) return;
+  getRibbonCommand(id, ribbonContext)(view.state, view.dispatch.bind(view), view);
+}
+
+if (referenceBtn) {
+  referenceBtn.addEventListener('click', () => runRibbon('openShortcutsReference'));
+}
 
 const docMenuBtn = document.getElementById('doc-menu-btn') as HTMLButtonElement | null;
 if (docMenuBtn) {
@@ -133,35 +161,19 @@ if (docMenuBtn) {
         items: [
           {
             label: 'Standardize Highlighting',
-            run: (v) =>
-              uniHighlight(() => settings.get('lastHighlightColor'), 'document')(
-                v.state,
-                v.dispatch.bind(v),
-              ),
+            run: () => runRibbon('standardizeHighlight'),
           },
           {
             label: 'Standardize Highlighting (Selection)',
-            run: (v) =>
-              uniHighlight(() => settings.get('lastHighlightColor'), 'selection')(
-                v.state,
-                v.dispatch.bind(v),
-              ),
+            run: () => runRibbon('standardizeHighlightSelection'),
           },
           {
             label: 'Standardize Shading',
-            run: (v) =>
-              uniShade(() => settings.get('lastShadingColor'), 'document')(
-                v.state,
-                v.dispatch.bind(v),
-              ),
+            run: () => runRibbon('standardizeShading'),
           },
           {
             label: 'Standardize Shading (Selection)',
-            run: (v) =>
-              uniShade(() => settings.get('lastShadingColor'), 'selection')(
-                v.state,
-                v.dispatch.bind(v),
-              ),
+            run: () => runRibbon('standardizeShadingSelection'),
           },
         ],
       },
@@ -175,53 +187,26 @@ if (cardMenuBtn) {
   cardMenuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     // Sections are kept alphabetical by title — Condense, Excerpt,
-    // Highlighting. The condense items route through `getRibbonCommand`
-    // so they pick up `ribbonContext`'s live settings (paragraphIntegrity,
-    // usePilcrows, headingMode) the same way F3 / Alt-F3 / etc. do.
+    // Highlighting. All items route through `getRibbonCommand` so a
+    // user-bound key fires the same code path as clicking the menu.
     openDocMenu(cardMenuBtn, view, [
       {
         title: 'Condense',
         items: [
-          {
-            label: 'Condense',
-            run: (v) =>
-              getRibbonCommand('condenseDefault', ribbonContext)(
-                v.state,
-                v.dispatch.bind(v),
-              ),
-          },
+          { label: 'Condense', run: () => runRibbon('condenseDefault') },
           {
             label: 'Condense without paragraph integrity',
-            run: (v) =>
-              getRibbonCommand('condenseNoIntegrity', ribbonContext)(
-                v.state,
-                v.dispatch.bind(v),
-              ),
+            run: () => runRibbon('condenseNoIntegrity'),
           },
           {
             label: 'Condense with pilcrows',
-            run: (v) =>
-              getRibbonCommand(
-                'condenseNoIntegrityWithPilcrows',
-                ribbonContext,
-              )(v.state, v.dispatch.bind(v)),
+            run: () => runRibbon('condenseNoIntegrityWithPilcrows'),
           },
           {
             label: 'Condense with warning',
-            run: (v) =>
-              getRibbonCommand('condenseWithWarning', ribbonContext)(
-                v.state,
-                v.dispatch.bind(v),
-              ),
+            run: () => runRibbon('condenseWithWarning'),
           },
-          {
-            label: 'Uncondense',
-            run: (v) =>
-              getRibbonCommand('uncondense', ribbonContext)(
-                v.state,
-                v.dispatch.bind(v),
-              ),
-          },
+          { label: 'Uncondense', run: () => runRibbon('uncondense') },
         ],
       },
       {
@@ -229,15 +214,7 @@ if (cardMenuBtn) {
         items: [
           {
             label: 'Create Reference',
-            run: (v) => {
-              void createReference(
-                v.state,
-                effectivePtForNode,
-                settings.get('forReferenceUseGray50'),
-              ).then((ok) => {
-                if (ok) showToast('Copied!');
-              });
-            },
+            run: () => runRibbon('createReference'),
           },
         ],
       },
@@ -246,19 +223,19 @@ if (cardMenuBtn) {
         items: [
           {
             label: 'Highlight to Background',
-            run: (v) => highlightToShading()(v.state, v.dispatch.bind(v)),
+            run: () => runRibbon('highlightToShading'),
           },
           {
             label: 'Background to Highlight',
-            run: (v) => shadingToHighlight()(v.state, v.dispatch.bind(v)),
+            run: () => runRibbon('shadingToHighlight'),
           },
         ],
       },
     ]);
   });
 }
-readModeBtn.addEventListener('click', () => settings.set('readMode', !settings.get('readMode')));
-wordCountBtn.addEventListener('click', () => { if (view) openWordCount(view); });
+readModeBtn.addEventListener('click', () => runRibbon('toggleReadMode'));
+wordCountBtn.addEventListener('click', () => runRibbon('wordCountSelection'));
 
 // Zoom controls.
 zoomOutBtn.addEventListener('click', () => setZoom(settings.get('zoomPct') - 10));

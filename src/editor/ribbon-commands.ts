@@ -2222,7 +2222,17 @@ export type RibbonCommandId =
   | 'copyPreviousCite'
   | 'pasteAsText'
   | 'clearToNormal'
-  | 'shrink';
+  | 'shrink'
+  | 'createReference'
+  | 'highlightToShading'
+  | 'shadingToHighlight'
+  | 'standardizeHighlight'
+  | 'standardizeHighlightSelection'
+  | 'standardizeShading'
+  | 'standardizeShadingSelection'
+  | 'toggleReadMode'
+  | 'wordCountSelection'
+  | 'openShortcutsReference';
 
 export const STRUCTURAL_RIBBON_COMMAND_IDS: StructuralRibbonCommandId[] = [
   'setPocket',
@@ -2252,6 +2262,16 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'pasteAsText',
   'clearToNormal',
   'shrink',
+  'createReference',
+  'highlightToShading',
+  'shadingToHighlight',
+  'standardizeHighlight',
+  'standardizeHighlightSelection',
+  'standardizeShading',
+  'standardizeShadingSelection',
+  'toggleReadMode',
+  'wordCountSelection',
+  'openShortcutsReference',
 ];
 
 export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
@@ -2278,6 +2298,16 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   pasteAsText: 'Toggle plain-paste mode',
   clearToNormal: 'Clear',
   shrink: 'Shrink card text',
+  createReference: 'Create Reference',
+  highlightToShading: 'Highlight to Background',
+  shadingToHighlight: 'Background to Highlight',
+  standardizeHighlight: 'Standardize Highlighting',
+  standardizeHighlightSelection: 'Standardize Highlighting (Selection)',
+  standardizeShading: 'Standardize Shading',
+  standardizeShadingSelection: 'Standardize Shading (Selection)',
+  toggleReadMode: 'Toggle read mode',
+  wordCountSelection: 'Word count selection',
+  openShortcutsReference: 'Open keyboard shortcuts',
 };
 
 /**
@@ -2312,6 +2342,18 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   pasteAsText: 'F2',
   clearToNormal: 'F12',
   shrink: 'Mod-8',
+  // Menu / button commands — exposed for user-defined bindings via
+  // the keybinding editor; no default key.
+  createReference: '',
+  highlightToShading: '',
+  shadingToHighlight: '',
+  standardizeHighlight: '',
+  standardizeHighlightSelection: '',
+  standardizeShading: '',
+  standardizeShadingSelection: '',
+  toggleReadMode: '',
+  wordCountSelection: '',
+  openShortcutsReference: '',
 };
 
 /**
@@ -2352,6 +2394,16 @@ export interface RibbonContext {
   /** Open delimiter for "Condense with warning" markers — one of
    *  `[`, `[[`, `<`, `<<`, `{`, `{{`. */
   condenseWarningDelimiter: () => CondenseWarningDelimiter;
+  /** Side-effecting actions for the menu-only / button-only commands.
+   *  All four are no-ops by default so tests / standalone uses of
+   *  `getRibbonCommand` don't need to wire them. The real editor
+   *  binds these in `index.ts` to the corresponding modal / dialog /
+   *  setting toggle. They are wrapped in Commands so the keybinding
+   *  editor can rebind them like any other ribbon action. */
+  runCreateReference: () => void;
+  openWordCountDialog: () => void;
+  toggleReadMode: () => void;
+  openShortcutsReference: () => void;
 }
 
 const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
@@ -2366,6 +2418,10 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   normalPt: () => 11,
   shrinkRestoresOmissionsToNormal: () => false,
   condenseWarningDelimiter: () => '[',
+  runCreateReference: () => {},
+  openWordCountDialog: () => {},
+  toggleReadMode: () => {},
+  openShortcutsReference: () => {},
 };
 
 function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
@@ -2417,6 +2473,44 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
         ctx.normalPt,
         ctx.shrinkRestoresOmissionsToNormal,
       );
+    case 'createReference':
+      // Side-effecting (clipboard write + toast). Returns true so the
+      // keymap consumes the keystroke even though no transaction fires.
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.runCreateReference();
+        return true;
+      };
+    case 'highlightToShading':
+      return highlightToShading();
+    case 'shadingToHighlight':
+      return shadingToHighlight();
+    case 'standardizeHighlight':
+      return uniHighlight(ctx.highlightColor, 'document');
+    case 'standardizeHighlightSelection':
+      return uniHighlight(ctx.highlightColor, 'selection');
+    case 'standardizeShading':
+      return uniShade(ctx.shadingColor, 'document');
+    case 'standardizeShadingSelection':
+      return uniShade(ctx.shadingColor, 'selection');
+    case 'toggleReadMode':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.toggleReadMode();
+        return true;
+      };
+    case 'wordCountSelection':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.openWordCountDialog();
+        return true;
+      };
+    case 'openShortcutsReference':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.openShortcutsReference();
+        return true;
+      };
   }
 }
 
