@@ -183,6 +183,14 @@ export interface Settings {
    */
   formattingPanelPreview: boolean;
   /**
+   * When true (default), the cite/underline/emphasis "character
+   * styles" sub-panel is shown in the ribbon. When false, just that
+   * sub-panel is hidden (the rest of the formatting panel, color
+   * controls, etc. stay visible). Independent of formattingPanelMode:
+   * setting the mode to "Hidden" hides everything regardless.
+   */
+  showCharacterStyles: boolean;
+  /**
    * Last highlight color picked from the ribbon dropdown. One of the
    * 15 Word named highlight colors (`yellow`, `green`, `darkRed`, …).
    * Used as the active color when F11 toggles highlight on; persisted
@@ -297,6 +305,7 @@ const DEFAULTS: Settings = {
   lineHeightUndertag: 1.2,
   formattingPanelMode: 'labels',
   formattingPanelPreview: true,
+  showCharacterStyles: true,
   lastHighlightColor: 'yellow',
   lastShadingColor: 'C0C0C0',
   lastFontColor: null,
@@ -387,6 +396,13 @@ export const SETTING_METADATA: SettingMeta[] = [
     label: 'Preview styles in formatting panel',
     description:
       'When on, formatting-panel buttons preview the visual treatment of the style they apply.',
+    kind: 'toggle',
+  },
+  {
+    key: 'showCharacterStyles',
+    label: 'Show character styles',
+    description:
+      'Show the cite / underline / emphasis character-style buttons in the ribbon. When off, just that sub-panel is hidden; the rest of the formatting panel stays visible.',
     kind: 'toggle',
   },
   {
@@ -533,6 +549,10 @@ function sanitize(s: Settings): Settings {
       s.formattingPanelPreview === undefined
         ? DEFAULTS.formattingPanelPreview
         : !!s.formattingPanelPreview,
+    showCharacterStyles:
+      s.showCharacterStyles === undefined
+        ? DEFAULTS.showCharacterStyles
+        : !!s.showCharacterStyles,
     lastHighlightColor: isWordHighlightName(String(s.lastHighlightColor ?? ''))
       ? String(s.lastHighlightColor)
       : DEFAULTS.lastHighlightColor,

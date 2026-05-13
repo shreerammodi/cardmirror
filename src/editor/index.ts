@@ -164,12 +164,18 @@ for (const [id, btnId] of Object.entries(FORMATTING_PANEL_BUTTONS) as [Formattin
   formattingPanelBtnRefs.push({ id, btn });
 }
 
-function applyFormattingPanel(mode: FormattingPanelMode, preview: boolean): void {
+function applyFormattingPanel(
+  mode: FormattingPanelMode,
+  preview: boolean,
+  showCharacterStyles: boolean,
+): void {
   if (!formattingPanelEl) return;
   formattingPanelEl.classList.toggle('hidden', mode === 'hidden');
   formattingPanelEl.classList.toggle('style-preview', preview);
   if (citePanelEl) {
-    citePanelEl.classList.toggle('hidden', mode === 'hidden');
+    // Cite panel hidden when the whole formatting panel is hidden,
+    // OR when the "Show character styles" setting is off.
+    citePanelEl.classList.toggle('hidden', mode === 'hidden' || !showCharacterStyles);
     citePanelEl.classList.toggle('style-preview', preview);
   }
   if (colorPanelEl) {
@@ -293,7 +299,7 @@ settings.subscribe((s) => {
   applyDisplayColors(s.displayColors);
   applyBodyFont(s.bodyFont);
   applyLineHeight(s.lineHeight);
-  applyFormattingPanel(s.formattingPanelMode, s.formattingPanelPreview);
+  applyFormattingPanel(s.formattingPanelMode, s.formattingPanelPreview, s.showCharacterStyles);
   syncParagraphIntegrityBtn();
   refreshWordCount();
   refreshFontSizeDisplay();
@@ -305,7 +311,11 @@ applyDisplayTypography(settings.get('displayTypography'));
 applyDisplayColors(settings.get('displayColors'));
 applyBodyFont(settings.get('bodyFont'));
 applyLineHeight(settings.get('lineHeight'));
-applyFormattingPanel(settings.get('formattingPanelMode'), settings.get('formattingPanelPreview'));
+applyFormattingPanel(
+  settings.get('formattingPanelMode'),
+  settings.get('formattingPanelPreview'),
+  settings.get('showCharacterStyles'),
+);
 
 // Claim browser shortcuts for every ribbon binding. F3 (Find), F5
 // (Reload), F7 (Caret Browse), F11 (Fullscreen), Mod-U (View Source),

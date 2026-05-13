@@ -397,10 +397,14 @@ body {
 }
 
 /* Color picker popup — a small grid of swatches that appears under
-   the arrow button. Positioned absolutely via JS so it sits flush
-   with the control. */
+   the arrow button. Positioned via JS using getBoundingClientRect
+   (viewport-relative); paired with `position: fixed` so the top/left
+   coordinates are interpreted in the same frame. With `position:
+   absolute` the coordinates would be page-relative, and at any
+   non-zero scroll (including the auto-scroll a browser performs on
+   heavy page zoom) the picker would land off the visible area. */
 .pmd-color-picker {
-  position: absolute;
+  position: fixed;
   z-index: 1000;
   background: var(--pmd-c-bg, #fff);
   border: 1px solid var(--pmd-c-border, #999);
