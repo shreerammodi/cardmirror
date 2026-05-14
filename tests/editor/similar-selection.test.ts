@@ -335,6 +335,67 @@ describe('selectSimilar (unified command)', () => {
     expect(next!.selection.empty).toBe(true);
   });
 
+  // Scoped flow lets the user fix multiple formats in the same
+  // span without redrawing the selection: after matches are
+  // computed, clicking elsewhere INSIDE the original scope but on
+  // a run with different formatting should re-fingerprint and
+  // swap matches, not clear the shadow. A click OUTSIDE the
+  // scope still clears as before.
+  it('after scoped match, clicking on a different format inside the scope re-fingerprints', () => {
+    const doc = docOf(
+      card(
+        tag('Tag'),
+        cardBody('plain alpha'),
+        cardBody('bold beta', [bold()]),
+        cardBody('plain gamma'),
+      ),
+      card(tag('OutOfScope'), cardBody('out plain')),
+    );
+    let s = EditorState.create({
+      doc,
+      schema,
+      plugins: [buildSimilarSelectionPlugin(effectivePt)],
+    });
+    // Scope = the first card's three card_body lines. `findTextStart`
+    // returns a position inside the run (after the first char), so
+    // back off by 1 on the start side to include the full "plain
+    // alpha" run rather than clipping its first character.
+    const alphaStart = findTextStart(s.doc, 'plain alpha');
+    const gammaEnd = findTextStart(s.doc, 'plain gamma') + 'plain gamma'.length;
+    s = s.apply(
+      s.tr.setSelection(
+        TextSelection.create(s.doc, alphaStart - 1, gammaEnd),
+      ),
+    );
+    selectSimilar(effectivePt)(s, (tr) => { s = s.apply(tr); });
+    expect(getSimilarSelectionState(s).mode).toBe('awaiting-cursor');
+
+    // Click on "plain alpha" → matches the two plain runs.
+    s = s.apply(s.tr.setSelection(TextSelection.create(s.doc, alphaStart + 2)));
+    let ps = getSimilarSelectionState(s);
+    expect(ps.mode).toBe('idle');
+    expect(textAtRanges(s.doc, ps.matches).sort()).toEqual([
+      'plain alpha',
+      'plain gamma',
+    ]);
+    expect(ps.scope).not.toBeNull();
+
+    // Click on "bold beta" — same scope, different fingerprint.
+    // Should re-match to just the bold run, scope preserved.
+    const betaPos = findTextStart(s.doc, 'bold beta') + 2;
+    s = s.apply(s.tr.setSelection(TextSelection.create(s.doc, betaPos)));
+    ps = getSimilarSelectionState(s);
+    expect(textAtRanges(s.doc, ps.matches)).toEqual(['bold beta']);
+    expect(ps.scope).not.toBeNull();
+
+    // Click OUTSIDE the scope → dismiss.
+    const outPos = findTextStart(s.doc, 'out plain') + 2;
+    s = s.apply(s.tr.setSelection(TextSelection.create(s.doc, outPos)));
+    ps = getSimilarSelectionState(s);
+    expect(ps.matches).toHaveLength(0);
+    expect(ps.scope).toBeNull();
+  });
+
   it('re-invocation while in awaiting-cursor mode toggles off', () => {
     const doc = docOf(card(tag('Tag'), cardBody('body')));
     const state = EditorState.create({

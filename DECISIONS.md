@@ -1543,6 +1543,15 @@ after the command's own dispatch — so the command doesn't dissipate
 itself). Escape clears via `handleKeyDown`. The plugin's setMeta
 transactions are recognized before the dismissal branch fires.
 
+**Scoped re-fingerprinting (2026-05-14):** In the scoped flow, the
+scope sticks around after matching completes. A cursor click inside
+the original scope but outside any current match re-runs matching
+from the new cursor — same scope, new fingerprint — instead of
+dismissing. Lets the user fix several distinct formats in the same
+span in quick succession without redrawing the selection each time.
+Clicks outside the scope still dismiss; the unscoped flow is
+unchanged (no scope, so any out-of-match cursor click clears).
+
 ### Why decorations and not a sidecar selection plugin
 
 PM's intrinsic Selection has well-defined edit semantics; a shadow

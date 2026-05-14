@@ -132,18 +132,49 @@ export function buildSimilarSelectionPlugin(
             return prev;
           }
 
-          // Matches were active and selection moved: clear unless the
-          // new cursor landed inside an existing match. (The command's
-          // own setMatches tr is handled above via meta and won't reach
-          // this branch.)
+          // Matches were active and selection moved. (The command's
+          // own setMatches tr is handled above via meta and won't
+          // reach this branch.) Three cases:
+          //   1. Cursor landed in an existing match → preserve
+          //      (chained format commands keep operating on it).
+          //   2. Scoped flow + cursor still inside the user's drawn
+          //      scope → re-fingerprint from the new cursor, swap
+          //      to fresh matches but KEEP the scope. Lets the user
+          //      fix multiple distinct formats in the same span in
+          //      quick succession without redrawing the selection.
+          //      A non-empty selection inside the scope just keeps
+          //      state as-is — their explicit selection drives
+          //      format commands; collapsing back into the scope re-
+          //      engages.
+          //   3. Anything else (unscoped flow click outside matches,
+          //      any click outside the scope) → dismiss.
           if (prev.matches.length > 0) {
             const sel = tr.selection;
             const insideMatch =
               sel.empty &&
               prev.matches.some((m) => sel.from >= m.from && sel.from <= m.to);
-            if (!insideMatch) {
-              return { matches: [], scope: null, mode: 'idle' };
+            if (insideMatch) return prev;
+            if (
+              prev.scope &&
+              sel.from >= prev.scope.from &&
+              sel.to <= prev.scope.to
+            ) {
+              if (!sel.empty) return prev;
+              const matches = computeSimilarMatches(
+                tr.doc,
+                sel.from,
+                prev.scope,
+                effectivePt,
+              );
+              if (matches.length > 0) {
+                return { matches, scope: prev.scope, mode: 'idle' };
+              }
+              // No text-run fingerprint at the new cursor (e.g. an
+              // empty paragraph inside the scope). Keep the shadow
+              // alive — the next real-text click can still re-engage.
+              return prev;
             }
+            return { matches: [], scope: null, mode: 'idle' };
           }
         }
 
