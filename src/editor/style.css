@@ -2651,6 +2651,10 @@ body.pmd-nav-resize-active {
   font-size: 0.7rem;
   font-weight: 600;
   flex-shrink: 0;
+  overflow: hidden;
+}
+.pmd-comment-initials svg {
+  display: block;
 }
 .pmd-comment-ai .pmd-comment-initials {
   background: #8b5cf6; /* purple to differentiate AI comments */

@@ -206,7 +206,7 @@ export class CommentsColumn {
     header.className = 'pmd-comment-header';
     const badge = document.createElement('span');
     badge.className = 'pmd-comment-initials';
-    badge.textContent = root.initials || initialsFor(root.author);
+    fillBadge(badge, root.author, root.initials);
     header.appendChild(badge);
     const name = document.createElement('span');
     name.className = 'pmd-comment-author';
@@ -311,7 +311,7 @@ export class CommentsColumn {
     header.className = 'pmd-comment-header';
     const badge = document.createElement('span');
     badge.className = 'pmd-comment-initials';
-    badge.textContent = comment.initials || initialsFor(comment.author);
+    fillBadge(badge, comment.author, comment.initials);
     header.appendChild(badge);
     const name = document.createElement('span');
     name.className = 'pmd-comment-author';
@@ -359,7 +359,10 @@ export class CommentsColumn {
     const comment: Comment = {
       id: newCommentId(),
       author: settings.get('commentAuthor'),
-      initials: effectiveInitials(),
+      // Store only the user's explicit setting — derivation happens
+      // at render time so the badge can fall back to a silhouette
+      // when there's no good initials to compute.
+      initials: settings.get('commentAuthorInitials').trim(),
       date: new Date().toISOString(),
       text,
       kind: 'human',
@@ -458,17 +461,56 @@ function collectRanges(doc: PMNode): Map<string, { from: number; to: number }> {
   return out;
 }
 
-function initialsFor(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase();
+/** Decide what to render in the avatar circle. Returns a short
+ *  initials string when we have something better than slicing two
+ *  letters off a single-word name (which produces "Yo" for "You"
+ *  and similarly silly results). Returns null when the caller
+ *  should render a generic silhouette icon instead. */
+function badgeText(authorName: string, explicitInitials: string): string | null {
+  const explicit = explicitInitials.trim();
+  if (explicit) return explicit.slice(0, 3).toUpperCase();
+  const parts = authorName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase();
+  }
+  // Single-word or empty author name — no good initials to derive.
+  return null;
 }
 
-function effectiveInitials(): string {
-  const explicit = settings.get('commentAuthorInitials').trim();
-  if (explicit) return explicit;
-  return initialsFor(settings.get('commentAuthor'));
+/** Build a small head-and-shoulders silhouette SVG. Sized to fit
+ *  inside the 1.4rem badge circle without specific width/height —
+ *  inherits via 100%/100% so the badge's existing dimensions
+ *  apply. */
+function buildSilhouetteSvg(): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('width', '60%');
+  svg.setAttribute('height', '60%');
+  svg.setAttribute('aria-hidden', 'true');
+  const head = document.createElementNS(ns, 'circle');
+  head.setAttribute('cx', '12');
+  head.setAttribute('cy', '8');
+  head.setAttribute('r', '4');
+  const body = document.createElementNS(ns, 'path');
+  body.setAttribute('d', 'M4 22c0-4.4 3.6-8 8-8s8 3.6 8 8H4z');
+  svg.appendChild(head);
+  svg.appendChild(body);
+  return svg;
+}
+
+/** Populate a badge element with either initials text or a silhouette
+ *  icon. Always clears `el` first so re-renders don't accumulate
+ *  stale children. */
+function fillBadge(el: HTMLElement, authorName: string, storedInitials: string): void {
+  el.replaceChildren();
+  const text = badgeText(authorName, storedInitials);
+  if (text) {
+    el.textContent = text;
+  } else {
+    el.appendChild(buildSilhouetteSvg());
+  }
 }
 
 function formatDate(iso: string): string {
@@ -507,7 +549,7 @@ export function addCommentToSelection(view: EditorView): string | null {
   const root: Comment = {
     id: commentId,
     author: settings.get('commentAuthor'),
-    initials: effectiveInitials(),
+    initials: settings.get('commentAuthorInitials').trim(),
     date: new Date().toISOString(),
     text: '',
     kind: 'human',
