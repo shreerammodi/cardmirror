@@ -3096,37 +3096,51 @@ describe('fixFormattingGaps', () => {
     return result;
   }
 
-  it('bridges highlight using the first bookend color when colors differ', () => {
+  // Highlight + shading bridges are now contingent on the gap
+  // qualifying via a named-style pair. We add underline_mark to the
+  // bookends so the gap qualifies; the color-bridge then fires per
+  // its own first-bookend-wins rule.
+  it('bridges highlight using the first bookend color when colors differ (qualifying bookends)', () => {
+    const u = schema.marks['underline_mark']!.create();
     const doc = makeDoc(p(
-      withHighlight('aaa', 'yellow'),
+      schema.text('aaa', [u, schema.marks['highlight']!.create({ color: 'yellow' })]),
       schema.text(' '),
-      withHighlight('bbb', 'green'),
+      schema.text('bbb', [u, schema.marks['highlight']!.create({ color: 'green' })]),
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
     fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
-    // Doc layout post-bridge: <p>aaa bbb</p>, all with highlight:yellow.
-    // Position 4 (1 for <p> open + 3 for "aaa") is the space.
     expect(colorAt(next!.doc, 'highlight', 4)).toBe('yellow');
-    // Every char carries the highlight now.
     const chars = marksByChar(next!.doc);
     for (const c of chars) expect(c.marks.has('highlight')).toBe(true);
   });
 
-  it('bridges shading similarly', () => {
+  it('bridges shading similarly when bookends qualify', () => {
+    const u = schema.marks['underline_mark']!.create();
     const doc = makeDoc(p(
-      withShading('xxx', 'C0C0C0'),
+      schema.text('xxx', [u, schema.marks['shading']!.create({ color: 'C0C0C0' })]),
       schema.text('. '),
-      withShading('yyy', 'D0D0D0'),
+      schema.text('yyy', [u, schema.marks['shading']!.create({ color: 'D0D0D0' })]),
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
     fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
-    // Position 4 (1 open + "xxx") is the first gap char ".".
     expect(colorAt(next!.doc, 'shading', 4)).toBe('C0C0C0');
     expect(colorAt(next!.doc, 'shading', 5)).toBe('C0C0C0');
     const chars = marksByChar(next!.doc);
     for (const c of chars) expect(c.marks.has('shading')).toBe(true);
+  });
+
+  it('does NOT bridge highlight when neither bookend has a qualifying named-style mark', () => {
+    // Both bookends carry only highlight — no underline / emphasis /
+    // cite. With the gating change the gap is not operated on at all.
+    const doc = makeDoc(p(
+      withHighlight('aaa', 'yellow'),
+      schema.text(' '),
+      withHighlight('bbb', 'yellow'),
+    ));
+    const state = EditorState.create({ doc, schema });
+    expect(fixFormattingGaps()(state, undefined)).toBe(false);
   });
 
   it('does not bridge when only one bookend has the mark', () => {
@@ -3332,10 +3346,13 @@ describe('fixFormattingGaps', () => {
     // bookends — addMark on the bookends would be idempotent for same-
     // attr marks, but for highlight with mismatched colors it would
     // change the last bookend's color. We bridge only the gap.
+    // Bookends need a named-style mark for the gap to qualify; we use
+    // underline_mark on both so the gap qualifies via same-mark rule.
+    const u = schema.marks['underline_mark']!.create();
     const doc = makeDoc(p(
-      schema.text('foo', [schema.marks['highlight']!.create({ color: 'yellow' })]),
+      schema.text('foo', [u, schema.marks['highlight']!.create({ color: 'yellow' })]),
       schema.text(' '),
-      schema.text('bar', [schema.marks['highlight']!.create({ color: 'green' })]),
+      schema.text('bar', [u, schema.marks['highlight']!.create({ color: 'green' })]),
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
@@ -3361,5 +3378,20 @@ describe('fixFormattingGaps', () => {
     expect(fooColor).toBe('yellow');
     expect(gapColor).toBe('yellow');
     expect(barColor).toBe('green');
+  });
+
+  it('does NOT clear font_size on gaps that do not qualify', () => {
+    // First bookend has underline; second bookend is shrunken plain
+    // text (only font_size, no named-style). Gap has its own
+    // font_size:16. Without the gating fix, the gap's font_size
+    // would get cleared even though no named-style bridge applies.
+    // With gating, the gap stays untouched.
+    const doc = makeDoc(p(
+      schema.text('foo', [schema.marks['underline_mark']!.create()]),
+      schema.text(' ', [schema.marks['font_size']!.create({ halfPoints: 16 })]),
+      schema.text('bar', [schema.marks['font_size']!.create({ halfPoints: 16 })]),
+    ));
+    const state = EditorState.create({ doc, schema });
+    expect(fixFormattingGaps()(state, undefined)).toBe(false);
   });
 });

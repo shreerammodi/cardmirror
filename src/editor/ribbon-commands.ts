@@ -2024,32 +2024,38 @@ export function pasteAsText(): Command {
  * mutually-exclusive named-style marks can't kick in and strip a
  * bookend's mark).
  *
- * Bridging rules per mark:
+ * The decision to operate on a gap at all is gated by the bookends'
+ * named-style marks. A gap "qualifies" only when both bookends
+ * carry a named-style mark of compatible types:
  *
- *   - Named-style (underline_mark / emphasis_mark / cite_mark):
- *     both bookends same → that mark; underline + emphasis (either
- *     order) → underline (Verbatim's "underline wins on mixed",
- *     `Formatting.bas:1071-1074`); any other mix → no named-style
- *     bridge.
- *   - highlight / shading: both bookends have the mark → bridge
- *     with the FIRST bookend's color (Verbatim's
- *     `c.Item(1).HighlightColorIndex` rule — first wins on color
- *     mismatch).
- *   - font_size: ALWAYS clear the gap's font_size mark (so stale
- *     shrunken-size marks don't persist across the bridge). If
- *     BOTH bookends have explicit font_size, additionally set the
- *     gap to the SMALLER halfPoints value — "smaller wins" so a
- *     shrunk-text bookend pulls the gap down to match (versus a
- *     larger gap that would visually stand out).
+ *   - underline + underline
+ *   - emphasis + emphasis
+ *   - cite + cite
+ *   - underline + emphasis (either order)
  *
- * Bridges per mark are independent, so a span with mixed bridgeable
- * marks (e.g. underline + highlight on the bookends) gets both
- * filled into the gap simultaneously.
+ * Any other pair (named-style abutting plain text, two completely
+ * different combinations, just-shrunken text on one side, etc.)
+ * leaves the gap entirely untouched — its font_size, highlight,
+ * everything stays exactly as it was.
  *
- * No-op (returns false) when nothing in scope actually changes —
- * either no regex matches, or every queued removeMark / addMark
- * collapses to a no-op because the gap already had the marks the
- * bridge would assign.
+ * For qualifying gaps, three independent rules apply to the gap
+ * chars (never the bookends):
+ *
+ *   - Named-style bridge: both-same → that mark; mixed
+ *     underline+emphasis → underline (Verbatim's "underline wins on
+ *     mixed", `Formatting.bas:1071-1074`).
+ *   - highlight / shading: bridged ONLY when both bookends carry
+ *     the same mark type. First bookend's color wins on a color
+ *     mismatch.
+ *   - font_size: always cleared (a stale shrunken-size mark in the
+ *     gap shouldn't survive the bridge); if BOTH bookends carry
+ *     explicit font_size, additionally assign the gap the SMALLER
+ *     halfPoints value (a shrunken bookend pulls the gap down to
+ *     match instead of the gap standing out at the larger size).
+ *
+ * No-op (returns false) when no gap in scope qualifies, or when
+ * every qualifying gap's bridge action collapses to a no-op
+ * because the marks the bridge would assign are already there.
  */
 export function fixFormattingGaps(): Command {
   return (state, dispatch) => {
@@ -2136,38 +2142,44 @@ export function fixFormattingGaps(): Command {
         const lmHasUnderline = lm.some((mk) => mk.type === underlineType);
         const lmHasEmphasis = lm.some((mk) => mk.type === emphasisType);
         const lmHasCite = lm.some((mk) => mk.type === citeType);
-        const fmFs = fm.find((mk) => mk.type === fontSizeType);
-        const lmFs = lm.find((mk) => mk.type === fontSizeType);
 
-        const marksToAdd: Mark[] = [];
-        const marksToRemove: MarkType[] = [];
-
-        // Named-style bridge rule (Verbatim parity, plus cite):
-        //   - both same → that mark.
-        //   - underline + emphasis (either direction) → underline.
-        //     Underline "wins" on mixed bookends per Verbatim
-        //     `Formatting.bas:1071-1074` — the milder, more inclusive
-        //     style covers the broader intent (this gap could plausibly
-        //     belong to either argument run, so default to the less-
-        //     restrictive one).
-        //   - any other mix → no named-style bridge.
-        // The three marks are mutually exclusive via the schema's
+        // Gate every gap action behind the named-style qualifier.
+        // Only these five bookend combinations count as a "gap to
+        // operate on": underline/underline, emphasis/emphasis,
+        // cite/cite, underline+emphasis, emphasis+underline. Any
+        // other pair (named-style abutting plain text, or just
+        // shrunken text, etc.) leaves the gap untouched. This keeps
+        // the highlight / shading / font_size rules from acting on
+        // gaps the user didn't intend them for.
+        //
+        // Underline "wins" on mixed underline+emphasis bookends —
+        // Verbatim parity (`Formatting.bas:1071-1074`); the milder,
+        // more inclusive style is the safer default when the gap
+        // could plausibly belong to either argument run. The three
+        // named-style marks are mutually exclusive via the schema's
         // `excludes`, so the bridged mark sits cleanly in the gap.
+        let bridgedNamedStyle: Mark | null = null;
         if (fmHasUnderline && lmHasUnderline) {
-          marksToAdd.push(underlineType.create());
+          bridgedNamedStyle = underlineType.create();
         } else if (fmHasEmphasis && lmHasEmphasis) {
-          marksToAdd.push(emphasisType.create());
+          bridgedNamedStyle = emphasisType.create();
         } else if (fmHasCite && lmHasCite) {
-          marksToAdd.push(citeType.create());
+          bridgedNamedStyle = citeType.create();
         } else if (
           (fmHasUnderline && lmHasEmphasis) ||
           (fmHasEmphasis && lmHasUnderline)
         ) {
-          marksToAdd.push(underlineType.create());
+          bridgedNamedStyle = underlineType.create();
         }
+        if (!bridgedNamedStyle) continue;
 
-        // Color-bearing marks: bridge with FIRST bookend's attrs even
-        // if last bookend's color differs (Verbatim's behavior).
+        const marksToAdd: Mark[] = [bridgedNamedStyle];
+        const marksToRemove: MarkType[] = [];
+
+        // Color-bearing marks: bridge ONLY when both bookends have
+        // the same mark type. Uses the FIRST bookend's attrs if the
+        // colors differ (Verbatim's `c.Item(1).HighlightColorIndex`
+        // choice).
         for (const t of [highlightType, shadingType]) {
           const firstMk = fm.find((mk) => mk.type === t);
           const lastMk = lm.find((mk) => mk.type === t);
@@ -2176,20 +2188,12 @@ export function fixFormattingGaps(): Command {
           }
         }
 
-        // Font size on the gap: always clear the gap's font_size
-        // mark — its stale value (typically a leftover shrunken size
-        // from an earlier edit) shouldn't survive the bridge. The
-        // gap then inherits whichever size its surroundings imply.
-        // If BOTH bookends carry explicit font_size, additionally
-        // assign the gap the smaller of the two halfPoints values.
-        // "Smaller wins" is the conservative choice: a smaller gap
-        // character blends visually into either bookend better than
-        // a larger one would.
-        //
-        // Pre-check whether any gap char actually has font_size so
-        // that the no-op detection stays accurate — we don't want
-        // dryrun to claim "something will happen" purely because we
-        // would queue a removeMark that the gap doesn't need.
+        // Font size on the gap: always clear; if BOTH bookends carry
+        // explicit font_size, additionally assign the smaller
+        // halfPoints. "Smaller wins" is the conservative choice — a
+        // shrunken bookend pulls the gap down to match instead of
+        // the gap standing out at the larger size. (Only acts on
+        // qualifying gaps per the gate above.)
         let gapHasFontSize = false;
         for (let i = firstIdx + 1; i < lastIdx; i++) {
           const gn = charNode[i];
@@ -2198,9 +2202,9 @@ export function fixFormattingGaps(): Command {
             break;
           }
         }
-        if (gapHasFontSize) {
-          marksToRemove.push(fontSizeType);
-        }
+        if (gapHasFontSize) marksToRemove.push(fontSizeType);
+        const fmFs = fm.find((mk) => mk.type === fontSizeType);
+        const lmFs = lm.find((mk) => mk.type === fontSizeType);
         if (fmFs && lmFs) {
           const fHp = Number(fmFs.attrs['halfPoints'] ?? 22);
           const lHp = Number(lmFs.attrs['halfPoints'] ?? 22);
@@ -2209,9 +2213,7 @@ export function fixFormattingGaps(): Command {
           );
         }
 
-        if (marksToAdd.length > 0 || marksToRemove.length > 0) {
-          adds.push({ from: gapFrom, to: gapTo, marksToAdd, marksToRemove });
-        }
+        adds.push({ from: gapFrom, to: gapTo, marksToAdd, marksToRemove });
       }
       return false;
     });
