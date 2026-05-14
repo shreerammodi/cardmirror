@@ -3545,6 +3545,12 @@ body.pmd-multi-doc #app {
 body.pmd-multi-doc #status-bar {
   left: var(--nav-width);
 }
+/* Each pane shows its own word count in its footer, so the
+ * shared status-bar word counter is redundant in multi-doc mode.
+ * Hide it (and let the zoom controls right-align via the spacer). */
+body.pmd-multi-doc #word-count-display {
+  display: none;
+}
 
 /* ---- Nav rail (one section per active slot) ---- */
 
