@@ -2552,17 +2552,18 @@ body.pmd-nav-resize-active {
 
 /* ---------------------------------------------- Tables */
 
-#editor .pmd-table {
+/* columnResizing()'s TableView nodeView replaces our schema toDOM at
+   render time, so the live <table> element doesn't carry our schema
+   class. Scope to .tableWrapper (added by the nodeView) instead. */
+#editor .tableWrapper > table {
   border-collapse: collapse;
   margin: 0.5rem 0;
   table-layout: fixed;
   width: 100%;
-  /* prosemirror-tables wraps the table in <div class="tableWrapper">
-     with overflow:auto for horizontal scroll on narrow viewports. */
 }
 
-#editor .pmd-table td,
-#editor .pmd-table th {
+#editor .tableWrapper td,
+#editor .tableWrapper th {
   border: 1px solid #888;
   padding: 0.2rem 0.4rem;
   vertical-align: top;
@@ -2570,12 +2571,12 @@ body.pmd-nav-resize-active {
   box-sizing: border-box;
 }
 
-#editor .pmd-table th {
+#editor .tableWrapper th {
   background: #f0f0f0;
   font-weight: bold;
 }
 
-#editor .pmd-table p {
+#editor .tableWrapper p {
   margin: 0;
 }
 
