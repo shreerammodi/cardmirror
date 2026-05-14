@@ -3626,6 +3626,13 @@ body.pmd-multi-doc #status-bar {
  * 1200px or 2400px wide. */
 .pmd-multi-row[data-layout="wide"] {
   overflow-x: auto;
+  /* Explicit `hidden` on the cross axis. Without it the CSS spec
+   * promotes `overflow-y` to `auto` whenever `overflow-x` is set
+   * to anything but `visible`, which would make the row scroll as
+   * a unit vertically and override each pane's own `.pmd-pane-body
+   * { overflow: auto }`. We want every pane to scroll
+   * independently. */
+  overflow-y: hidden;
   scroll-snap-type: x mandatory;
   scroll-behavior: smooth;
 }
