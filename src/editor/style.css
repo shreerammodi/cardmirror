@@ -2863,11 +2863,14 @@ body.pmd-nav-resize-active {
 /* Small fixed-height container that holds one resting line at a
    time. New activity slides up from the bottom while the old one
    slides off the top. Used by both the Thinking… placeholder in
-   the comments column and the cite-creator tooltip. */
+   the comments column and the cite-creator tooltip.
+   `display: block` so the stage fills the parent's content width;
+   the absolutely-positioned children (the lines) don't contribute
+   to intrinsic sizing, so `inline-block` would collapse to 0 wide
+   and the text would disappear. */
 .pmd-activity-stage {
   position: relative;
-  display: inline-block;
-  vertical-align: bottom;
+  display: block;
   overflow: hidden;
   height: 1.3em;
   line-height: 1.3em;
