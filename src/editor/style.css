@@ -2884,6 +2884,121 @@ body.pmd-nav-resize-active {
   display: none !important;
 }
 
+/* ---------------------------------------------- AI cite tooltip */
+
+/* Pinned near the user's selection while the cite-creator is
+   contacting Anthropic. Same color palette as the AI thinking
+   indicator in the comments column so the persona reads
+   consistently. */
+.pmd-ai-cite-tooltip {
+  position: absolute;
+  z-index: 900;
+  max-width: 22rem;
+  padding: 0.35rem 0.7rem;
+  background: rgba(139, 92, 246, 0.95);
+  color: #fff;
+  border-radius: 6px;
+  font-family: 'Calibri', 'Helvetica Neue', sans-serif;
+  font-size: 0.85rem;
+  font-style: italic;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
+/* ---------------------------------------------- Prompt editor modal */
+
+.pmd-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--pmd-c-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.pmd-prompt-dialog {
+  background: var(--pmd-c-bg);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  width: 92%;
+  max-width: 720px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Calibri', 'Helvetica Neue', sans-serif;
+  padding: 1rem 1.25rem;
+  gap: 0.6rem;
+}
+.pmd-prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pmd-prompt-header h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.pmd-prompt-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--pmd-c-text-muted);
+  padding: 0 0.25rem;
+}
+.pmd-prompt-close:hover { color: var(--pmd-c-text); }
+.pmd-prompt-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--pmd-c-text-muted);
+}
+.pmd-prompt-textarea {
+  flex: 1 1 auto;
+  min-height: 14rem;
+  padding: 0.5rem 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  border: 1px solid var(--pmd-c-border, #999);
+  border-radius: 4px;
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+  resize: vertical;
+}
+.pmd-prompt-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.pmd-prompt-btn {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.9rem;
+  border-radius: 4px;
+  border: 1px solid var(--pmd-c-border, #999);
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.pmd-prompt-btn:hover { background: var(--pmd-c-button-hover, rgba(0, 0, 0, 0.06)); }
+.pmd-prompt-btn-primary {
+  background: var(--pmd-c-accent, #4a90e2);
+  border-color: var(--pmd-c-accent, #4a90e2);
+  color: #fff;
+}
+.pmd-prompt-btn-primary:hover { background: var(--pmd-c-accent-hover, #3a7dd0); }
+
+.pmd-settings-btn {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+  border-radius: 4px;
+  border: 1px solid var(--pmd-c-border, #999);
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.pmd-settings-btn:hover { background: var(--pmd-c-button-hover, rgba(0, 0, 0, 0.06)); }
+
 /* ---------------------------------------------- Clod configurator */
 
 .pmd-clod-overlay {

@@ -36,6 +36,7 @@ import {
 import { openSaveAs } from './save-as-ui.js';
 import { commentsPlugin, commentsKey, loadThreads, getCommentsState } from './comments-plugin.js';
 import { CommentsColumn, addCommentToSelection } from './comments-ui.js';
+import { runAiCreateCite } from './ai/cite-creator.js';
 import { readModePlugin, PMD_READ_MODE_TOGGLE } from './read-mode-plugin.js';
 import { absorbPlugin } from './absorb-plugin.js';
 import { citeClassifierPlugin } from './cite-classifier-plugin.js';
@@ -200,6 +201,10 @@ const ribbonContext: RibbonContext = {
     }
     commentsColumn.render();
     commentsColumn.focusReplyForThread(newId);
+  },
+  aiCreateCite: () => {
+    if (!view) return;
+    runAiCreateCite(view);
   },
 };
 

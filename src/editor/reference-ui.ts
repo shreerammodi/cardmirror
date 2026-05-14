@@ -73,6 +73,10 @@ const GROUPS: ShortcutGroup[] = [
     commands: ['toggleCommentsVisible', 'addCommentToSelection', 'aiAskAboutSelection'],
   },
   {
+    title: 'AI',
+    commands: ['aiCreateCite'],
+  },
+  {
     title: 'Select',
     commands: ['selectSimilar'],
   },

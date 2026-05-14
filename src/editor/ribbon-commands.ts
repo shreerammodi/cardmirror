@@ -2835,6 +2835,7 @@ export type RibbonCommandId =
   | 'toggleCommentsVisible'
   | 'addCommentToSelection'
   | 'aiAskAboutSelection'
+  | 'aiCreateCite'
   | 'wordCountSelection'
   | 'openShortcutsReference'
   | 'selectSimilar'
@@ -2892,6 +2893,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'toggleCommentsVisible',
   'addCommentToSelection',
   'aiAskAboutSelection',
+  'aiCreateCite',
   'wordCountSelection',
   'openShortcutsReference',
   'selectSimilar',
@@ -2946,6 +2948,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   toggleCommentsVisible: 'Show / hide comments',
   addCommentToSelection: 'Add comment to selection',
   aiAskAboutSelection: 'Ask AI about selection',
+  aiCreateCite: 'AI: format cite from selection',
   wordCountSelection: 'Word count selection',
   openShortcutsReference: 'Open keyboard shortcuts',
   selectSimilar: 'Select Similar Formatting',
@@ -3010,6 +3013,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   toggleCommentsVisible: '',
   addCommentToSelection: '',
   aiAskAboutSelection: '',
+  aiCreateCite: 'Mod-Shift-x',
   wordCountSelection: '',
   openShortcutsReference: '',
   selectSimilar: '',
@@ -3090,6 +3094,7 @@ export interface RibbonContext {
   toggleCommentsVisible: () => void;
   addCommentToSelection: () => void;
   aiAskAboutSelection: () => void;
+  aiCreateCite: () => void;
 }
 
 const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
@@ -3115,6 +3120,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   toggleCommentsVisible: () => {},
   addCommentToSelection: () => {},
   aiAskAboutSelection: () => {},
+  aiCreateCite: () => {},
 };
 
 function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
@@ -3222,6 +3228,13 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
         if (state.selection.empty) return false;
         if (!dispatch) return true;
         ctx.aiAskAboutSelection();
+        return true;
+      };
+    case 'aiCreateCite':
+      return (state, dispatch) => {
+        if (state.selection.empty) return false;
+        if (!dispatch) return true;
+        ctx.aiCreateCite();
         return true;
       };
     case 'wordCountSelection':

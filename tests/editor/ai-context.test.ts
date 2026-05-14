@@ -197,6 +197,43 @@ describe('hasAiMention', () => {
   });
 });
 
+describe('cite-creator response parsing', () => {
+  it('parses a clean JSON reply with cite + tokens', async () => {
+    const { parseCiteResponse } = await import('../../src/editor/ai/cite-creator.js');
+    const text = JSON.stringify({
+      cite: 'Smith 24 (UCLA), "Title," Foreign Affairs, 5-12-2024, https://x, accessed 5-14-2026.',
+      tokens: ['Smith 24'],
+    });
+    const out = parseCiteResponse(text);
+    expect(out.cite).toContain('Smith 24');
+    expect(out.tokens).toEqual(['Smith 24']);
+  });
+
+  it('strips a fenced ```json wrapper if the model adds one', async () => {
+    const { parseCiteResponse } = await import('../../src/editor/ai/cite-creator.js');
+    const text = '```json\n{"cite":"Smith 24, ...","tokens":["Smith 24"]}\n```';
+    const out = parseCiteResponse(text);
+    expect(out.cite).toBe('Smith 24, ...');
+    expect(out.tokens).toEqual(['Smith 24']);
+  });
+
+  it('throws on missing cite field', async () => {
+    const { parseCiteResponse } = await import('../../src/editor/ai/cite-creator.js');
+    expect(() => parseCiteResponse('{"tokens":["X"]}')).toThrow(/cite/i);
+  });
+
+  it('throws on missing tokens array', async () => {
+    const { parseCiteResponse } = await import('../../src/editor/ai/cite-creator.js');
+    expect(() => parseCiteResponse('{"cite":"X"}')).toThrow(/tokens/i);
+  });
+
+  it('substitutes {DATE} placeholder for today', async () => {
+    const { resolveCitePrompt } = await import('../../src/editor/ai/cite-creator.js');
+    const out = resolveCitePrompt('today is {DATE}', new Date(2026, 0, 5));
+    expect(out).toBe('today is 1-5-2026');
+  });
+});
+
 describe('clod time-period selection', () => {
   it('places 7am in "morning" under defaults', () => {
     const at = new Date(2026, 4, 13, 7, 0, 0);

@@ -380,6 +380,11 @@ export interface Settings {
     possessive: string;
     reflexive: string;
   };
+  /** System prompt for the AI cite creator. Editable via the
+   *  Settings dialog's "Edit prompt" modal — long enough that a
+   *  full textarea makes more sense than an inline input. Empty
+   *  string falls back to `DEFAULT_AI_CITE_PROMPT`. */
+  aiCitePrompt: string;
 }
 
 /** Open-delimiter options for "Condense with warning" markers. The
@@ -483,6 +488,7 @@ const DEFAULTS: Settings = {
     possessive: 'their',
     reflexive: 'themself',
   },
+  aiCitePrompt: '',
 };
 
 /** Public read-only view of the built-in defaults — handy for any UI
@@ -515,7 +521,8 @@ export interface SettingMeta {
     | 'keybindings'
     | 'text'
     | 'password'
-    | 'clod';
+    | 'clod'
+    | 'aiCitePrompt';
 }
 
 export const SETTING_METADATA: SettingMeta[] = [
@@ -689,6 +696,13 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'When the AI is composing a reply, the in-flight placeholder cycles through time-of-day Clod activities ("Clod is making toast…") instead of plain "Thinking…".',
     kind: 'clod',
+  },
+  {
+    key: 'aiCitePrompt',
+    label: 'AI cite-creator prompt',
+    description:
+      'System prompt the cite-creator hands to the model. Click "Edit prompt" to open a full-size editor. Leave blank to use the built-in default.',
+    kind: 'aiCitePrompt',
   },
 ];
 
@@ -875,6 +889,8 @@ function sanitize(s: Settings): Settings {
       ? (s.aiPersonaPronouns as Settings['aiPersonaPronouns'])
       : DEFAULTS.aiPersonaPronouns,
     aiPersonaCustomPronouns: sanitizeCustomPronouns(s.aiPersonaCustomPronouns),
+    aiCitePrompt:
+      typeof s.aiCitePrompt === 'string' ? s.aiCitePrompt : DEFAULTS.aiCitePrompt,
   };
 }
 

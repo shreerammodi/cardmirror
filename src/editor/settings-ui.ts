@@ -227,6 +227,19 @@ class SettingsModal {
         settings.set(meta.key as 'commentAuthor', input.value as never);
       });
       label.appendChild(input);
+    } else if (meta.kind === 'aiCitePrompt') {
+      // Just a button — the actual prompt editor pops up in its
+      // own modal because the prompt's long enough that an inline
+      // textarea would shove the rest of the settings dialog off-
+      // screen.
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pmd-settings-btn';
+      btn.textContent = 'Edit prompt';
+      btn.addEventListener('click', () => {
+        void import('./ai/edit-prompt-modal.js').then((m) => m.openCitePromptEditor());
+      });
+      label.appendChild(btn);
     } else if (meta.kind === 'clod') {
       // Standard boolean toggle with an easter-egg twist:
       // Mod (Ctrl/Cmd) + Alt + Shift + click opens the Clod
