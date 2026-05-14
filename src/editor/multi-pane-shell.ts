@@ -424,17 +424,52 @@ class MultiPaneShell {
       for (const id of SLOT_IDS) this.slots[id].refreshWordCount();
     });
 
-    // Drag-hover focus: while a drag is active, the controller's
-    // hoverTarget tells us which view the drop will land in. When
-    // the user hovers over a pane (even before releasing), focus
-    // that pane so the ribbon / chrome retarget — matches the
-    // user's expectation that hovering a doc brings it into focus.
+    // Drag-hover focus + post-drop collapse:
+    //
+    //   - On 'move': the controller's hoverTarget tells us which
+    //     view the drop will land in. When the user hovers over
+    //     a pane (even before releasing), focus that pane so the
+    //     ribbon / chrome retarget. Stash the source/target views
+    //     too so we can detect cross-view drops on 'end'.
+    //   - On 'end': if this was a cross-view drop, apply the
+    //     destination pane's outline-level filter to the freshly-
+    //     dropped headings (which got fresh IDs via
+    //     rewriteHeadingIds). Existing user expansions stay.
+    let lastSourceView: EditorView | null = null;
+    let lastTargetView: EditorView | null = null;
     dragController.subscribe((event) => {
-      if (event !== 'move') return;
-      const target = dragController.getHoverTarget();
-      if (!target) return;
-      const slot = this.findSlotByView(target.view);
-      if (slot && this.focusedSlot !== slot) this.focusSlot(slot);
+      if (event === 'begin') {
+        const session = dragController.getSession();
+        lastSourceView = session?.view ?? null;
+        lastTargetView = null;
+      } else if (event === 'move') {
+        const target = dragController.getHoverTarget();
+        if (target) {
+          lastTargetView = target.view;
+          const slot = this.findSlotByView(target.view);
+          if (slot && this.focusedSlot !== slot) this.focusSlot(slot);
+        }
+      } else if (event === 'end') {
+        if (
+          lastSourceView &&
+          lastTargetView &&
+          lastSourceView !== lastTargetView
+        ) {
+          const targetSlot = this.findSlotByView(lastTargetView);
+          if (targetSlot?.visible) {
+            // Flush the pane's debounced nav update so this runs
+            // against the post-drop doc and the new IDs are visible.
+            const rec = targetSlot.visible;
+            if (rec.navUpdateTimer !== null) {
+              clearTimeout(rec.navUpdateTimer);
+              rec.navUpdateTimer = null;
+            }
+            rec.navPanel.applyMaxLevelToNewHeadings();
+          }
+        }
+        lastSourceView = null;
+        lastTargetView = null;
+      }
     });
 
     // First active slot gets focus by default once a doc lands.
@@ -458,9 +493,9 @@ class MultiPaneShell {
   /** Mark `slot` as focused. The shared ribbon / chrome will route
    *  through its visible doc's EditorView. In wide-scroll layout
    *  with three active panes, also scroll the focused pane into
-   *  view — that's what makes clicking the peeking third doc
-   *  bring it fully into view (the `scroll-snap-type: x mandatory`
-   *  on the row keeps the landing position clean). */
+   *  view IF it's not already fully visible — clicking the peeking
+   *  third doc brings it into view, but clicking the middle (fully
+   *  visible) doc leaves the scroll position alone. */
   focusSlot(slot: Slot): void {
     const wasSame = this.focusedSlot === slot && getActiveView() === slot.visible?.view;
     if (this.focusedSlot && this.focusedSlot !== slot) {
@@ -473,10 +508,20 @@ class MultiPaneShell {
     }
     const activeCount = SLOT_IDS.filter((id) => this.slots[id].stack.length > 0).length;
     if (this.layoutMode === 'wide' && activeCount === 3) {
-      // `inline: 'start'` clamps to scroll-max on the rightmost pane,
-      // so clicking the third doc's peek lands at the snap position
-      // where pane 2 + pane 3 are fully visible.
-      slot.paneEl.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' });
+      // Compare the pane's box against the row's viewport. If any
+      // part of the pane is clipped (off-screen), scroll it into
+      // view. The `scroll-snap-type` on the row aligns the landing
+      // position to a snap point; if the pane is already fully
+      // inside the viewport (e.g., the middle pane), skip the
+      // scroll so the user doesn't see an unwanted snap.
+      const rowRect = this.rowEl.getBoundingClientRect();
+      const paneRect = slot.paneEl.getBoundingClientRect();
+      const fullyVisible =
+        paneRect.left >= rowRect.left - 0.5 &&
+        paneRect.right <= rowRect.right + 0.5;
+      if (!fullyVisible) {
+        slot.paneEl.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' });
+      }
     }
   }
 

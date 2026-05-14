@@ -101,6 +101,13 @@ export class NavigationPanel {
   /** When set (multi-pane sections), the outline-level filter is
    *  per-instance instead of shared via the `navMaxLevel` setting. */
   private localMaxLevel: number | null = null;
+  /** Heading IDs seen at the last render. Used by
+   *  `applyMaxLevelToNewHeadings` (called after cross-view drops in
+   *  multi-pane mode) to identify headings that were dropped /
+   *  pasted in since the previous render and need to be auto-
+   *  collapsed to the current `maxLevel`. Existing user-expanded
+   *  parents stay expanded. */
+  private lastSeenIds: Set<string> = new Set();
   private get maxLevel(): number {
     if (this.localMaxLevel != null) return this.localMaxLevel;
     return settings.get('navMaxLevel');
@@ -359,8 +366,48 @@ export class NavigationPanel {
     }
   }
 
+  /**
+   * Apply the current `maxLevel` collapse rule to headings whose IDs
+   * weren't present at the last render. Used by the multi-pane shell
+   * after a cross-view drop: dropped content gets fresh heading IDs
+   * via `rewriteHeadingIds`, so the diff identifies exactly the new
+   * entries. Existing user-expanded parents are preserved.
+   *
+   * Also triggers a synchronous re-render and updates the latest doc
+   * snapshot — call after a transaction has applied.
+   */
+  applyMaxLevelToNewHeadings(): void {
+    const view = this.view;
+    if (!view) return;
+    const doc = view.state.doc;
+    this.currentDoc = doc;
+    const maxLevel = this.maxLevel;
+    const entries = collectHeadings(doc);
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]!;
+      if (entry.id == null) continue;
+      if (this.lastSeenIds.has(entry.id)) continue; // not new
+      const next = entries[i + 1];
+      const hasChildren = next != null && next.level > entry.level;
+      if (!hasChildren) continue;
+      if (entry.level >= maxLevel) {
+        this.collapsed.add(entry.id);
+      }
+    }
+    this.render(doc);
+  }
+
   private render(doc: PMNode): void {
     const entries = collectHeadings(doc);
+
+    // Refresh the `lastSeenIds` set so `applyMaxLevelToNewHeadings`
+    // (called by the multi-pane shell after cross-view drops) can
+    // diff future renders against it.
+    const seen = new Set<string>();
+    for (const entry of entries) {
+      if (entry.id != null) seen.add(entry.id);
+    }
+    this.lastSeenIds = seen;
 
     // Clear and re-build. For doc sizes we care about (max ~600 headings
     // in the example corpus) this is fine; if profiling shows it's hot,

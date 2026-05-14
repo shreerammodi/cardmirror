@@ -783,7 +783,7 @@ code {
    browsers anchor at the very top of the viewport — under our fixed
    ribbon. scroll-margin-top reserves that much vertical space above
    the heading when it's the scroll target. */
-#editor [data-id] {
+:is(#editor, .pmd-pane-editor) [data-id] {
   scroll-margin-top: calc(var(--ribbon-height) + 0.5rem);
 }
 
@@ -832,7 +832,7 @@ code {
    specificity than a bare `.pmd-analytic` rule and would otherwise
    strip the before-margin. Color is settings-driven via
    --pmd-color-analytic — see ARCHITECTURE.md §18. */
-#editor .pmd-analytic {
+:is(#editor, .pmd-pane-editor) .pmd-analytic {
   font-size: var(--pmd-size-analytic);
   line-height: var(--pmd-line-height-analytic);
   font-weight: bold;
@@ -847,7 +847,7 @@ code {
 .pmd-cite-para,
 .pmd-card-body,
 .pmd-undertag,
-#editor p {
+:is(#editor, .pmd-pane-editor) p {
   margin: 0;
 }
 
@@ -1042,7 +1042,7 @@ code {
    visible text from `pmd-rm-keep` spans + `::after { content: ' ' }`
    and relies on whitespace collapsing to fold those separators into
    a single space between chunks. */
-#editor .ProseMirror {
+:is(#editor, .pmd-pane-editor) .ProseMirror {
   white-space: pre-wrap;
   tab-size: 4;
 }
@@ -2872,7 +2872,7 @@ body.pmd-nav-resize-active {
 /* Inline indicator on commented text — subtle yellow underline so
    you can see at a glance what's commented. Doesn't fight with
    highlight backgrounds since it's an underline. */
-#editor .pmd-comment-range {
+:is(#editor, .pmd-pane-editor) .pmd-comment-range {
   background-color: rgba(255, 215, 0, 0.12);
   border-bottom: 1px dotted #c79a00;
   cursor: help;
@@ -3456,14 +3456,14 @@ body.pmd-nav-resize-active {
    No `width: 100%` — TableView sets an inline `style.width` from the
    summed `colwidth` attrs (imported from <w:tblGrid>), and we want
    the table to render at its true Word width, not edge-to-edge. */
-#editor .tableWrapper > table {
+:is(#editor, .pmd-pane-editor) .tableWrapper > table {
   border-collapse: collapse;
   margin: 0.5rem 0;
   table-layout: fixed;
 }
 
-#editor .tableWrapper td,
-#editor .tableWrapper th {
+:is(#editor, .pmd-pane-editor) .tableWrapper td,
+:is(#editor, .pmd-pane-editor) .tableWrapper th {
   border: 1px solid #888;
   padding: 0.2rem 0.4rem;
   vertical-align: top;
@@ -3471,22 +3471,22 @@ body.pmd-nav-resize-active {
   box-sizing: border-box;
 }
 
-#editor .tableWrapper th {
+:is(#editor, .pmd-pane-editor) .tableWrapper th {
   background: #f0f0f0;
   font-weight: bold;
 }
 
-#editor .tableWrapper p {
+:is(#editor, .pmd-pane-editor) .tableWrapper p {
   margin: 0;
 }
 
 /* prosemirror-tables column-resize handle. */
-#editor .tableWrapper {
+:is(#editor, .pmd-pane-editor) .tableWrapper {
   overflow-x: auto;
   margin: 0.5rem 0;
 }
 
-#editor .column-resize-handle {
+:is(#editor, .pmd-pane-editor) .column-resize-handle {
   position: absolute;
   right: -2px;
   top: 0;
@@ -3501,7 +3501,7 @@ body.pmd-nav-resize-active {
 }
 
 /* prosemirror-tables's selected-cells decoration. */
-#editor .selectedCell::after {
+:is(#editor, .pmd-pane-editor) .selectedCell::after {
   position: absolute;
   content: '';
   inset: 0;
@@ -3821,6 +3821,10 @@ body.pmd-multi-doc #word-count-display {
   width: 100%;
   height: 100%;
   min-height: 100%;
+  /* Match the single-doc editor's zoom binding so the shared zoom
+   * controls scale per-pane content, and the editor drag surface's
+   * zoom-aware math lands drop indicators at the right Y position. */
+  zoom: var(--editor-zoom, 1);
 }
 /* Re-use the global editor styling for the per-pane ProseMirror
  * surface (the ProseMirror's own root element gets class
