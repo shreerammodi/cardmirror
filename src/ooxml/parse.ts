@@ -64,6 +64,53 @@ export function children(node: XmlNode, tag: string): XmlNode[] {
   return [];
 }
 
+/** Re-serialize a parsed XmlNode list back to an XML fragment.
+ *  Inverse of `parseXml` for the subset of OOXML we produce — preserves
+ *  element order, attributes, and `#text` leaves. Used when we want to
+ *  round-trip opaque sub-trees (e.g. `<w:tblPr>` extras) verbatim
+ *  without modeling every child element in the schema. */
+export function serializeXmlNodes(nodes: XmlNode[]): string {
+  let out = '';
+  for (const node of nodes) {
+    out += serializeXmlNode(node);
+  }
+  return out;
+}
+
+function serializeXmlNode(node: XmlNode): string {
+  for (const key of Object.keys(node)) {
+    if (key === ':@') continue;
+    if (key === '#text') {
+      return escText(String(node[key] ?? ''));
+    }
+    // Tag node — single tag key per node in preserveOrder mode.
+    const attrPart = serializeAttrs(node[':@'] ?? {});
+    const value = node[key];
+    if (Array.isArray(value) && value.length > 0) {
+      return `<${key}${attrPart}>${serializeXmlNodes(value)}</${key}>`;
+    }
+    return `<${key}${attrPart}/>`;
+  }
+  return '';
+}
+
+function serializeAttrs(a: Record<string, string>): string {
+  let out = '';
+  for (const [k, v] of Object.entries(a)) {
+    out += ` ${k}="${escAttr(String(v))}"`;
+  }
+  return out;
+}
+
+/** Minimal XML escape helpers inlined here so parse.ts has no
+ *  upward dependency on `ooxml/xml.ts`. */
+function escText(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function escAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
 /**
  * Get the text content of a node by recursively concatenating all
  * #text children.

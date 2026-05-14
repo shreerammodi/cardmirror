@@ -509,6 +509,17 @@ export const nodes: { [name: string]: NodeSpec } = {
     tableRole: 'table',
     isolating: true,
     group: 'block',
+    attrs: {
+      // Opaque OOXML `<w:tblPr>` inner content captured at import time
+      // and re-emitted verbatim on export. Lets us round-trip table-
+      // level borders / styles / shading without modeling each
+      // property in the schema. New tables created in the editor have
+      // this null and get the exporter's default tblPr.
+      rawTblPr: {
+        default: null as string | null,
+        validate: (v: unknown) => v === null || typeof v === 'string',
+      },
+    },
     parseDOM: [{ tag: 'table' }],
     toDOM: () => ['table', { class: 'pmd-table' }, ['tbody', 0]],
   },
@@ -529,6 +540,15 @@ export const nodes: { [name: string]: NodeSpec } = {
         default: null as number[] | null,
         validate: (v: unknown) =>
           v === null || (Array.isArray(v) && v.every((n) => typeof n === 'number')),
+      },
+      // Opaque OOXML `<w:tcPr>` children captured at import time
+      // (everything except `gridSpan`, `vMerge`, and `tcW`, which are
+      // derived from the cell's structural attrs). Re-emitted after
+      // the structural bits on export so per-cell borders / shading /
+      // vAlign etc. round-trip.
+      rawTcPr: {
+        default: null as string | null,
+        validate: (v: unknown) => v === null || typeof v === 'string',
       },
     },
     tableRole: 'cell',
@@ -556,6 +576,11 @@ export const nodes: { [name: string]: NodeSpec } = {
         default: null as number[] | null,
         validate: (v: unknown) =>
           v === null || (Array.isArray(v) && v.every((n) => typeof n === 'number')),
+      },
+      // See `table_cell.rawTcPr` for the round-trip contract.
+      rawTcPr: {
+        default: null as string | null,
+        validate: (v: unknown) => v === null || typeof v === 'string',
       },
     },
     tableRole: 'header_cell',

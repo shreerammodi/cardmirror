@@ -210,13 +210,22 @@ class DocxExporter {
     if (colCount === 0) colCount = 1;
 
     this.parts.push('<w:tbl>');
-    this.parts.push(
-      '<w:tblPr>' +
-        '<w:tblStyle w:val="TableGrid"/>' +
-        '<w:tblW w:w="0" w:type="auto"/>' +
-        '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>' +
-        '</w:tblPr>',
-    );
+    // Imported tables carry their original `<w:tblPr>` content
+    // verbatim on `table.rawTblPr` (table borders, custom tblStyle,
+    // shading, etc.). Re-emit it untouched when present; otherwise
+    // fall back to the default for editor-created tables.
+    const rawTblPr = (table.attrs['rawTblPr'] as string | null) ?? null;
+    if (rawTblPr) {
+      this.parts.push(`<w:tblPr>${rawTblPr}</w:tblPr>`);
+    } else {
+      this.parts.push(
+        '<w:tblPr>' +
+          '<w:tblStyle w:val="TableGrid"/>' +
+          '<w:tblW w:w="0" w:type="auto"/>' +
+          '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>' +
+          '</w:tblPr>',
+      );
+    }
     // Build per-column dxa widths from each cell's `colwidth` array
     // (CSS px). Convert px → dxa: 1 px = 15 dxa at 96 DPI. Walk every
     // cell so a wider row can fill in widths for columns the first
@@ -271,6 +280,10 @@ class DocxExporter {
           let tcPr = '';
           if (cs > 1) tcPr += `<w:gridSpan w:val="${cs}"/>`;
           if (rs > 1) tcPr += '<w:vMerge w:val="restart"/>';
+          // Append per-cell extras (borders, shading, vAlign, etc.)
+          // verbatim after the structurally-derived bits.
+          const rawTcPr = (e.node.attrs['rawTcPr'] as string | null) ?? null;
+          if (rawTcPr) tcPr += rawTcPr;
           this.parts.push(`<w:tcPr><w:tcW w:w="${cellDxa(e.col, cs)}" w:type="dxa"/>${tcPr}</w:tcPr>`);
           e.node.forEach((child) => {
             if (child.type.name === 'paragraph') {
@@ -282,6 +295,8 @@ class DocxExporter {
           this.parts.push('</w:tc>');
         } else {
           // Continuation cell. Empty paragraph + <w:vMerge/>.
+          // Continuation cells inherit borders/shading from the
+          // restart cell in OOXML, so no rawTcPr to emit here.
           this.parts.push('<w:tc>');
           let tcPr = '';
           if (e.colspan > 1) tcPr += `<w:gridSpan w:val="${e.colspan}"/>`;

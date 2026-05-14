@@ -1806,6 +1806,66 @@ inside the protected range. Doubles listed before singles so the
 longer match wins on overlap, matching the rest of the file's
 ordering convention.
 
+## 2026-05-13: Table / cell raw properties round-trip + track-changes accept-on-import
+
+Two related import changes that widen OOXML fidelity without
+requiring schema-level UI.
+
+### Table / cell raw properties
+
+`table` gains an opaque `rawTblPr: string | null` attr; `table_cell`
+and `table_header` gain `rawTcPr: string | null`. Both hold serialized
+OOXML fragments captured at import time.
+
+  - `rawTblPr` captures the entire inner content of `<w:tblPr>`
+    minus track-change records (`<w:tblPrChange>`). On export it
+    replaces the default tblPr we'd otherwise generate — so
+    `<w:tblBorders>`, custom `<w:tblStyle>`, shading, etc. round-trip
+    byte-stable. New editor-created tables (rawTblPr null) still
+    fall back to the default `TableGrid` / `<w:tblW>` / `<w:tblLook>`
+    triple.
+
+  - `rawTcPr` captures `<w:tcPr>` children minus the ones the
+    exporter regenerates from structural attrs (`gridSpan`,
+    `vMerge`, `tcW`) and track-change markers (`tcPrChange`,
+    `cellIns`, `cellDel`, `cellMerge`). On export the captured
+    fragment is appended after our structural bits inside the same
+    `<w:tcPr>`, so `<w:tcBorders>`, `<w:shd>`, `<w:vAlign>`, etc. all
+    survive untouched.
+
+A new `serializeXmlNodes` helper in `src/ooxml/parse.ts` inverts
+`parseXml` for the subset of OOXML we produce — preserves order,
+attributes, and `#text` leaves. We hand-rolled this rather than
+pulling in fast-xml-parser's XMLBuilder because the parser uses
+`preserveOrder: true` and the builder's flag combinations under
+that mode were a moving target.
+
+No editor UI for editing these properties — explicit non-goal per
+the user's request. Edit operations (split/merge cells, etc.)
+preserve `rawTcPr` verbatim even when the structural change might
+visually invalidate some borders; that's an accepted edge case for
+the cheap round-trip win.
+
+### Track changes — accept on import
+
+The importer's `collectInlines` dispatch now handles the four OOXML
+revision wrappers:
+
+  - `<w:ins>` and `<w:moveTo>` → recurse, treating the inner runs
+    as kept content.
+  - `<w:del>` and `<w:moveFrom>` → no-op (entire wrapped run is
+    dropped, including any `<w:delText>` content).
+
+Paragraph- and run-level change records (`<w:pPrChange>`,
+`<w:rPrChange>`) are silently ignored by existing pPr/rPr parsing
+which already only extracts known properties. Table-level cell
+revision markers (`<w:cellIns>`, `<w:cellDel>`, `<w:cellMerge>`,
+`<w:tcPrChange>`, `<w:tblPrChange>`) are stripped from the captured
+`rawTblPr` / `rawTcPr`, so accept-on-import is consistent everywhere.
+
+On export we never emit revision elements — we only know about the
+post-accept state, so there's nothing to write.
+
 ## 2026-05-13: Paragraph indent (Tab / Shift-Tab) + round-trip
 
 Every node that serializes to `<w:p>` now carries an `indent` attr

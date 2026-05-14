@@ -29,6 +29,7 @@ import {
   children as childrenOf,
   findChild,
   parseXml,
+  serializeXmlNodes,
   textContent,
   type XmlNode,
 } from '../ooxml/parse.js';
@@ -216,15 +217,55 @@ function parseParagraph(pNode: XmlNode, ctx: ImportContext): ParaInfo {
  * Out of scope (preserved structurally but not visually): cell
  * widths, borders, shading, table styles.
  */
+/** Children of `<w:tcPr>` that the exporter regenerates from the
+ *  cell's structural attrs (colspan, rowspan, colwidth). Stripped
+ *  from `rawTcPr` so they don't double on round-trip. The change-
+ *  tracking markers (`tcPrChange`, `cellIns`, `cellDel`, `cellMerge`)
+ *  are also stripped — accepting track changes means dropping
+ *  change records and keeping the post-change state. */
+const TCPR_GENERATED_CHILDREN: ReadonlySet<string> = new Set([
+  'w:gridSpan',
+  'w:vMerge',
+  'w:tcW',
+  'w:tcPrChange',
+  'w:cellIns',
+  'w:cellDel',
+  'w:cellMerge',
+]);
+
+/** Children of `<w:tblPr>` to strip from the captured `rawTblPr`
+ *  for the same reason as `tcPrChange` above: track-changes records
+ *  should not survive an "accept on import". */
+const TBLPR_STRIPPED_CHILDREN: ReadonlySet<string> = new Set([
+  'w:tblPrChange',
+]);
+
 function parseTable(tblNode: XmlNode, ctx: ImportContext): PMNode | null {
   type CellData = {
     colspan: number;
     rowspan: number;
     colPos: number;
+    rawTcPr: string | null;
     content: PMNode[];
   };
   const rowCells: CellData[][] = [];
   const vmergeRestarts: Map<number, CellData> = new Map();
+
+  // Capture `<w:tblPr>` extras so table-level borders / shading /
+  // tblStyle round-trip verbatim. Children we don't want to preserve
+  // (tblPrChange — accept-on-import) get stripped.
+  let rawTblPr: string | null = null;
+  const tblPrEl = findChild(childrenOf(tblNode, 'w:tbl'), 'w:tblPr');
+  if (tblPrEl) {
+    const keep = childrenOf(tblPrEl, 'w:tblPr').filter((child) => {
+      for (const k of Object.keys(child)) {
+        if (k === ':@' || k === '#text') continue;
+        return !TBLPR_STRIPPED_CHILDREN.has(k);
+      }
+      return false;
+    });
+    if (keep.length > 0) rawTblPr = serializeXmlNodes(keep);
+  }
 
   // Parse <w:tblGrid><w:gridCol w:w="…"/> column widths so the
   // rendered table reflects Word's actual column sizing. OOXML width
@@ -254,8 +295,10 @@ function parseTable(tblNode: XmlNode, ctx: ImportContext): PMNode | null {
       const tcPr = findChild(tcChildren, 'w:tcPr');
       let colspan = 1;
       let vMergeMode: 'none' | 'restart' | 'continue' = 'none';
+      let rawTcPr: string | null = null;
       if (tcPr) {
-        for (const prop of childrenOf(tcPr, 'w:tcPr')) {
+        const tcPrChildren = childrenOf(tcPr, 'w:tcPr');
+        for (const prop of tcPrChildren) {
           if ('w:gridSpan' in prop) {
             const v = Number(attrsOf(prop)['w:val'] || 1);
             if (Number.isFinite(v) && v > 1) colspan = v;
@@ -264,6 +307,18 @@ function parseTable(tblNode: XmlNode, ctx: ImportContext): PMNode | null {
             vMergeMode = val === 'restart' ? 'restart' : 'continue';
           }
         }
+        // Capture everything except the structurally-regenerated
+        // properties (gridSpan, vMerge, tcW, tcPrChange) for verbatim
+        // re-emission on export. tcBorders, shd, tcMar, vAlign, etc.
+        // all land here and survive round-trip.
+        const keep = tcPrChildren.filter((child) => {
+          for (const k of Object.keys(child)) {
+            if (k === ':@' || k === '#text') continue;
+            return !TCPR_GENERATED_CHILDREN.has(k);
+          }
+          return false;
+        });
+        if (keep.length > 0) rawTcPr = serializeXmlNodes(keep);
       }
       if (vMergeMode === 'continue') {
         const active = vmergeRestarts.get(colPos);
@@ -282,7 +337,7 @@ function parseTable(tblNode: XmlNode, ctx: ImportContext): PMNode | null {
         const fallback = schema.nodes['paragraph']!.createAndFill();
         if (fallback) cellParas.push(fallback);
       }
-      const data: CellData = { colspan, rowspan: 1, colPos, content: cellParas };
+      const data: CellData = { colspan, rowspan: 1, colPos, rawTcPr, content: cellParas };
       cells.push(data);
       if (vMergeMode === 'restart') {
         vmergeRestarts.set(colPos, data);
@@ -317,13 +372,18 @@ function parseTable(tblNode: XmlNode, ctx: ImportContext): PMNode | null {
           }
         }
         return cellType.create(
-          { colspan: c.colspan, rowspan: c.rowspan, colwidth },
+          {
+            colspan: c.colspan,
+            rowspan: c.rowspan,
+            colwidth,
+            rawTcPr: c.rawTcPr,
+          },
           c.content,
         );
       }),
     ),
   );
-  return tableType.create(null, rows);
+  return tableType.create({ rawTblPr }, rows);
 }
 
 /** Parse a `<w:p>` as a cell paragraph: plain `paragraph` nodeType,
@@ -367,6 +427,19 @@ function collectInlines(node: XmlNode, ctx: ImportContext, out: PMNode[]): void 
       collectInlines(c, ctx, out);
     }
     if (rId) ctx.hyperlinkStack.pop();
+  }
+  // Track-change wrappers — "accept all" policy:
+  //  - `<w:ins>` / `<w:moveTo>` ← inserted / move-target content;
+  //    treat as kept. Recurse into the wrapped runs.
+  //  - `<w:del>` / `<w:moveFrom>` ← deleted / move-source content;
+  //    drop entirely (no recursion).
+  else if ('w:ins' in node || 'w:moveTo' in node) {
+    const tag = 'w:ins' in node ? 'w:ins' : 'w:moveTo';
+    for (const c of childrenOf(node, tag)) {
+      collectInlines(c, ctx, out);
+    }
+  } else if ('w:del' in node || 'w:moveFrom' in node) {
+    // Intentionally no-op: deletion / move-source content is dropped.
   }
   // Other inline-ish nodes (w:bookmarkStart, w:bookmarkEnd, etc.) — skip.
 }

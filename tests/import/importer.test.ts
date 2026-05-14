@@ -599,6 +599,177 @@ describe('importer — paragraph indent', () => {
   });
 });
 
+describe('importer — table / cell raw properties round-trip', () => {
+  it('captures and re-emits `<w:tblPr>` extras (borders, custom style)', () => {
+    const tblPrInner =
+      '<w:tblStyle w:val="MyTable"/>' +
+      '<w:tblW w:w="5000" w:type="pct"/>' +
+      '<w:tblBorders>' +
+      '<w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>' +
+      '<w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>' +
+      '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/>' +
+      '<w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/>' +
+      '</w:tblBorders>';
+    const xml = bodyXml(`
+      <w:tbl>
+        <w:tblPr>${tblPrInner}</w:tblPr>
+        <w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid>
+        <w:tr><w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr>
+      </w:tbl>
+    `);
+    const original = importDoc(xml);
+    const table = original.firstChild!;
+    expect(table.type.name).toBe('table');
+    // The opaque attr should hold the captured fragment (order
+    // preserved by the serializer).
+    const captured = String(table.attrs['rawTblPr'] ?? '');
+    expect(captured).toContain('<w:tblStyle w:val="MyTable"/>');
+    expect(captured).toContain('<w:tblBorders>');
+    expect(captured).toContain('<w:top w:val="single"');
+    // Round-trip: the exact fragment goes back into <w:tblPr>.
+    const { documentXml } = exportDoc(original);
+    expect(documentXml).toContain('<w:tblStyle w:val="MyTable"/>');
+    expect(documentXml).toContain('<w:tblBorders>');
+    // And re-import preserves it again — fully byte-stable.
+    const re = importDoc(documentXml);
+    const captured2 = String(re.firstChild!.attrs['rawTblPr'] ?? '');
+    expect(captured2).toBe(captured);
+  });
+
+  it('captures and re-emits per-cell <w:tcBorders> + <w:shd>', () => {
+    const tcPrExtras =
+      '<w:tcBorders>' +
+      '<w:top w:val="single" w:sz="4" w:color="000000"/>' +
+      '<w:left w:val="single" w:sz="4" w:color="000000"/>' +
+      '<w:bottom w:val="single" w:sz="4" w:color="000000"/>' +
+      '<w:right w:val="single" w:sz="4" w:color="000000"/>' +
+      '</w:tcBorders>' +
+      '<w:shd w:val="clear" w:color="auto" w:fill="D9D9D9"/>';
+    const xml = bodyXml(`
+      <w:tbl>
+        <w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid>
+        <w:tr><w:tc>
+          <w:tcPr>
+            <w:tcW w:w="3000" w:type="dxa"/>
+            ${tcPrExtras}
+          </w:tcPr>
+          <w:p><w:r><w:t>cell</w:t></w:r></w:p>
+        </w:tc></w:tr>
+      </w:tbl>
+    `);
+    const original = importDoc(xml);
+    const row = original.firstChild!.firstChild!;
+    const cell = row.firstChild!;
+    const raw = String(cell.attrs['rawTcPr'] ?? '');
+    expect(raw).toContain('<w:tcBorders>');
+    expect(raw).toContain('<w:shd');
+    // gridSpan/vMerge/tcW were stripped (they're structurally regenerated)
+    expect(raw).not.toContain('<w:tcW');
+    expect(raw).not.toContain('<w:gridSpan');
+    expect(raw).not.toContain('<w:vMerge');
+    const { documentXml } = exportDoc(original);
+    expect(documentXml).toContain('<w:tcBorders>');
+    expect(documentXml).toContain('<w:shd w:val="clear"');
+  });
+
+  it('strips track-change markers (tblPrChange / tcPrChange / cellIns / cellDel)', () => {
+    const xml = bodyXml(`
+      <w:tbl>
+        <w:tblPr>
+          <w:tblStyle w:val="Plain"/>
+          <w:tblPrChange w:id="1" w:author="A">
+            <w:tblPr><w:tblStyle w:val="Old"/></w:tblPr>
+          </w:tblPrChange>
+        </w:tblPr>
+        <w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid>
+        <w:tr><w:tc>
+          <w:tcPr>
+            <w:tcW w:w="3000" w:type="dxa"/>
+            <w:cellIns w:id="2" w:author="A"/>
+            <w:tcPrChange w:id="3" w:author="A">
+              <w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr>
+            </w:tcPrChange>
+          </w:tcPr>
+          <w:p><w:r><w:t>cell</w:t></w:r></w:p>
+        </w:tc></w:tr>
+      </w:tbl>
+    `);
+    const doc = importDoc(xml);
+    const table = doc.firstChild!;
+    const rawTbl = String(table.attrs['rawTblPr'] ?? '');
+    expect(rawTbl).toContain('<w:tblStyle w:val="Plain"/>');
+    expect(rawTbl).not.toContain('tblPrChange');
+    const cell = table.firstChild!.firstChild!;
+    const rawTc = String(cell.attrs['rawTcPr'] ?? '');
+    expect(rawTc).not.toContain('cellIns');
+    expect(rawTc).not.toContain('tcPrChange');
+  });
+});
+
+describe('importer — track changes accept-on-import', () => {
+  it('keeps text inside <w:ins> as normal content', () => {
+    const xml = bodyXml(`
+      <w:p>
+        <w:r><w:t xml:space="preserve">Before </w:t></w:r>
+        <w:ins w:id="1" w:author="A">
+          <w:r><w:t>inserted</w:t></w:r>
+        </w:ins>
+        <w:r><w:t xml:space="preserve"> after</w:t></w:r>
+      </w:p>
+    `);
+    const doc = importDoc(xml);
+    expect(doc.firstChild!.textContent).toBe('Before inserted after');
+  });
+
+  it('drops text inside <w:del> entirely', () => {
+    const xml = bodyXml(`
+      <w:p>
+        <w:r><w:t xml:space="preserve">Keep </w:t></w:r>
+        <w:del w:id="1" w:author="A">
+          <w:r><w:delText xml:space="preserve">drop this </w:delText></w:r>
+        </w:del>
+        <w:r><w:t xml:space="preserve">end</w:t></w:r>
+      </w:p>
+    `);
+    const doc = importDoc(xml);
+    expect(doc.firstChild!.textContent).toBe('Keep end');
+  });
+
+  it('accepts <w:moveTo> as kept and drops <w:moveFrom>', () => {
+    const xml = bodyXml(`
+      <w:p>
+        <w:moveFrom w:id="1" w:author="A">
+          <w:r><w:t>(removed source) </w:t></w:r>
+        </w:moveFrom>
+        <w:r><w:t xml:space="preserve">middle </w:t></w:r>
+        <w:moveTo w:id="2" w:author="A">
+          <w:r><w:t>(moved-in target)</w:t></w:r>
+        </w:moveTo>
+      </w:p>
+    `);
+    const doc = importDoc(xml);
+    expect(doc.firstChild!.textContent).toBe('middle (moved-in target)');
+  });
+
+  it('handles tracked changes nested inside a hyperlink', () => {
+    const xml = bodyXml(`
+      <w:p>
+        <w:hyperlink>
+          <w:r><w:t xml:space="preserve">visible </w:t></w:r>
+          <w:ins w:id="1" w:author="A">
+            <w:r><w:t>more</w:t></w:r>
+          </w:ins>
+          <w:del w:id="2" w:author="A">
+            <w:r><w:delText> stale</w:delText></w:r>
+          </w:del>
+        </w:hyperlink>
+      </w:p>
+    `);
+    const doc = importDoc(xml);
+    expect(doc.firstChild!.textContent).toBe('visible more');
+  });
+});
+
 describe('importer — special hyphen characters', () => {
   it('imports w:noBreakHyphen as U+2011', () => {
     const xml = bodyXml(`
