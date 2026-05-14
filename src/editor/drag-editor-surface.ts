@@ -220,36 +220,53 @@ export class EditorDragSurface implements DragSurface {
     // getBoundingClientRect has to be divided back out.
     const zoom = this.getEditorZoom();
 
+    // Two-pass to avoid layout thrash. The previous single-pass loop
+    // called `view.coordsAtPos` (which reads layout) then
+    // `host.appendChild(indicator)` (which invalidates layout). For
+    // hundreds of headings the browser was forced to recompute layout
+    // before every coordsAtPos read — the dominant cost of drag-
+    // pickup on large docs.
+    //
+    // Pass 1: read all positions. No DOM mutations, so the browser
+    // can serve every coordsAtPos from one cached layout.
+    const positions: { insertPos: number; top: number }[] = [];
     const seen = new Set<number>();
-    const place = (insertPos: number, anchorY: number): void => {
+    const pushCoord = (insertPos: number, top: number): void => {
       if (seen.has(insertPos)) return;
       seen.add(insertPos);
-      const indicator = document.createElement('div');
-      indicator.className = 'pmd-editor-drop-indicator';
-      indicator.style.top = `${(anchorY - hostRect.top) / zoom + host.scrollTop}px`;
-      host.appendChild(indicator);
-      this.indicators.push({ el: indicator, insertPos });
+      positions.push({ insertPos, top });
     };
-
     for (const entry of collectHeadings(view.state.doc)) {
       if (entry.level > draggedLevel) continue;
       const range = computeHeadingRange(view.state.doc, entry);
       if (!range) continue;
       try {
         const coords = view.coordsAtPos(range.from);
-        place(range.from, coords.top);
+        pushCoord(range.from, coords.top);
       } catch {
         /* skip */
       }
     }
-
     const docEnd = view.state.doc.content.size;
     try {
       const endCoords = view.coordsAtPos(docEnd);
-      place(docEnd, endCoords.bottom);
+      pushCoord(docEnd, endCoords.bottom);
     } catch {
       /* skip */
     }
+
+    // Pass 2: build all the indicator elements into a fragment, then
+    // append them in a single DOM operation. One layout invalidation
+    // total instead of one per heading.
+    const fragment = document.createDocumentFragment();
+    for (const { insertPos, top } of positions) {
+      const indicator = document.createElement('div');
+      indicator.className = 'pmd-editor-drop-indicator';
+      indicator.style.top = `${(top - hostRect.top) / zoom + host.scrollTop}px`;
+      fragment.appendChild(indicator);
+      this.indicators.push({ el: indicator, insertPos });
+    }
+    host.appendChild(fragment);
   }
 
   private removeIndicators(): void {

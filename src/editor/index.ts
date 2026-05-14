@@ -271,14 +271,92 @@ const ribbonContext: RibbonContext = {
 openBtn.addEventListener('click', () => dropzone.click());
 if (newBtn) {
   newBtn.addEventListener('click', () => {
-    // Multi-doc: prompt for slot, then create a blank doc there.
-    if (multiDocActive && multiDocOnNewDoc) {
-      void multiDocOnNewDoc();
-      return;
-    }
-    // Single-doc: replace the current doc with a fresh starter.
-    mountView(makeStarterDoc());
-    currentDocFilename = null;
+    void onNewDocClicked();
+  });
+}
+
+/**
+ * Handle the ribbon "New document" button.
+ *
+ *   - Multi-doc: route through the multi-pane shell's slot picker
+ *     (the new doc is added to a stack alongside whatever else is
+ *     open; no "current doc" to overwrite).
+ *   - Single-doc: replacing the current view is destructive, so
+ *     ask first. Three-button confirm: Save → run Save As, on
+ *     success swap to a fresh doc; Don't save → swap immediately;
+ *     Cancel → bail. Esc / overlay click also cancel.
+ */
+async function onNewDocClicked(): Promise<void> {
+  if (multiDocActive && multiDocOnNewDoc) {
+    void multiDocOnNewDoc();
+    return;
+  }
+  const choice = await confirmNewDocOverwrite();
+  if (choice === 'cancel') return;
+  if (choice === 'save') {
+    const saved = await runSaveAsFlow();
+    if (!saved) return;
+  }
+  mountView(makeStarterDoc());
+  currentDocFilename = null;
+}
+
+/** Three-button overlay used by the single-doc "New document" flow.
+ *  Returns the user's choice; resolves with `'cancel'` on Esc or
+ *  the explicit Cancel button. */
+function confirmNewDocOverwrite(): Promise<'save' | 'discard' | 'cancel'> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'pmd-route-overlay';
+    const dialog = document.createElement('div');
+    dialog.className = 'pmd-route-dialog';
+
+    const header = document.createElement('div');
+    header.className = 'pmd-route-header';
+    header.textContent = 'Save your current document before creating a new one?';
+    dialog.appendChild(header);
+
+    const buttons = document.createElement('div');
+    buttons.className = 'pmd-route-buttons';
+
+    const cleanup = (): void => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+    };
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'pmd-route-btn';
+    saveBtn.innerHTML = '<strong>Save</strong><br><span>Save the current doc, then start fresh.</span>';
+    saveBtn.addEventListener('click', () => { cleanup(); resolve('save'); });
+    buttons.appendChild(saveBtn);
+
+    const discardBtn = document.createElement('button');
+    discardBtn.type = 'button';
+    discardBtn.className = 'pmd-route-btn';
+    discardBtn.innerHTML = "<strong>Don't save</strong><br><span>Discard changes and start fresh.</span>";
+    discardBtn.addEventListener('click', () => { cleanup(); resolve('discard'); });
+    buttons.appendChild(discardBtn);
+
+    dialog.appendChild(buttons);
+
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'pmd-route-cancel';
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', () => { cleanup(); resolve('cancel'); });
+    dialog.appendChild(cancel);
+
+    overlay.appendChild(dialog);
+    // Click outside the dialog box → cancel.
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) { cleanup(); resolve('cancel'); }
+    });
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') { cleanup(); resolve('cancel'); }
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
   });
 }
 settingsBtn.addEventListener('click', () => openSettings());
@@ -1374,13 +1452,16 @@ function defaultSaveFilename(): string {
   return 'untitled.docx';
 }
 
-exportBtn.addEventListener('click', async () => {
-  // In-app Save As dialog first — single entry point for filename
-  // and the future export options that prompted this rework.
-  // Cancelling the dialog aborts the save entirely.
+/**
+ * Run the Save As flow. Returns `true` when the user committed to a
+ * save (and the bytes hit disk / downloaded), `false` when they
+ * cancelled the dialog or the OS file picker — including the case
+ * where the user cancelled mid-stream. Extracted so the New-doc
+ * confirmation flow can reuse it.
+ */
+async function runSaveAsFlow(): Promise<boolean> {
   const choice = await openSaveAs(defaultSaveFilename());
-  if (!choice) return;
-
+  if (!choice) return false;
   try {
     // In multi-doc mode the focused pane drives Save — read its
     // doc directly so we always export the right one regardless
@@ -1440,7 +1521,7 @@ exportBtn.addEventListener('click', async () => {
         });
       } catch (e) {
         // AbortError = user cancelled the OS dialog. Quietly bail.
-        if (e instanceof DOMException && e.name === 'AbortError') return;
+        if (e instanceof DOMException && e.name === 'AbortError') return false;
         throw e;
       }
       const writable = await handle.createWritable();
@@ -1449,7 +1530,7 @@ exportBtn.addEventListener('click', async () => {
       // Remember the user's chosen name as the new default — so a
       // second Save As prefills the renamed file.
       if (handle.name) currentDocFilename = handle.name;
-      return;
+      return true;
     }
 
     // Fallback: synthesize a download link with the chosen name.
@@ -1460,10 +1541,16 @@ exportBtn.addEventListener('click', async () => {
     a.click();
     URL.revokeObjectURL(url);
     currentDocFilename = choice.filename;
+    return true;
   } catch (err) {
     console.error('Save failed:', err);
     alert(`Save failed: ${err instanceof Error ? err.message : err}`);
+    return false;
   }
+}
+
+exportBtn.addEventListener('click', () => {
+  void runSaveAsFlow();
 });
 
 function countSummary(doc: PMNode): string {
