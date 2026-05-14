@@ -3579,6 +3579,17 @@ body.pmd-multi-doc #word-count-display {
   z-index: 50;
   overflow: hidden;
 }
+/* Match the per-pane footer's height/background/border so the line
+ * that separates editor body from pane footer extends seamlessly
+ * across the nav rail. As a flex child with `flex: 0 0 22px`, this
+ * sits at the bottom of the column and shrinks the sections above
+ * by 22px each. Content-less — purely visual. */
+.pmd-multi-nav::after {
+  content: '';
+  flex: 0 0 22px;
+  background: var(--pmd-c-surface-2, var(--pmd-c-surface));
+  border-top: 1px solid var(--pmd-c-border-soft);
+}
 .pmd-multi-nav-section {
   flex: 1 1 0;
   min-height: 0;
@@ -3606,6 +3617,11 @@ body.pmd-multi-doc #word-count-display {
   overflow: auto;
   display: flex;
   flex-direction: column;
+  /* Match the nav panel's white surface so when the panel's
+   * intrinsic height is shorter than the body (very few headings),
+   * the body's background fills the rest instead of revealing the
+   * rail's grey behind it. */
+  background: var(--pmd-c-bg);
 }
 /* The per-section NavigationPanel mounts its `<aside class="pmd-nav-panel">`
  * inside `.pmd-multi-nav-body`. Strip the fixed-position styling the
