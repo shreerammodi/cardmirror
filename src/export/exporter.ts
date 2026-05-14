@@ -25,6 +25,7 @@ import {
 } from '../ooxml/styles.js';
 import { bookmarkNameForId } from '../schema/ids.js';
 import { base64ToBytes } from '../ooxml/base64.js';
+import type { Thread } from '../editor/comments-plugin.js';
 
 interface HyperlinkRel {
   rId: string;
@@ -50,6 +51,20 @@ export interface ExportResult {
   relsXml: string;
   /** Image / binary parts that the docx zip writer must include. */
   mediaParts: ExportedMediaPart[];
+  /** `word/comments.xml` content, or `null` if no comments were
+   *  passed in (so the zip writer can skip emitting the part). */
+  commentsXml: string | null;
+  /** `word/commentsExtended.xml` content. Same null-when-absent
+   *  contract as `commentsXml`. */
+  commentsExtendedXml: string | null;
+}
+
+export interface ExportOptions {
+  /** Comment threads to emit. When absent or empty no comments
+   *  parts are produced, and the document.xml omits
+   *  `<w:commentRangeStart/End>` brackets regardless of what marks
+   *  the doc tree carries. */
+  threads?: readonly Thread[];
 }
 
 /** Map common image MIME types to file extensions. */
@@ -96,20 +111,44 @@ class DocxExporter {
   private nextRelId = 2; // rId1 is reserved for styles
   private nextImageIdx = 1;
   private nextDocPrId = 1;
+  /** ThreadIds currently allow-listed for `<w:commentRangeStart/End>`
+   *  emission. Comments that aren't in this set are silently
+   *  stripped from output even if the doc still carries their mark
+   *  (matches "Save As → Include comments: off"). Empty set when
+   *  the caller didn't pass any threads, which is the v0 default. */
+  private allowedThreadIds: Set<string> = new Set();
+  /** ThreadIds currently inside an open `<w:commentRangeStart>`
+   *  during the document.xml walk. Tracked so we can emit
+   *  `<w:commentRangeEnd>` + `<w:commentReference>` exactly once
+   *  per contiguous run of marked text. */
+  private openCommentRanges: Set<string> = new Set();
+  /** Threads passed in to `exportDoc`. Used to emit `comments.xml`
+   *  and `commentsExtended.xml` after the doc walk. */
+  private threads: readonly Thread[] = [];
+  /** Comment-paragraph paraId allocator for `commentsExtended.xml`. */
+  private nextParaIdHex = 0x10000000;
 
-  exportDoc(doc: PMNode): ExportResult {
+  exportDoc(doc: PMNode, opts: ExportOptions = {}): ExportResult {
     if (doc.type.name !== 'doc') {
       throw new Error(`Expected doc node, got ${doc.type.name}`);
     }
 
+    this.threads = opts.threads ?? [];
+    for (const t of this.threads) this.allowedThreadIds.add(t.id);
+
     this.parts.push(DOCUMENT_OPEN);
     this.emitChildren(doc);
+    // Close any comment ranges still open at end of doc (defensive —
+    // shouldn't normally happen, but guards against schema drift).
+    this.closeOpenCommentRanges();
     this.parts.push(SECT_PR_AND_DOCUMENT_CLOSE);
 
     return {
       documentXml: this.parts.join(''),
       relsXml: this.buildRelsXml(),
       mediaParts: this.mediaParts,
+      commentsXml: this.threads.length > 0 ? this.buildCommentsXml() : null,
+      commentsExtendedXml: this.threads.length > 0 ? this.buildCommentsExtendedXml() : null,
     };
   }
 
@@ -360,6 +399,22 @@ class DocxExporter {
 
   private emitInlines(paragraph: PMNode): void {
     paragraph.forEach((child) => {
+      // Reconcile open comment ranges against this inline's
+      // comment_range marks. Threads that appear now and weren't
+      // open get a `<w:commentRangeStart>`; threads that were
+      // open and are no longer get closed. Images run through the
+      // same reconciliation so a comment that spans across an
+      // inline image stays continuous.
+      const wanted = new Set<string>();
+      if (child.isText || child.type.name === 'image') {
+        for (const mark of child.marks) {
+          if (mark.type.name !== 'comment_range') continue;
+          const id = String(mark.attrs['threadId'] ?? '');
+          if (id && this.allowedThreadIds.has(id)) wanted.add(id);
+        }
+      }
+      this.reconcileCommentRanges(wanted);
+
       if (child.isText) {
         this.emitTextRun(child.text ?? '', child.marks);
       } else if (child.type.name === 'image') {
@@ -367,6 +422,42 @@ class DocxExporter {
       }
       // Other inline non-text nodes: defensive no-op.
     });
+    // Close any comment ranges still open at the paragraph
+    // boundary. OOXML accepts ranges that cross paragraphs, but
+    // most readers (including Word) handle per-paragraph ranges
+    // more predictably — so we close+reopen at boundaries.
+    this.closeOpenCommentRanges();
+  }
+
+  /** Bracket the next inline emission with `<w:commentRangeStart>`
+   *  / `<w:commentRangeEnd>` + `<w:commentReference>` runs so the
+   *  threads in `wanted` end up anchored to this stretch of text. */
+  private reconcileCommentRanges(wanted: Set<string>): void {
+    // Close ranges that are open but no longer wanted.
+    for (const id of [...this.openCommentRanges]) {
+      if (!wanted.has(id)) {
+        this.parts.push(`<w:commentRangeEnd w:id="${escAttr(id)}"/>`);
+        this.parts.push(
+          `<w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr>` +
+            `<w:commentReference w:id="${escAttr(id)}"/></w:r>`,
+        );
+        this.openCommentRanges.delete(id);
+      }
+    }
+    // Open ranges that are wanted but not yet open.
+    for (const id of wanted) {
+      if (!this.openCommentRanges.has(id)) {
+        this.parts.push(`<w:commentRangeStart w:id="${escAttr(id)}"/>`);
+        this.openCommentRanges.add(id);
+      }
+    }
+  }
+
+  /** Emit `<w:commentRangeEnd>` + `<w:commentReference>` for every
+   *  thread whose start tag is still open. */
+  private closeOpenCommentRanges(): void {
+    if (this.openCommentRanges.size === 0) return;
+    this.reconcileCommentRanges(new Set());
   }
 
   private emitImageRun(node: PMNode): void {
@@ -574,8 +665,87 @@ class DocxExporter {
         `<Relationship Id="${rel.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${rel.target}"/>`,
       );
     }
+    if (this.threads.length > 0) {
+      const commentsRId = `rId${this.nextRelId++}`;
+      inner.push(
+        `<Relationship Id="${commentsRId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/>`,
+      );
+      const commentsExRId = `rId${this.nextRelId++}`;
+      inner.push(
+        `<Relationship Id="${commentsExRId}" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="commentsExtended.xml"/>`,
+      );
+    }
     return `${RELS_OPEN}${inner.join('')}${RELS_CLOSE}`;
   }
+
+  /** Build `word/comments.xml`. Each `Comment` in each `Thread`
+   *  becomes one `<w:comment>` element. Body text is split on
+   *  newlines into separate `<w:p>` children, each carrying a
+   *  fresh `w14:paraId` so the extended file can link replies. */
+  private buildCommentsXml(): string {
+    const out: string[] = [];
+    out.push(XML_PROLOG);
+    out.push(
+      '<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
+        ' xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">',
+    );
+    for (const thread of this.threads) {
+      for (const c of thread.comments) {
+        const paraId = this.allocParaId();
+        this.paraIdByCommentId.set(c.id, paraId);
+        out.push(
+          `<w:comment w:id="${escAttr(c.id)}" w:author="${escAttr(c.author)}"` +
+            ` w:date="${escAttr(c.date)}" w:initials="${escAttr(c.initials)}">`,
+        );
+        const paragraphs = c.text.split('\n');
+        for (let i = 0; i < paragraphs.length; i++) {
+          // Only the FIRST paragraph carries the paraId — that's
+          // what commentsExtended links against. Subsequent
+          // paragraphs of multi-line comments are body content.
+          const idAttr = i === 0 ? ` w14:paraId="${paraId}"` : '';
+          out.push(`<w:p${idAttr}>`);
+          out.push(`<w:r><w:t xml:space="preserve">${escText(paragraphs[i] ?? '')}</w:t></w:r>`);
+          out.push('</w:p>');
+        }
+        out.push('</w:comment>');
+      }
+    }
+    out.push('</w:comments>');
+    return out.join('');
+  }
+
+  /** Build `word/commentsExtended.xml`. One `<w15:commentEx>` per
+   *  comment, declaring the parent relationship (root comments are
+   *  also emitted, with no `paraIdParent` attribute). */
+  private buildCommentsExtendedXml(): string {
+    const out: string[] = [];
+    out.push(XML_PROLOG);
+    out.push(
+      '<w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">',
+    );
+    for (const thread of this.threads) {
+      for (const c of thread.comments) {
+        const paraId = this.paraIdByCommentId.get(c.id);
+        if (!paraId) continue;
+        const parentParaId = c.parentId
+          ? this.paraIdByCommentId.get(c.parentId)
+          : null;
+        const parentAttr = parentParaId
+          ? ` w15:paraIdParent="${parentParaId}"`
+          : '';
+        out.push(`<w15:commentEx w15:paraId="${paraId}" w15:done="0"${parentAttr}/>`);
+      }
+    }
+    out.push('</w15:commentsEx>');
+    return out.join('');
+  }
+
+  /** Allocate a fresh 8-hex-digit paraId. */
+  private allocParaId(): string {
+    const v = (this.nextParaIdHex++).toString(16).padStart(8, '0').toUpperCase();
+    return v;
+  }
+  private paraIdByCommentId: Map<string, string> = new Map();
 }
 
 /**
@@ -628,6 +798,6 @@ function buildDrawingXml(opts: {
 }
 
 /** Public API: schema doc → document.xml + rels. */
-export function exportDoc(doc: PMNode): ExportResult {
-  return new DocxExporter().exportDoc(doc);
+export function exportDoc(doc: PMNode, opts: ExportOptions = {}): ExportResult {
+  return new DocxExporter().exportDoc(doc, opts);
 }

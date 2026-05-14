@@ -94,6 +94,11 @@ interface ImportContext {
   hyperlinkStack: string[];
   /** Active Word field-code regions while walking runs. */
   fieldStack: FieldState[];
+  /** Active `<w:commentRangeStart w:id="…">` brackets. Pushed on
+   *  `w:commentRangeStart`, popped on `w:commentRangeEnd`. Every
+   *  text node emitted while the stack is non-empty receives a
+   *  `comment_range` mark for each active id. */
+  commentRangeStack: string[];
   /** Media parts from the source zip; null if not provided (drawings drop). */
   mediaParts: MediaPartsMap | null;
 }
@@ -105,7 +110,13 @@ export function importDoc(
   mediaParts: MediaPartsMap | null = null,
 ): PMNode {
   const rels = relsXml ? parseRels(relsXml) : {};
-  const ctx: ImportContext = { rels, hyperlinkStack: [], fieldStack: [], mediaParts };
+  const ctx: ImportContext = {
+    rels,
+    hyperlinkStack: [],
+    fieldStack: [],
+    commentRangeStack: [],
+    mediaParts,
+  };
 
   const root = parseXml(documentXml);
   const docEl = findChild(root, 'w:document');
@@ -459,7 +470,21 @@ function collectInlines(node: XmlNode, ctx: ImportContext, out: PMNode[]): void 
   } else if ('w:del' in node || 'w:moveFrom' in node) {
     // Intentionally no-op: deletion / move-source content is dropped.
   }
-  // Other inline-ish nodes (w:bookmarkStart, w:bookmarkEnd, etc.) — skip.
+  // Comment range brackets. These live as siblings of `<w:r>` at
+  // the paragraph level (and can span paragraphs — the stack on
+  // ImportContext is doc-wide so cross-paragraph ranges work).
+  else if ('w:commentRangeStart' in node) {
+    const id = attrsOf(node)['w:id'];
+    if (id) ctx.commentRangeStack.push(id);
+  } else if ('w:commentRangeEnd' in node) {
+    const id = attrsOf(node)['w:id'];
+    if (id) {
+      const idx = ctx.commentRangeStack.lastIndexOf(id);
+      if (idx >= 0) ctx.commentRangeStack.splice(idx, 1);
+    }
+  }
+  // Other inline-ish nodes (w:bookmarkStart, w:bookmarkEnd,
+  // w:commentReference, etc.) — skip.
 }
 
 function parseRun(rNode: XmlNode, ctx: ImportContext, out: PMNode[]): void {
@@ -486,6 +511,13 @@ function parseRun(rNode: XmlNode, ctx: ImportContext, out: PMNode[]): void {
           break;
         }
       }
+    }
+    // Each open `<w:commentRangeStart>` contributes a `comment_range`
+    // mark. Multiple overlapping comment ranges on the same text get
+    // multiple marks — ProseMirror collapses duplicates with the
+    // same threadId but keeps distinct ids.
+    for (const threadId of ctx.commentRangeStack) {
+      m.push(schema.marks['comment_range']!.create({ threadId }));
     }
     return m;
   };

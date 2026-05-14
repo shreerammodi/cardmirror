@@ -1806,6 +1806,88 @@ inside the protected range. Doubles listed before singles so the
 longer match wins on overlap, matching the rest of the file's
 ordering convention.
 
+## 2026-05-13: Comments — round-trip + side column + AI groundwork
+
+Comments are now a first-class feature. Three concerns:
+
+### Schema + plugin
+
+  - **Mark:** `comment_range` (non-inclusive, `{ threadId: string }`)
+    anchors a range of text to a thread. Renders as a `<span class=
+    "pmd-comment-range" data-comment-id="…">` with a subtle yellow
+    underline so commented text is visible at a glance.
+  - **Plugin state** (`src/editor/comments-plugin.ts`): a
+    `Map<threadId, Thread>` lives in plugin state, NOT on the doc.
+    Threads carry the heavy data (`Comment[]` with author / date /
+    text / `kind: 'human' | 'ai'` / `parentId`). Mutations go
+    through `setMeta(commentsKey, …)` payloads — `load`, `add`,
+    `reply`, `edit-text`, `delete-thread`, `delete-comment`,
+    `set-visible`. Doc-changing transactions trigger an
+    `appendTransaction` that GC's threads whose mark has been
+    deleted from the doc.
+
+### Round-trip
+
+  - **Importer** reads `<w:commentRangeStart/End>` brackets from
+    document.xml and applies `comment_range` marks to text between
+    them. A parallel `importComments` parser reads
+    `word/comments.xml` (+ optional `word/commentsExtended.xml`)
+    into the `Thread[]` shape: comments group into threads via the
+    paraId / paraIdParent linkage; sorted root-first then by date.
+  - **Exporter** brackets marked text with `<w:commentRangeStart>`
+    / `<w:commentRangeEnd>` + `<w:commentReference>` runs and
+    generates fresh `comments.xml` + `commentsExtended.xml`. Each
+    comment gets an allocated `w14:paraId`; replies get a
+    `paraIdParent` pointing at their parent's paraId.
+  - **`fromDocxFull`** (new) returns `{ doc, threads }` for the
+    editor. `fromDocx` keeps its `Promise<PMNode>` signature so
+    existing tests / CLI / benchmarks aren't disturbed.
+  - **`toDocx(doc, opts?)`** now accepts `{ threads }`. Without
+    threads the exporter strips brackets and emits no comment
+    parts — that's what "Save As → Include comments: off" does.
+  - **Content_Types + rels** automatically picks up the
+    `comments` and `commentsExtended` overrides via the new
+    `Docx.addContentTypeOverrides` helper.
+
+### UI
+
+  - **Ribbon panel "Comments"** (new vertical stack right of view
+    ops): `💬` toggles the side column, `+` adds a comment to the
+    selection. Two new ribbon commands (`toggleCommentsVisible`,
+    `addCommentToSelection`) are registered so users can bind keys
+    via the keybinding editor.
+  - **Right-side comment column** (`src/editor/comments-ui.ts`):
+    flex-sibling of `#editor` in `#app`. Hidden by default;
+    `commentsVisible` setting persists the user's last choice. Each
+    thread renders as a card — author + initials badge + date
+    header, body text, replies indented below, reply textarea at
+    the bottom. AI comments (later round) get a purple badge and
+    `kind` tag.
+  - **First-comment flow**: clicking + on a selection creates an
+    empty-root thread, opens the column, and focuses an input.
+    First submit edits the root's text in place (via the new
+    `edit-text` plugin action) rather than creating a reply.
+
+### AI groundwork
+
+No AI logic ships in this round. The pieces are pre-wired so
+round 2 can drop in without breaking the import/export shape:
+
+  - `Comment.kind: 'human' | 'ai'` field exists today; importer
+    sets `'human'` for everything from docx; AI flows can stamp
+    `'ai'` on threads they create. Round-trip drops `kind` (Word
+    doesn't model it) — fine for now.
+  - New settings: `commentAuthor` / `commentAuthorInitials`
+    (display name for new comments), `anthropicApiKey` (stored
+    locally, password input), `aiFeaturesEnabled` (master switch).
+    All exposed in the settings dialog.
+  - The user's AI design is documented in PROJECT.md: select
+    text → keyboard shortcut → opens a comment input where the
+    user types their question → submit routes to Anthropic with
+    selection + surrounding card context → AI replies as the
+    root comment. Replies that `@AI` mention the assistant re-
+    invoke it with the thread as context.
+
 ## 2026-05-13: Save As — inclusion checkboxes + Read Mode export
 
 The Save As dialog gains four checkboxes governing what survives

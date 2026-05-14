@@ -2832,6 +2832,8 @@ export type RibbonCommandId =
   | 'standardizeHighlight'
   | 'standardizeShading'
   | 'toggleReadMode'
+  | 'toggleCommentsVisible'
+  | 'addCommentToSelection'
   | 'wordCountSelection'
   | 'openShortcutsReference'
   | 'selectSimilar'
@@ -2886,6 +2888,8 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'standardizeHighlight',
   'standardizeShading',
   'toggleReadMode',
+  'toggleCommentsVisible',
+  'addCommentToSelection',
   'wordCountSelection',
   'openShortcutsReference',
   'selectSimilar',
@@ -2937,6 +2941,8 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   standardizeHighlight: 'Standardize Highlighting',
   standardizeShading: 'Standardize Background Color',
   toggleReadMode: 'Toggle read mode',
+  toggleCommentsVisible: 'Show / hide comments',
+  addCommentToSelection: 'Add comment to selection',
   wordCountSelection: 'Word count selection',
   openShortcutsReference: 'Open keyboard shortcuts',
   selectSimilar: 'Select Similar Formatting',
@@ -2998,6 +3004,8 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   standardizeHighlight: '',
   standardizeShading: '',
   toggleReadMode: '',
+  toggleCommentsVisible: '',
+  addCommentToSelection: '',
   wordCountSelection: '',
   openShortcutsReference: '',
   selectSimilar: '',
@@ -3075,6 +3083,8 @@ export interface RibbonContext {
   openWordCountDialog: () => void;
   toggleReadMode: () => void;
   openShortcutsReference: () => void;
+  toggleCommentsVisible: () => void;
+  addCommentToSelection: () => void;
 }
 
 const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
@@ -3097,6 +3107,8 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   openWordCountDialog: () => {},
   toggleReadMode: () => {},
   openShortcutsReference: () => {},
+  toggleCommentsVisible: () => {},
+  addCommentToSelection: () => {},
 };
 
 function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
@@ -3182,6 +3194,21 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return (_state, dispatch) => {
         if (!dispatch) return true;
         ctx.toggleReadMode();
+        return true;
+      };
+    case 'toggleCommentsVisible':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.toggleCommentsVisible();
+        return true;
+      };
+    case 'addCommentToSelection':
+      // The mark + thread creation logic is view-aware, so the
+      // command just delegates to the editor's side-effect hook.
+      return (state, dispatch) => {
+        if (state.selection.empty) return false;
+        if (!dispatch) return true;
+        ctx.addCommentToSelection();
         return true;
       };
     case 'wordCountSelection':

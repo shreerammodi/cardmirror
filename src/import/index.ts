@@ -5,9 +5,12 @@
 import type { Node as PMNode } from 'prosemirror-model';
 import { Docx } from '../ooxml/docx.js';
 import { importDoc, type MediaPart, type MediaPartsMap } from './importer.js';
+import { importComments } from './comments.js';
+import type { Thread } from '../editor/comments-plugin.js';
 
 export { importDoc } from './importer.js';
 export type { MediaPart, MediaPartsMap } from './importer.js';
+export { importComments } from './comments.js';
 
 /** Map common image extensions to MIME types. */
 const IMAGE_CONTENT_TYPES: Record<string, string> = {
@@ -56,4 +59,34 @@ export async function fromDocx(bytes: Uint8Array | ArrayBuffer): Promise<PMNode>
   }
 
   return importDoc(documentXml, relsXml, mediaParts);
+}
+
+/** Like `fromDocx` but also returns the parsed comment threads.
+ *  The editor calls this; tests/CLI/benchmarks that only care
+ *  about the doc structure can keep using `fromDocx`. */
+export async function fromDocxFull(
+  bytes: Uint8Array | ArrayBuffer,
+): Promise<{ doc: PMNode; threads: Thread[] }> {
+  const docx = await Docx.load(bytes);
+  const documentXml = await docx.readText('word/document.xml');
+  if (!documentXml) throw new Error('docx is missing word/document.xml');
+  const relsXml = await docx.readText('word/_rels/document.xml.rels');
+
+  const mediaParts: MediaPartsMap = new Map();
+  for (const path of docx.paths()) {
+    if (!path.startsWith('word/media/')) continue;
+    const partBytes = await docx.readBinary(path);
+    if (!partBytes) continue;
+    const part: MediaPart = {
+      bytes: partBytes,
+      contentType: inferContentType(path),
+    };
+    mediaParts.set(path, part);
+  }
+
+  const doc = importDoc(documentXml, relsXml, mediaParts);
+  const commentsXml = await docx.readText('word/comments.xml');
+  const commentsExtendedXml = await docx.readText('word/commentsExtended.xml');
+  const threads = importComments(commentsXml, commentsExtendedXml);
+  return { doc, threads };
 }

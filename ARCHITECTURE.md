@@ -158,7 +158,8 @@ Notes:
   `subscript`, `font_color`, `shading(color)`, and `link(href)` for
   hyperlinks (URLs are the common case; intra-doc links to
   bookmarked headings are supported for completeness — see §12 on
-  heading IDs). `strikethrough` round-trips as `<w:strike/>`; OOXML's
+  heading IDs). `comment_range(threadId)` anchors a range to a
+  thread in the comments plugin state. `strikethrough` round-trips as `<w:strike/>`; OOXML's
   `<w:dstrike/>` (double strikethrough) imports as the same single-
   strike mark. `superscript` / `subscript` round-trip as `<w:vertAlign
   w:val="superscript|subscript"/>` and are mutually exclusive (each
@@ -190,6 +191,18 @@ Notes:
   structurally regenerated bits (gridSpan, vMerge, tcW) and any
   track-change markers. The exporter re-emits these fragments
   verbatim; the schema has no UI to edit them.
+- **Comments** are first-class. Each commented range carries a
+  `comment_range(threadId)` mark; the thread data
+  (`Comment[]` with author / date / text / `kind` / `parentId`)
+  lives in a plugin state map keyed by threadId. Round-trips to
+  `<w:commentRangeStart/End>` in document.xml plus the
+  `word/comments.xml` and `word/commentsExtended.xml` parts. The
+  side-column UI is a flex-sibling of the editor, toggled by the
+  ribbon's Comments panel; the `comment_range` mark renders with
+  a subtle inline indicator so commented text is visible at a
+  glance. `kind: 'ai' | 'human'` exists on the data type so the
+  planned AI-explainer feature can mark threads it created without
+  a schema migration.
 - **Track changes are accepted on import.** Wrapped runs inside
   `<w:ins>` / `<w:moveTo>` are recursed into as kept content;
   `<w:del>` / `<w:moveFrom>` are dropped entirely. `<w:pPrChange>` /

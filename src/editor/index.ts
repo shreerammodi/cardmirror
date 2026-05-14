@@ -14,8 +14,9 @@ import { history, undo, redo } from 'prosemirror-history';
 import { baseKeymap } from 'prosemirror-commands';
 import { Node as PMNode } from 'prosemirror-model';
 import { schema, newHeadingId } from '../schema/index.js';
-import { fromDocx, toDocx } from '../index.js';
+import { fromDocxFull, toDocx } from '../index.js';
 import { transformForExport } from '../export/transform-for-export.js';
+import type { Thread } from './comments-plugin.js';
 import { NavigationPanel } from './nav-panel.js';
 import { openSettings } from './settings-ui.js';
 import { openReference } from './reference-ui.js';
@@ -33,6 +34,8 @@ import {
   type FormattingPanelMode,
 } from './settings.js';
 import { openSaveAs } from './save-as-ui.js';
+import { commentsPlugin, commentsKey, loadThreads, getCommentsState } from './comments-plugin.js';
+import { CommentsColumn, addCommentToSelection } from './comments-ui.js';
 import { readModePlugin, PMD_READ_MODE_TOGGLE } from './read-mode-plugin.js';
 import { absorbPlugin } from './absorb-plugin.js';
 import { citeClassifierPlugin } from './cite-classifier-plugin.js';
@@ -80,6 +83,9 @@ const settingsBtn = document.getElementById('settings-btn') as HTMLButtonElement
 const referenceBtn = document.getElementById('reference-btn') as HTMLButtonElement | null;
 const readModeBtn = document.getElementById('read-mode-btn') as HTMLButtonElement;
 const wordCountBtn = document.getElementById('word-count-btn') as HTMLButtonElement;
+const commentsToggleBtn = document.getElementById('comments-toggle-btn') as HTMLButtonElement | null;
+const commentsAddBtn = document.getElementById('comments-add-btn') as HTMLButtonElement | null;
+const commentsColumnEl = document.getElementById('comments-column') as HTMLElement | null;
 const wordCountText = document.getElementById('word-count-text')!;
 const plainPasteToggleBtn = document.getElementById('plain-paste-toggle-btn') as HTMLButtonElement | null;
 const fontSizeInput = document.getElementById('font-size-input') as HTMLInputElement | null;
@@ -165,6 +171,24 @@ const ribbonContext: RibbonContext = {
     settings.set('readMode', !settings.get('readMode'));
   },
   openShortcutsReference: () => openReference(),
+  toggleCommentsVisible: () => {
+    if (!commentsColumn || !commentsColumnEl) return;
+    const next = commentsColumnEl.hidden;
+    commentsColumn.setVisible(next);
+    commentsToggleBtn?.setAttribute('aria-pressed', next ? 'true' : 'false');
+    commentsColumn.render();
+  },
+  addCommentToSelection: () => {
+    if (!view || !commentsColumn) return;
+    const newId = addCommentToSelection(view);
+    if (!newId) return;
+    if (commentsColumnEl?.hidden) {
+      commentsColumn.setVisible(true);
+      commentsToggleBtn?.setAttribute('aria-pressed', 'true');
+    }
+    commentsColumn.render();
+    commentsColumn.focusReplyForThread(newId);
+  },
 };
 
 openBtn.addEventListener('click', () => dropzone.click());
@@ -340,6 +364,39 @@ if (cardMenuBtn) {
 }
 readModeBtn.addEventListener('click', () => runRibbon('toggleReadMode'));
 wordCountBtn.addEventListener('click', () => runRibbon('wordCountSelection'));
+
+// Comments column. The CommentsColumn instance owns the side-panel
+// DOM; we re-render it via `view.dispatchTransaction` overrides
+// further down so doc edits, plugin meta, and selection changes all
+// keep the panel in sync. setVisible flips the `hidden` attr +
+// stores the setting + dispatches a `set-visible` meta to the plugin.
+const commentsColumn = commentsColumnEl
+  ? new CommentsColumn(commentsColumnEl, () => view ?? null)
+  : null;
+if (commentsToggleBtn && commentsColumn) {
+  commentsToggleBtn.addEventListener('click', () => {
+    const next = commentsColumnEl?.hidden ?? true;
+    commentsColumn.setVisible(next);
+    commentsToggleBtn.setAttribute('aria-pressed', next ? 'true' : 'false');
+    commentsColumn.render();
+  });
+}
+if (commentsAddBtn && commentsColumn) {
+  commentsAddBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  commentsAddBtn.addEventListener('click', () => {
+    if (!view) return;
+    const newId = addCommentToSelection(view);
+    if (!newId) return;
+    // Auto-reveal the column so the user can see and fill in the
+    // new thread right away.
+    if (commentsColumnEl?.hidden) {
+      commentsColumn.setVisible(true);
+      commentsToggleBtn?.setAttribute('aria-pressed', 'true');
+    }
+    commentsColumn.render();
+    commentsColumn.focusReplyForThread(newId);
+  });
+}
 
 // Zoom controls.
 zoomOutBtn.addEventListener('click', () => setZoom(settings.get('zoomPct') - 10));
@@ -1014,6 +1071,7 @@ function buildEditorPlugins(): Plugin[] {
     ),
     keymap(baseKeymap),
     readModePlugin,
+    commentsPlugin,
     absorbPlugin,
     citeClassifierPlugin,
     namedStyleNormalizerPlugin,
@@ -1036,7 +1094,7 @@ function buildEditorPlugins(): Plugin[] {
   ];
 }
 
-function mountView(doc: PMNode): void {
+function mountView(doc: PMNode, threads: Thread[] = []): void {
   if (view) {
     editorDragSurface.detach();
     view.destroy();
@@ -1051,6 +1109,7 @@ function mountView(doc: PMNode): void {
     editable: () => !settings.get('readMode'),
     dispatchTransaction(tx) {
       if (!view) return;
+      const prevCommentsState = commentsKey.getState(view.state);
       const next = view.state.apply(tx);
       view.updateState(next);
       if (tx.docChanged) {
@@ -1063,10 +1122,28 @@ function mountView(doc: PMNode): void {
       // word count is the dominant per-keystroke cost on big docs.
       // Debounce so we only do it after typing pauses.
       scheduleHeavyUpdate();
+      // Re-render comments column when the plugin state or doc
+      // (which holds comment_range positions) actually changed.
+      if (commentsColumn && (tx.docChanged || commentsKey.getState(next) !== prevCommentsState)) {
+        commentsColumn.render();
+      }
     },
   });
+  // Hydrate comments plugin state from the import. A separate
+  // transaction (with addToHistory: false inside `loadThreads`)
+  // keeps load out of the undo stack.
+  if (threads.length > 0) {
+    view.dispatch(loadThreads(view.state, threads));
+  }
   currentDoc = doc;
   navPanel.attach(view);
+  // Sync visible state with the persisted setting on every mount.
+  const startVisible = settings.get('commentsVisible');
+  if (commentsColumnEl) commentsColumnEl.hidden = !startVisible;
+  if (commentsToggleBtn) {
+    commentsToggleBtn.setAttribute('aria-pressed', startVisible ? 'true' : 'false');
+  }
+  if (commentsColumn) commentsColumn.render();
   // Editor drop surface — renders drop indicators in the editor when
   // a nav-pane drag is active, and exposes a hit-test the nav drag
   // handler queries during pointermove. (Phase 3a.)
@@ -1101,8 +1178,8 @@ dropzone.addEventListener('change', async () => {
   if (!file) return;
   const buf = await file.arrayBuffer();
   try {
-    const doc = await fromDocx(new Uint8Array(buf));
-    mountView(doc);
+    const { doc, threads } = await fromDocxFull(new Uint8Array(buf));
+    mountView(doc, threads);
     currentDocFilename = file.name;
     console.log(`Loaded ${file.name}: ${countSummary(doc)}`);
   } catch (err) {
@@ -1137,7 +1214,13 @@ exportBtn.addEventListener('click', async () => {
       includeUndertags: choice.includeUndertags,
       readMode: choice.readMode,
     });
-    const bytes = await toDocx(exportDocNode);
+    // Pull threads from the comments plugin when the Save-As
+    // dialog said to include them; otherwise the exporter strips
+    // brackets and skips the parts entirely.
+    const threads = choice.includeComments && view
+      ? Array.from(getCommentsState(view.state).threads.values())
+      : undefined;
+    const bytes = await toDocx(exportDocNode, threads ? { threads } : undefined);
     // Copy into a regular ArrayBuffer for Blob's BlobPart contract.
     const ab = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(ab).set(bytes);

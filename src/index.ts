@@ -17,9 +17,9 @@ export {
   HEADING_BOOKMARK_PREFIX,
 } from './schema/index.js';
 
-export { fromDocx, importDoc } from './import/index.js';
+export { fromDocx, fromDocxFull, importDoc, importComments } from './import/index.js';
 
 export { toDocx, exportDoc } from './export/index.js';
-export type { ExportResult } from './export/index.js';
+export type { ExportResult, ExportOptions } from './export/index.js';
 
 export { Docx } from './ooxml/docx.js';

@@ -213,6 +213,20 @@ class SettingsModal {
       row.appendChild(text);
       row.appendChild(buildKeybindingsEditor());
       return row;
+    } else if (meta.kind === 'text' || meta.kind === 'password') {
+      // Plain string input. Used for comment author / initials,
+      // Anthropic API key, etc. Password kind masks the value.
+      const input = document.createElement('input');
+      input.type = meta.kind === 'password' ? 'password' : 'text';
+      input.className = 'pmd-settings-text';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      const initial = settings.get(meta.key);
+      input.value = typeof initial === 'string' ? initial : '';
+      input.addEventListener('change', () => {
+        settings.set(meta.key as 'commentAuthor', input.value as never);
+      });
+      label.appendChild(input);
     }
 
     row.appendChild(label);

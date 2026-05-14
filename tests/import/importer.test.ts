@@ -599,6 +599,128 @@ describe('importer — paragraph indent', () => {
   });
 });
 
+describe('importer — comment ranges', () => {
+  it('applies comment_range marks from <w:commentRangeStart/End> brackets', () => {
+    const xml = bodyXml(`
+      <w:p>
+        <w:r><w:t xml:space="preserve">before </w:t></w:r>
+        <w:commentRangeStart w:id="1"/>
+        <w:r><w:t xml:space="preserve">commented </w:t></w:r>
+        <w:r><w:t>text</w:t></w:r>
+        <w:commentRangeEnd w:id="1"/>
+        <w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr><w:commentReference w:id="1"/></w:r>
+        <w:r><w:t xml:space="preserve"> after</w:t></w:r>
+      </w:p>
+    `);
+    const doc = importDoc(xml);
+    let foundCommented = '';
+    let foundUncommented = '';
+    doc.descendants((node) => {
+      if (!node.isText) return;
+      const marked = node.marks.some((m) => m.type.name === 'comment_range');
+      if (marked) foundCommented += node.text;
+      else foundUncommented += node.text;
+    });
+    expect(foundCommented).toBe('commented text');
+    expect(foundUncommented).toBe('before  after');
+  });
+
+  it('handles overlapping comment ranges on the same text', () => {
+    const xml = bodyXml(`
+      <w:p>
+        <w:commentRangeStart w:id="1"/>
+        <w:r><w:t xml:space="preserve">A </w:t></w:r>
+        <w:commentRangeStart w:id="2"/>
+        <w:r><w:t xml:space="preserve">B </w:t></w:r>
+        <w:commentRangeEnd w:id="1"/>
+        <w:r><w:t>C</w:t></w:r>
+        <w:commentRangeEnd w:id="2"/>
+      </w:p>
+    `);
+    const doc = importDoc(xml);
+    const marks: Record<string, string[]> = {};
+    doc.descendants((node) => {
+      if (!node.isText) return;
+      const ids = node.marks
+        .filter((m) => m.type.name === 'comment_range')
+        .map((m) => String(m.attrs['threadId']))
+        .sort();
+      marks[node.text!] = ids;
+    });
+    expect(marks['A ']).toEqual(['1']);
+    expect(marks['B ']).toEqual(['1', '2']);
+    expect(marks['C']).toEqual(['2']);
+  });
+
+  it('round-trips a single comment thread through export and re-import', () => {
+    const docXml = bodyXml(`
+      <w:p>
+        <w:commentRangeStart w:id="5"/>
+        <w:r><w:t>flagged</w:t></w:r>
+        <w:commentRangeEnd w:id="5"/>
+        <w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr><w:commentReference w:id="5"/></w:r>
+      </w:p>
+    `);
+    const original = importDoc(docXml);
+    // Synthesize the thread state the editor would have built from
+    // comments.xml — exportDoc requires explicit threads in opts to
+    // emit anything.
+    const threads = [
+      {
+        id: '5',
+        comments: [
+          {
+            id: '5',
+            author: 'Tester',
+            initials: 'T',
+            date: '2026-05-13T00:00:00Z',
+            text: 'Is this right?',
+            kind: 'human' as const,
+            parentId: null,
+          },
+        ],
+      },
+    ];
+    const { documentXml, commentsXml, commentsExtendedXml } = exportDoc(original, { threads });
+    expect(documentXml).toContain('<w:commentRangeStart w:id="5"/>');
+    expect(documentXml).toContain('<w:commentRangeEnd w:id="5"/>');
+    expect(documentXml).toContain('<w:commentReference w:id="5"/>');
+    expect(commentsXml).toContain('<w:comment w:id="5"');
+    expect(commentsXml).toContain('Is this right?');
+    expect(commentsExtendedXml).toContain('<w15:commentEx');
+    const re = importDoc(documentXml);
+    let foundCommented = false;
+    re.descendants((node) => {
+      if (node.isText && node.text === 'flagged') {
+        foundCommented = node.marks.some(
+          (m) => m.type.name === 'comment_range' && m.attrs['threadId'] === '5',
+        );
+      }
+    });
+    expect(foundCommented).toBe(true);
+  });
+
+  it('omits comment brackets when no threads are passed to exportDoc', () => {
+    const docXml = bodyXml(`
+      <w:p>
+        <w:commentRangeStart w:id="1"/>
+        <w:r><w:t>flagged</w:t></w:r>
+        <w:commentRangeEnd w:id="1"/>
+        <w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr><w:commentReference w:id="1"/></w:r>
+      </w:p>
+    `);
+    const original = importDoc(docXml);
+    // No threads → exporter strips brackets even though the mark is
+    // still on the doc tree. Matches Save-As "Include comments: off".
+    const { documentXml, commentsXml, commentsExtendedXml } = exportDoc(original);
+    expect(documentXml).not.toContain('w:commentRangeStart');
+    expect(documentXml).not.toContain('w:commentRangeEnd');
+    expect(documentXml).not.toContain('w:commentReference');
+    expect(commentsXml).toBeNull();
+    expect(commentsExtendedXml).toBeNull();
+  });
+});
+
 describe('importer — paragraph spacing', () => {
   it('captures <w:spacing> attributes verbatim into the paragraph attr', () => {
     const xml = bodyXml(`

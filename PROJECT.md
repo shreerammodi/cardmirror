@@ -109,8 +109,6 @@ referenced files.
 - **Numbered / bulleted lists** — `<w:numPr>` + `numbering.xml`. Held
   for now; common in real docs but a meaningful schema addition
   (new `bullet_list` / `ordered_list` / `list_item` nodes).
-- **Comments** — `<w:commentRangeStart/End>` + `word/comments.xml`.
-  Not present in current sample docs but on the queue.
 - **Per-type display-spacing setting** — paragraph spacing already
   round-trips through the schema's `spacing` attr; what's still
   pending is a settings-UI panel to override the visible rhythm per
@@ -118,6 +116,29 @@ referenced files.
   stored OOXML values are data, the per-type setting is
   presentation. CSS hooks already exist in `style.css`; pattern-
   match the existing `--pmd-line-height` plumbing.
+
+### Planned: AI features (round 2)
+
+Comments are deliberately groundwork for an AI-explainer flow. The
+data type's `kind: 'human' | 'ai'` field, the `commentAuthor` /
+`anthropicApiKey` / `aiFeaturesEnabled` settings, and the
+side-column UI all exist today. Round 2 adds the wiring:
+
+- A keyboard shortcut on a selection opens a fresh comment input
+  in the side column. The user types their question, hits submit,
+  and the editor builds a context payload (selection + containing
+  tag / analytic / cite_paragraphs, or just selection at doc
+  level) plus the question, and POSTs to Anthropic. The reply
+  lands as a `kind: 'ai'` comment in the new thread.
+- Inside an existing thread, replying with text that contains an
+  `@AI` mention re-invokes the model with the thread + range as
+  context.
+- AI comments are visually distinguished (purple badge already in
+  the side column). They round-trip via docx as regular comments;
+  the `kind` field is lost on export (Word has no concept).
+- The master toggle (`aiFeaturesEnabled`) hides all AI UI when
+  off, even if a key is set, so users can keep credentials saved
+  but go fully offline ad-hoc.
 
 ### Explicit non-goals
 

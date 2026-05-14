@@ -1687,6 +1687,21 @@ body.pmd-nav-resize-active {
   cursor: pointer;
 }
 
+.pmd-settings-text {
+  flex: 0 0 12rem;
+  padding: 0.3rem 0.45rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  border: 1px solid var(--pmd-c-border, #999);
+  border-radius: 4px;
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+}
+.pmd-settings-text:focus {
+  outline: 2px solid var(--pmd-c-accent, #4a90e2);
+  outline-offset: -1px;
+}
+
 /* Readers editor (settings) */
 .pmd-typography-editor {
   margin-top: 0.5rem;
@@ -2527,6 +2542,172 @@ body.pmd-nav-resize-active {
 }
 
 /* ---------------------------------------------- Reference (cheat-sheet) modal */
+
+/* ---------------------------------------------- Comments column */
+
+/* `#app` is the editor's main flex container. The editor takes the
+   remaining space; the comments column docks to the right when
+   visible and collapses out of layout when `hidden`. */
+#app {
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+}
+#editor {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pmd-comments-column {
+  flex: 0 0 320px;
+  max-width: 320px;
+  overflow-y: auto;
+  background: var(--pmd-c-bg-soft, #f7f7f8);
+  border-left: 1px solid var(--pmd-c-border-soft, rgba(0, 0, 0, 0.08));
+  padding: 0.75rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-family: 'Calibri', 'Helvetica Neue', sans-serif;
+  font-size: 0.85rem;
+}
+.pmd-comments-column[hidden] { display: none; }
+
+.pmd-comments-empty {
+  color: var(--pmd-c-text-muted);
+  font-style: italic;
+  padding: 1rem 0.25rem;
+  text-align: center;
+}
+
+.pmd-comment-thread {
+  background: var(--pmd-c-bg, #fff);
+  border: 1px solid var(--pmd-c-border-soft, rgba(0, 0, 0, 0.12));
+  border-radius: 6px;
+  padding: 0.55rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+.pmd-comment-thread:hover {
+  border-color: var(--pmd-c-border, #888);
+}
+
+.pmd-comment-root,
+.pmd-comment-reply {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.pmd-comment-reply {
+  padding-left: 0.65rem;
+  border-left: 2px solid var(--pmd-c-border-soft, rgba(0, 0, 0, 0.08));
+}
+.pmd-comment-pending {
+  color: var(--pmd-c-text-muted);
+}
+
+.pmd-comment-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+.pmd-comment-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  background: var(--pmd-c-accent, #4a90e2);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.pmd-comment-ai .pmd-comment-initials {
+  background: #8b5cf6; /* purple to differentiate AI comments */
+}
+.pmd-comment-author {
+  font-weight: 600;
+  flex: 1 1 auto;
+}
+.pmd-comment-kind-tag {
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.4rem;
+  background: rgba(139, 92, 246, 0.15);
+  color: #6d28d9;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.pmd-comment-date {
+  color: var(--pmd-c-text-muted);
+  font-size: 0.75rem;
+}
+.pmd-comment-delete {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.25rem;
+}
+.pmd-comment-delete:hover {
+  color: #b00;
+}
+
+.pmd-comment-body p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.pmd-comment-reply-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.pmd-comment-reply-input {
+  resize: vertical;
+  padding: 0.35rem 0.45rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  border: 1px solid var(--pmd-c-border, #999);
+  border-radius: 4px;
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+  min-height: 2.2em;
+}
+.pmd-comment-reply-input:focus {
+  outline: 2px solid var(--pmd-c-accent, #4a90e2);
+  outline-offset: -1px;
+}
+.pmd-comment-reply-submit {
+  align-self: flex-end;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  border: 1px solid var(--pmd-c-accent, #4a90e2);
+  background: var(--pmd-c-accent, #4a90e2);
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pmd-comment-reply-submit:hover {
+  background: var(--pmd-c-accent-hover, #3a7dd0);
+}
+
+/* Inline indicator on commented text — subtle yellow underline so
+   you can see at a glance what's commented. Doesn't fight with
+   highlight backgrounds since it's an underline. */
+#editor .pmd-comment-range {
+  background-color: rgba(255, 215, 0, 0.12);
+  border-bottom: 1px dotted #c79a00;
+  cursor: help;
+}
 
 .pmd-save-as-overlay {
   position: fixed;

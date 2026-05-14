@@ -324,6 +324,24 @@ export interface Settings {
    * map fall back to `DEFAULT_RIBBON_KEYS`.
    */
   ribbonKeyOverrides: Partial<Record<RibbonCommandId, string | string[]>>;
+  /** Display name attached to new comments authored locally. */
+  commentAuthor: string;
+  /** Initials attached to new comments authored locally (Word shows
+   *  these in the margin badge). Auto-derived from `commentAuthor`
+   *  if left empty. */
+  commentAuthorInitials: string;
+  /** Whether the right-side comments column is currently visible.
+   *  Toggled by the comments-show-hide ribbon button; persisted so
+   *  the editor remembers the last state. */
+  commentsVisible: boolean;
+  /** Anthropic API key for AI features. Empty until the user sets
+   *  one. Stored locally; never sent anywhere except direct calls
+   *  to the Anthropic API. */
+  anthropicApiKey: string;
+  /** Master switch for AI features (the explainer comment shortcut,
+   *  @AI mentions inside comments, etc.). When false, no UI for
+   *  AI shows up and no API calls happen even if a key is set. */
+  aiFeaturesEnabled: boolean;
 }
 
 /** Open-delimiter options for "Condense with warning" markers. The
@@ -406,6 +424,11 @@ const DEFAULTS: Settings = {
   condenseWarningCustomResumeMarker: '',
   shrinkCustomProtections: [],
   ribbonKeyOverrides: {},
+  commentAuthor: 'You',
+  commentAuthorInitials: '',
+  commentsVisible: false,
+  anthropicApiKey: '',
+  aiFeaturesEnabled: false,
 };
 
 /** Public read-only view of the built-in defaults — handy for any UI
@@ -435,7 +458,9 @@ export interface SettingMeta {
     | 'headingMode'
     | 'condenseWarningDelimiter'
     | 'shrinkCustomProtections'
-    | 'keybindings';
+    | 'keybindings'
+    | 'text'
+    | 'password';
 }
 
 export const SETTING_METADATA: SettingMeta[] = [
@@ -576,6 +601,32 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'Rebind any ribbon / menu command to your own keys. Click + on a row to add a binding; click × on a chip to remove one; click ↺ to restore that row\'s defaults.',
     kind: 'keybindings',
+  },
+  {
+    key: 'commentAuthor',
+    label: 'Comment author name',
+    description: 'Display name attached to comments you create. Stored locally.',
+    kind: 'text',
+  },
+  {
+    key: 'commentAuthorInitials',
+    label: 'Comment author initials',
+    description: 'Short badge shown on your comments. Auto-derived from the name if left empty.',
+    kind: 'text',
+  },
+  {
+    key: 'aiFeaturesEnabled',
+    label: 'Enable AI features',
+    description:
+      'Master switch for AI-powered comment features (in-comment "Explain" prompts, @AI mentions). Requires an Anthropic API key below.',
+    kind: 'toggle',
+  },
+  {
+    key: 'anthropicApiKey',
+    label: 'Anthropic API key',
+    description:
+      'Used only when AI features are enabled. Stored locally in browser settings; sent only to api.anthropic.com.',
+    kind: 'password',
   },
 ];
 
@@ -737,6 +788,20 @@ function sanitize(s: Settings): Settings {
         : DEFAULTS.condenseWarningCustomResumeMarker,
     shrinkCustomProtections: sanitizeShrinkProtections(s.shrinkCustomProtections),
     ribbonKeyOverrides: sanitizeRibbonKeyOverrides(s.ribbonKeyOverrides),
+    commentAuthor:
+      typeof s.commentAuthor === 'string' && s.commentAuthor.length > 0
+        ? s.commentAuthor
+        : DEFAULTS.commentAuthor,
+    commentAuthorInitials:
+      typeof s.commentAuthorInitials === 'string'
+        ? s.commentAuthorInitials
+        : DEFAULTS.commentAuthorInitials,
+    commentsVisible: !!s.commentsVisible,
+    anthropicApiKey:
+      typeof s.anthropicApiKey === 'string'
+        ? s.anthropicApiKey
+        : DEFAULTS.anthropicApiKey,
+    aiFeaturesEnabled: !!s.aiFeaturesEnabled,
   };
 }
 

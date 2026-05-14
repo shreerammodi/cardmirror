@@ -69,6 +69,10 @@ const GROUPS: ShortcutGroup[] = [
     commands: ['toggleReadMode', 'wordCountSelection', 'openShortcutsReference'],
   },
   {
+    title: 'Comments',
+    commands: ['toggleCommentsVisible', 'addCommentToSelection'],
+  },
+  {
     title: 'Select',
     commands: ['selectSimilar'],
   },

@@ -104,7 +104,8 @@ Marks: `cite_mark`, `underline_mark`, `underline_direct`,
 `emphasis_mark`, `undertag_mark`, `analytic_mark`, plus direct
 formatting `bold`, `italic`, `strikethrough`, `superscript`,
 `subscript`, `link`, `highlight`, `font_color`, `font_size`,
-`shading`, `pilcrow_marker`, `font_family`.
+`shading`, `pilcrow_marker`, `font_family`, `comment_range`
+(anchors a thread to a range of text).
 
 See [`src/schema/`](./src/schema/) for full specs and
 [`ARCHITECTURE.md §4`](./ARCHITECTURE.md) for design rationale.

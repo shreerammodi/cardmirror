@@ -66,6 +66,21 @@ export class Docx {
     this.zip.file(path, bytes);
   }
 
+  /** Insert one or more `<Override>` entries into the
+   *  `[Content_Types].xml` part. Used by `toDocx` to declare any
+   *  optional parts beyond the baseline (comments.xml,
+   *  commentsExtended.xml, etc.). */
+  async addContentTypeOverrides(overrides: { partName: string; contentType: string }[]): Promise<void> {
+    if (overrides.length === 0) return;
+    const ct = await this.readText('[Content_Types].xml');
+    if (!ct) return;
+    const additions = overrides
+      .map((o) => `<Override PartName="${o.partName}" ContentType="${o.contentType}"/>`)
+      .join('');
+    const updated = ct.replace('</Types>', `${additions}</Types>`);
+    this.writeText('[Content_Types].xml', updated);
+  }
+
   /** Get the raw zip for advanced operations. */
   raw(): JSZip {
     return this.zip;

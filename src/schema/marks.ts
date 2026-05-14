@@ -376,4 +376,43 @@ export const marks: { [name: string]: MarkSpec } = {
     ],
   },
 
+  /**
+   * Comment anchor — references a thread in the comments plugin
+   * state via `threadId`. Non-inclusive so typing past either end
+   * of a commented range doesn't extend the anchor. Renders as a
+   * span with a `data-comment-id` attribute the CSS uses to draw
+   * the subtle inline indicator. Thread content (author / text /
+   * replies) lives in plugin state, not on the mark.
+   *
+   * Round-trips as `<w:commentRangeStart>` / `<w:commentRangeEnd>`
+   * brackets in document.xml; the actual comment data goes into
+   * `word/comments.xml` (+ `word/commentsExtended.xml` for thread
+   * relationships).
+   */
+  comment_range: {
+    inclusive: false,
+    attrs: {
+      threadId: {
+        default: '',
+        validate: (v: unknown) => typeof v === 'string',
+      },
+    },
+    parseDOM: [
+      {
+        tag: 'span[data-comment-id]',
+        getAttrs: (dom: HTMLElement) => ({
+          threadId: dom.getAttribute('data-comment-id') ?? '',
+        }),
+      },
+    ],
+    toDOM: (mark) => [
+      'span',
+      {
+        class: 'pmd-comment-range',
+        'data-comment-id': String(mark.attrs['threadId'] ?? ''),
+      },
+      0,
+    ],
+  },
+
 };
