@@ -51,6 +51,17 @@ import {
   getOperatingRanges,
   META_OPERATING_ON_SHADOW,
 } from './similar-selection-plugin.js';
+import {
+  addRowAfter,
+  addRowBefore,
+  deleteRow,
+  addColumnAfter,
+  addColumnBefore,
+  deleteColumn,
+  deleteTable,
+  mergeCells,
+  splitCell,
+} from 'prosemirror-tables';
 
 type HeadingTypeName = 'pocket' | 'hat' | 'block';
 
@@ -2814,7 +2825,17 @@ export type RibbonCommandId =
   | 'selectSimilar'
   | 'removeHyperlinks'
   | 'convertAnalyticsToTags'
-  | 'fixFormattingGaps';
+  | 'fixFormattingGaps'
+  | 'insertTable'
+  | 'addRowAfter'
+  | 'addRowBefore'
+  | 'deleteTableRow'
+  | 'addColumnAfter'
+  | 'addColumnBefore'
+  | 'deleteTableColumn'
+  | 'mergeTableCells'
+  | 'splitTableCell'
+  | 'deleteTable';
 
 export const STRUCTURAL_RIBBON_COMMAND_IDS: StructuralRibbonCommandId[] = [
   'setPocket',
@@ -2856,6 +2877,16 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'removeHyperlinks',
   'convertAnalyticsToTags',
   'fixFormattingGaps',
+  'insertTable',
+  'addRowAfter',
+  'addRowBefore',
+  'deleteTableRow',
+  'addColumnAfter',
+  'addColumnBefore',
+  'deleteTableColumn',
+  'mergeTableCells',
+  'splitTableCell',
+  'deleteTable',
 ];
 
 export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
@@ -2894,6 +2925,16 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   removeHyperlinks: 'Remove Hyperlinks',
   convertAnalyticsToTags: 'Convert Analytics to Tags',
   fixFormattingGaps: 'Fix Formatting Gaps',
+  insertTable: 'Insert Table',
+  addRowAfter: 'Insert Row Below',
+  addRowBefore: 'Insert Row Above',
+  deleteTableRow: 'Delete Row',
+  addColumnAfter: 'Insert Column Right',
+  addColumnBefore: 'Insert Column Left',
+  deleteTableColumn: 'Delete Column',
+  mergeTableCells: 'Merge Cells',
+  splitTableCell: 'Split Cell',
+  deleteTable: 'Delete Table',
 };
 
 /**
@@ -2942,6 +2983,17 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   removeHyperlinks: '',
   convertAnalyticsToTags: '',
   fixFormattingGaps: '',
+  // Table commands — no default keys; bind via the keybinding editor.
+  insertTable: '',
+  addRowAfter: '',
+  addRowBefore: '',
+  deleteTableRow: '',
+  addColumnAfter: '',
+  addColumnBefore: '',
+  deleteTableColumn: '',
+  mergeTableCells: '',
+  splitTableCell: '',
+  deleteTable: '',
 };
 
 /**
@@ -3128,7 +3180,63 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return convertAnalyticsToTags();
     case 'fixFormattingGaps':
       return fixFormattingGaps(ctx.effectivePtForNode);
+    case 'insertTable':
+      return insertTable();
+    case 'addRowAfter':
+      return addRowAfter;
+    case 'addRowBefore':
+      return addRowBefore;
+    case 'deleteTableRow':
+      return deleteRow;
+    case 'addColumnAfter':
+      return addColumnAfter;
+    case 'addColumnBefore':
+      return addColumnBefore;
+    case 'deleteTableColumn':
+      return deleteColumn;
+    case 'mergeTableCells':
+      return mergeCells;
+    case 'splitTableCell':
+      return splitCell;
+    case 'deleteTable':
+      return deleteTable;
   }
+}
+
+/**
+ * Insert a default 3×3 table at the cursor. (Larger / smaller
+ * tables can be reached via add-row / add-column after the fact.)
+ * Inserts only if the cursor sits where a table is schema-legal.
+ */
+function insertTable(): Command {
+  return (state, dispatch) => {
+    const tableType = schema.nodes['table'];
+    const rowType = schema.nodes['table_row'];
+    const cellType = schema.nodes['table_cell'];
+    const paragraphType = schema.nodes['paragraph'];
+    if (!tableType || !rowType || !cellType || !paragraphType) return false;
+
+    const rows = 3;
+    const cols = 3;
+    const cellContent = paragraphType.createAndFill();
+    if (!cellContent) return false;
+    const tableRows: PMNode[] = [];
+    for (let r = 0; r < rows; r++) {
+      const cells: PMNode[] = [];
+      for (let c = 0; c < cols; c++) {
+        cells.push(cellType.create(null, cellContent));
+      }
+      tableRows.push(rowType.create(null, cells));
+    }
+    const tableNode = tableType.create(null, tableRows);
+
+    const $from = state.selection.$from;
+    // Find the doc-level position where a table can be inserted.
+    const insertAt = $from.before(1);
+    if (!dispatch) return true;
+    dispatch(state.tr.insert(insertAt, tableNode).scrollIntoView());
+    return true;
+  };
 }
 
 /** Normalize a default-key value (string | string[]) to an array. */

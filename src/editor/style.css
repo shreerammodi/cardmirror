@@ -2550,3 +2550,62 @@ body.pmd-nav-resize-active {
   color: var(--pmd-c-text);
 }
 
+/* ---------------------------------------------- Tables */
+
+#editor .pmd-table {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  table-layout: fixed;
+  width: 100%;
+  /* prosemirror-tables wraps the table in <div class="tableWrapper">
+     with overflow:auto for horizontal scroll on narrow viewports. */
+}
+
+#editor .pmd-table td,
+#editor .pmd-table th {
+  border: 1px solid #888;
+  padding: 0.2rem 0.4rem;
+  vertical-align: top;
+  position: relative;
+  box-sizing: border-box;
+}
+
+#editor .pmd-table th {
+  background: #f0f0f0;
+  font-weight: bold;
+}
+
+#editor .pmd-table p {
+  margin: 0;
+}
+
+/* prosemirror-tables column-resize handle. */
+#editor .tableWrapper {
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+
+#editor .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: #adf;
+  pointer-events: none;
+}
+
+#editor.resize-cursor {
+  cursor: col-resize;
+}
+
+/* prosemirror-tables's selected-cells decoration. */
+#editor .selectedCell::after {
+  position: absolute;
+  content: '';
+  inset: 0;
+  background: rgba(200, 200, 255, 0.4);
+  pointer-events: none;
+  z-index: 2;
+}
+

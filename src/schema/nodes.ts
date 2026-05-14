@@ -54,7 +54,7 @@ export function ensureId(attrs: Record<string, unknown> | null): { id: string } 
  * (see its content expression).
  */
 const BLOCK_CONTENT =
-  '(paragraph | pocket | hat | block | card | analytic_unit | undertag | cite_paragraph | card_body)*';
+  '(paragraph | pocket | hat | block | card | analytic_unit | undertag | cite_paragraph | card_body | table)*';
 
 export const nodes: { [name: string]: NodeSpec } = {
   /** Top-level container. Sequence of block-level content. */
@@ -350,10 +350,148 @@ export const nodes: { [name: string]: NodeSpec } = {
     toDOM: () => ['p', { class: 'pmd-undertag' }, 0],
   },
 
-  /** Generic body paragraph — implicit Normal style. */
+  /** Generic body paragraph — implicit Normal style. Optional
+   *  `alignment` attr surfaces OOXML's `<w:jc>` for paragraphs in
+   *  contexts where alignment matters (table cells especially —
+   *  Word tables routinely center their cell content). Null means
+   *  default (left/inherited). Values match Word's set. */
   paragraph: {
     content: 'inline*',
-    parseDOM: [{ tag: 'p' }],
-    toDOM: () => ['p', 0],
+    attrs: {
+      alignment: {
+        default: null as 'left' | 'center' | 'right' | 'justify' | null,
+        validate: (v: unknown) =>
+          v === null ||
+          v === 'left' ||
+          v === 'center' ||
+          v === 'right' ||
+          v === 'justify',
+      },
+    },
+    parseDOM: [
+      {
+        tag: 'p',
+        getAttrs: (dom: HTMLElement) => {
+          const align = dom.style.textAlign || null;
+          return {
+            alignment:
+              align === 'left' ||
+              align === 'center' ||
+              align === 'right' ||
+              align === 'justify'
+                ? align
+                : null,
+          };
+        },
+      },
+    ],
+    toDOM: (node) => {
+      const align = node.attrs['alignment'] as string | null;
+      return align
+        ? ['p', { style: `text-align: ${align}` }, 0]
+        : ['p', 0];
+    },
+  },
+
+  // ---- Tables (prosemirror-tables compatible) -------------------
+  // Round-tripped from OOXML <w:tbl> / <w:tr> / <w:tc>. Cells hold
+  // generic paragraphs only — no cards / analytics / pockets etc.
+  // inside cells (matches OOXML's "no nesting of structural debate
+  // elements inside table cells" practice).
+  //
+  // Cell attrs follow prosemirror-tables' convention so the
+  // built-in commands (addRowAfter, deleteRow, mergeCells, etc.)
+  // work without adaptation.
+
+  table: {
+    content: 'table_row+',
+    tableRole: 'table',
+    isolating: true,
+    group: 'block',
+    parseDOM: [{ tag: 'table' }],
+    toDOM: () => ['table', { class: 'pmd-table' }, ['tbody', 0]],
+  },
+
+  table_row: {
+    content: '(table_cell | table_header)*',
+    tableRole: 'row',
+    parseDOM: [{ tag: 'tr' }],
+    toDOM: () => ['tr', 0],
+  },
+
+  table_cell: {
+    content: 'paragraph+',
+    attrs: {
+      colspan: { default: 1, validate: (v: unknown) => typeof v === 'number' && v >= 1 },
+      rowspan: { default: 1, validate: (v: unknown) => typeof v === 'number' && v >= 1 },
+      colwidth: {
+        default: null as number[] | null,
+        validate: (v: unknown) =>
+          v === null || (Array.isArray(v) && v.every((n) => typeof n === 'number')),
+      },
+    },
+    tableRole: 'cell',
+    isolating: true,
+    parseDOM: [
+      {
+        tag: 'td',
+        getAttrs: (dom: HTMLElement) => readCellAttrs(dom),
+      },
+    ],
+    toDOM: (node) => ['td', cellAttrsToDom(node.attrs), 0],
+  },
+
+  // Defined for prosemirror-tables compatibility even though OOXML
+  // doesn't distinguish header cells from body cells. Importer always
+  // produces table_cell; we keep table_header so the plugin's
+  // commands (e.g. toggleHeaderRow) function should the user invoke
+  // them.
+  table_header: {
+    content: 'paragraph+',
+    attrs: {
+      colspan: { default: 1, validate: (v: unknown) => typeof v === 'number' && v >= 1 },
+      rowspan: { default: 1, validate: (v: unknown) => typeof v === 'number' && v >= 1 },
+      colwidth: {
+        default: null as number[] | null,
+        validate: (v: unknown) =>
+          v === null || (Array.isArray(v) && v.every((n) => typeof n === 'number')),
+      },
+    },
+    tableRole: 'header_cell',
+    isolating: true,
+    parseDOM: [
+      {
+        tag: 'th',
+        getAttrs: (dom: HTMLElement) => readCellAttrs(dom),
+      },
+    ],
+    toDOM: (node) => ['th', cellAttrsToDom(node.attrs), 0],
   },
 };
+
+function readCellAttrs(dom: HTMLElement): {
+  colspan: number;
+  rowspan: number;
+  colwidth: number[] | null;
+} {
+  const colspan = parseInt(dom.getAttribute('colspan') || '1', 10) || 1;
+  const rowspan = parseInt(dom.getAttribute('rowspan') || '1', 10) || 1;
+  const widthAttr = dom.getAttribute('data-colwidth');
+  const colwidth = widthAttr
+    ? widthAttr.split(',').map((s) => parseInt(s, 10)).filter((n) => Number.isFinite(n))
+    : null;
+  return { colspan, rowspan, colwidth };
+}
+
+function cellAttrsToDom(attrs: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  const colspan = Number(attrs['colspan'] ?? 1);
+  const rowspan = Number(attrs['rowspan'] ?? 1);
+  if (colspan !== 1) out['colspan'] = String(colspan);
+  if (rowspan !== 1) out['rowspan'] = String(rowspan);
+  const colwidth = attrs['colwidth'] as number[] | null;
+  if (colwidth && colwidth.length > 0) {
+    out['data-colwidth'] = colwidth.join(',');
+  }
+  return out;
+}

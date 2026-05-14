@@ -121,8 +121,156 @@ class DocxExporter {
       this.emitChildren(node);
       return;
     }
+    if (node.type.name === 'table') {
+      this.emitTable(node);
+      return;
+    }
     // Every other block-level node is a paragraph kind.
     this.emitParagraph(node);
+  }
+
+  /**
+   * Emit `<w:tbl>` for a `table` node. Cells with `rowspan > 1` are
+   * split into a "restart" cell at the top + N-1 "continue" cells
+   * (`<w:vMerge/>`) synthesized in the subsequent rows at the same
+   * column position. This is the inverse of the importer's vMerge
+   * collapse. Empty continuation cells get an empty paragraph for
+   * OOXML structural validity.
+   *
+   * Column placement: PM rows store cells in document order without
+   * gaps, but OOXML rows include vMerge continuation cells at their
+   * inherited-from-above column positions. We compute each PM cell's
+   * effective grid column by skipping over positions occupied by a
+   * vMerge from a previous row.
+   */
+  private emitTable(table: PMNode): void {
+    type CellAtCol = { node: PMNode; col: number };
+    const rows: CellAtCol[][] = [];
+    // `occupied[rowIdx]` is the set of grid columns claimed by a
+    // vertical span originating in an earlier row.
+    const occupied: Set<number>[] = [];
+    let rowIdx = 0;
+    table.forEach((row) => {
+      if (row.type.name !== 'table_row') return;
+      const cells: CellAtCol[] = [];
+      let col = 0;
+      const myOccupied = occupied[rowIdx] ?? new Set<number>();
+      row.forEach((cell) => {
+        if (cell.type.name !== 'table_cell' && cell.type.name !== 'table_header') return;
+        // Advance past columns claimed by a vMerge from above.
+        while (myOccupied.has(col)) col++;
+        cells.push({ node: cell, col });
+        const cs = Number(cell.attrs['colspan'] ?? 1);
+        const rs = Number(cell.attrs['rowspan'] ?? 1);
+        // Reserve every column this cell spans for every row it
+        // spans below this one.
+        for (let r = 1; r < rs; r++) {
+          const target = rowIdx + r;
+          if (!occupied[target]) occupied[target] = new Set<number>();
+          for (let c = 0; c < cs; c++) occupied[target]!.add(col + c);
+        }
+        col += cs;
+      });
+      rows.push(cells);
+      rowIdx++;
+    });
+
+    // Build per-row continuation entries (one for each cell with
+    // rowspan > 1, repeated rs-1 times in the rows below).
+    type Cont = { col: number; colspan: number };
+    const continuationsByRow: Cont[][] = rows.map(() => []);
+    rows.forEach((rowCells, rIdx) => {
+      for (const c of rowCells) {
+        const rs = Number(c.node.attrs['rowspan'] ?? 1);
+        const cs = Number(c.node.attrs['colspan'] ?? 1);
+        for (let r = 1; r < rs; r++) {
+          const target = rIdx + r;
+          if (target < continuationsByRow.length) {
+            continuationsByRow[target]!.push({ col: c.col, colspan: cs });
+          }
+        }
+      }
+    });
+
+    // Determine number of columns from the widest row's right edge
+    // (including continuations) so we can emit a minimal `<w:tblGrid>`.
+    let colCount = 0;
+    rows.forEach((cells, rIdx) => {
+      let rightEdge = 0;
+      for (const c of cells) {
+        const r = c.col + Number(c.node.attrs['colspan'] ?? 1);
+        if (r > rightEdge) rightEdge = r;
+      }
+      for (const k of continuationsByRow[rIdx] ?? []) {
+        const r = k.col + k.colspan;
+        if (r > rightEdge) rightEdge = r;
+      }
+      if (rightEdge > colCount) colCount = rightEdge;
+    });
+    if (colCount === 0) colCount = 1;
+
+    this.parts.push('<w:tbl>');
+    this.parts.push(
+      '<w:tblPr>' +
+        '<w:tblStyle w:val="TableGrid"/>' +
+        '<w:tblW w:w="0" w:type="auto"/>' +
+        '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>' +
+        '</w:tblPr>',
+    );
+    // Minimal grid: even-width columns, summing to a default
+    // total. Word recomputes widths on open if it likes.
+    const colWidth = Math.floor(9350 / colCount);
+    let grid = '<w:tblGrid>';
+    for (let i = 0; i < colCount; i++) grid += `<w:gridCol w:w="${colWidth}"/>`;
+    grid += '</w:tblGrid>';
+    this.parts.push(grid);
+
+    rows.forEach((rowCells, rowIdx) => {
+      this.parts.push('<w:tr>');
+      // Build an ordered emission list combining the row's real
+      // cells and any vMerge continuation cells that belong here.
+      type Entry =
+        | { kind: 'real'; node: PMNode; col: number }
+        | { kind: 'continue'; col: number; colspan: number };
+      const entries: Entry[] = [];
+      for (const c of rowCells) entries.push({ kind: 'real', node: c.node, col: c.col });
+      for (const k of continuationsByRow[rowIdx] ?? []) {
+        entries.push({ kind: 'continue', col: k.col, colspan: k.colspan });
+      }
+      entries.sort((a, b) => a.col - b.col);
+
+      for (const e of entries) {
+        if (e.kind === 'real') {
+          const cs = Number(e.node.attrs['colspan'] ?? 1);
+          const rs = Number(e.node.attrs['rowspan'] ?? 1);
+          this.parts.push('<w:tc>');
+          let tcPr = '';
+          if (cs > 1) tcPr += `<w:gridSpan w:val="${cs}"/>`;
+          if (rs > 1) tcPr += '<w:vMerge w:val="restart"/>';
+          this.parts.push(`<w:tcPr><w:tcW w:w="${colWidth * cs}" w:type="dxa"/>${tcPr}</w:tcPr>`);
+          e.node.forEach((child) => {
+            if (child.type.name === 'paragraph') {
+              this.emitParagraph(child);
+            } else {
+              this.emitBlock(child);
+            }
+          });
+          this.parts.push('</w:tc>');
+        } else {
+          // Continuation cell. Empty paragraph + <w:vMerge/>.
+          this.parts.push('<w:tc>');
+          let tcPr = '';
+          if (e.colspan > 1) tcPr += `<w:gridSpan w:val="${e.colspan}"/>`;
+          tcPr += '<w:vMerge/>';
+          this.parts.push(`<w:tcPr><w:tcW w:w="${colWidth * e.colspan}" w:type="dxa"/>${tcPr}</w:tcPr>`);
+          this.parts.push('<w:p/>');
+          this.parts.push('</w:tc>');
+        }
+      }
+      this.parts.push('</w:tr>');
+    });
+
+    this.parts.push('</w:tbl>');
   }
 
   private emitParagraph(node: PMNode): void {
@@ -130,8 +278,12 @@ class DocxExporter {
     const pStyle = NODE_TO_PSTYLE[name] ?? null;
     const isHeading = HEADING_LIKE.has(name);
     const id = isHeading ? ((node.attrs['id'] as string | null) ?? null) : null;
+    const alignment = (node.attrs['alignment'] as string | null) ?? null;
 
-    const pPr = pStyle ? `<w:pPr><w:pStyle w:val="${pStyle}"/></w:pPr>` : '';
+    let pPrInner = '';
+    if (pStyle) pPrInner += `<w:pStyle w:val="${pStyle}"/>`;
+    if (alignment) pPrInner += `<w:jc w:val="${alignment}"/>`;
+    const pPr = pPrInner ? `<w:pPr>${pPrInner}</w:pPr>` : '';
 
     this.parts.push('<w:p>');
     this.parts.push(pPr);

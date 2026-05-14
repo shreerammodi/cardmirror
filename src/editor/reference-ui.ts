@@ -80,6 +80,21 @@ const GROUPS: ShortcutGroup[] = [
       'removeHyperlinks',
     ],
   },
+  {
+    title: 'Table',
+    commands: [
+      'insertTable',
+      'addRowBefore',
+      'addRowAfter',
+      'addColumnBefore',
+      'addColumnAfter',
+      'deleteTableRow',
+      'deleteTableColumn',
+      'mergeTableCells',
+      'splitTableCell',
+      'deleteTable',
+    ],
+  },
 ];
 
 class ReferenceModal {

@@ -46,6 +46,11 @@ interface ParaInfo {
   headingId: string | null;
   /** Original pStyle, for diagnostics. */
   pStyle: string | null;
+  /** When set, the assembler emits this PMNode verbatim at this
+   *  position in the doc instead of treating it as a paragraph.
+   *  Used for `<w:tbl>` → `table` nodes, which are pre-assembled
+   *  into PM form during the body walk. */
+  rawNode?: PMNode;
 }
 
 /** rId → relationship target map from word/_rels/document.xml.rels. */
@@ -89,8 +94,19 @@ export function importDoc(
   for (const node of bodyChildren) {
     if ('w:p' in node) {
       paragraphs.push(parseParagraph(node, ctx));
+    } else if ('w:tbl' in node) {
+      const tableNode = parseTable(node, ctx);
+      if (tableNode) {
+        paragraphs.push({
+          nodeType: '__rawNode__',
+          inlines: [],
+          headingId: null,
+          pStyle: null,
+          rawNode: tableNode,
+        });
+      }
     }
-    // <w:sectPr>, <w:tbl>, etc. — skip for v0.
+    // <w:sectPr>, etc. — skip.
   }
 
   return normalizeUnderlineMarks(assembleDoc(paragraphs));
@@ -152,6 +168,128 @@ function parseParagraph(pNode: XmlNode, ctx: ImportContext): ParaInfo {
   const nodeType = resolveNodeType(pStyle, inlines);
 
   return { nodeType, inlines, headingId, pStyle };
+}
+
+/**
+ * Parse a `<w:tbl>` into a `table` PMNode. Supports:
+ *   - `<w:gridSpan>` → `colspan` on the cell.
+ *   - `<w:vMerge w:val="restart"/>` + `<w:vMerge/>` continuations →
+ *     `rowspan` on the restart cell; continuation cells dropped
+ *     from PM rows.
+ *   - `<w:p>` cell content → generic `paragraph` nodes (with the
+ *     paragraph's `<w:jc>` preserved as the `alignment` attr).
+ *
+ * Out of scope (preserved structurally but not visually): cell
+ * widths, borders, shading, table styles.
+ */
+function parseTable(tblNode: XmlNode, ctx: ImportContext): PMNode | null {
+  type CellData = {
+    colspan: number;
+    rowspan: number;
+    content: PMNode[];
+  };
+  const rowCells: CellData[][] = [];
+  const vmergeRestarts: Map<number, CellData> = new Map();
+
+  for (const child of childrenOf(tblNode, 'w:tbl')) {
+    if (!('w:tr' in child)) continue;
+    const cells: CellData[] = [];
+    let colPos = 0;
+    for (const tcChild of childrenOf(child, 'w:tr')) {
+      if (!('w:tc' in tcChild)) continue;
+      const tcChildren = childrenOf(tcChild, 'w:tc');
+      const tcPr = findChild(tcChildren, 'w:tcPr');
+      let colspan = 1;
+      let vMergeMode: 'none' | 'restart' | 'continue' = 'none';
+      if (tcPr) {
+        for (const prop of childrenOf(tcPr, 'w:tcPr')) {
+          if ('w:gridSpan' in prop) {
+            const v = Number(attrsOf(prop)['w:val'] || 1);
+            if (Number.isFinite(v) && v > 1) colspan = v;
+          } else if ('w:vMerge' in prop) {
+            const val = attrsOf(prop)['w:val'];
+            vMergeMode = val === 'restart' ? 'restart' : 'continue';
+          }
+        }
+      }
+      if (vMergeMode === 'continue') {
+        const active = vmergeRestarts.get(colPos);
+        if (active) active.rowspan += 1;
+        colPos += colspan;
+        continue;
+      }
+      const cellParas: PMNode[] = [];
+      for (const cellChild of tcChildren) {
+        if ('w:p' in cellChild) {
+          const para = parseCellParagraph(cellChild, ctx);
+          if (para) cellParas.push(para);
+        }
+      }
+      if (cellParas.length === 0) {
+        const fallback = schema.nodes['paragraph']!.createAndFill();
+        if (fallback) cellParas.push(fallback);
+      }
+      const data: CellData = { colspan, rowspan: 1, content: cellParas };
+      cells.push(data);
+      if (vMergeMode === 'restart') {
+        vmergeRestarts.set(colPos, data);
+      } else {
+        vmergeRestarts.delete(colPos);
+      }
+      colPos += colspan;
+    }
+    if (cells.length > 0) rowCells.push(cells);
+  }
+
+  if (rowCells.length === 0) return null;
+
+  const tableType = schema.nodes['table'];
+  const rowType = schema.nodes['table_row'];
+  const cellType = schema.nodes['table_cell'];
+  if (!tableType || !rowType || !cellType) return null;
+
+  const rows = rowCells.map((cells) =>
+    rowType.create(
+      null,
+      cells.map((c) =>
+        cellType.create(
+          { colspan: c.colspan, rowspan: c.rowspan, colwidth: null },
+          c.content,
+        ),
+      ),
+    ),
+  );
+  return tableType.create(null, rows);
+}
+
+/** Parse a `<w:p>` as a cell paragraph: plain `paragraph` nodeType,
+ *  preserve `<w:pPr>/<w:jc>` as the `alignment` attr, and reuse
+ *  the standard inline-content walk so marks (font_size, bold,
+ *  highlight, etc.) survive into the cell. */
+function parseCellParagraph(pNode: XmlNode, ctx: ImportContext): PMNode | null {
+  const pChildren = childrenOf(pNode, 'w:p');
+  const pPr = findChild(pChildren, 'w:pPr');
+  let alignment: 'left' | 'center' | 'right' | 'justify' | null = null;
+  if (pPr) {
+    const jc = findChild(childrenOf(pPr, 'w:pPr'), 'w:jc');
+    if (jc) {
+      const v = attrsOf(jc)['w:val'];
+      if (v === 'center' || v === 'right' || v === 'left' || v === 'justify') {
+        alignment = v;
+      } else if (v === 'start') {
+        alignment = 'left';
+      } else if (v === 'end') {
+        alignment = 'right';
+      }
+    }
+  }
+  const inlines: PMNode[] = [];
+  for (const c of pChildren) {
+    collectInlines(c, ctx, inlines);
+  }
+  const paragraph = schema.nodes['paragraph'];
+  if (!paragraph) return null;
+  return paragraph.create({ alignment }, inlines);
 }
 
 function collectInlines(node: XmlNode, ctx: ImportContext, out: PMNode[]): void {
@@ -470,6 +608,14 @@ function assembleDoc(paragraphs: ParaInfo[]): PMNode {
   let i = 0;
   while (i < paragraphs.length) {
     const para = paragraphs[i]!;
+
+    // Pre-assembled raw nodes (tables) bypass the paragraph-classifier
+    // logic entirely — they emit straight into the doc at this point.
+    if (para.rawNode) {
+      docNodes.push(para.rawNode);
+      i++;
+      continue;
+    }
 
     if (para.nodeType === 'analytic') {
       // Start an analytic_unit: analytic + undertag* + card_body*

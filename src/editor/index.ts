@@ -37,6 +37,7 @@ import { citeClassifierPlugin } from './cite-classifier-plugin.js';
 import { namedStyleNormalizerPlugin } from './named-style-normalizer-plugin.js';
 import { fontSizeClassPlugin } from './font-size-class-plugin.js';
 import { buildSimilarSelectionPlugin } from './similar-selection-plugin.js';
+import { tableEditing, columnResizing } from 'prosemirror-tables';
 import { buildPastePlugin, togglePlainPaste } from './paste-plugin.js';
 import { editorDragSurface } from './drag-editor-surface.js';
 import {
@@ -227,6 +228,21 @@ if (docMenuBtn) {
             label: 'Select Similar Formatting',
             run: () => runRibbon('selectSimilar'),
           },
+        ],
+      },
+      {
+        title: 'Table',
+        items: [
+          { label: 'Insert Table (3×3)', run: () => runRibbon('insertTable') },
+          { label: 'Insert Row Above', run: () => runRibbon('addRowBefore') },
+          { label: 'Insert Row Below', run: () => runRibbon('addRowAfter') },
+          { label: 'Insert Column Left', run: () => runRibbon('addColumnBefore') },
+          { label: 'Insert Column Right', run: () => runRibbon('addColumnAfter') },
+          { label: 'Delete Row', run: () => runRibbon('deleteTableRow') },
+          { label: 'Delete Column', run: () => runRibbon('deleteTableColumn') },
+          { label: 'Merge Cells', run: () => runRibbon('mergeTableCells') },
+          { label: 'Split Cell', run: () => runRibbon('splitTableCell') },
+          { label: 'Delete Table', run: () => runRibbon('deleteTable') },
         ],
       },
     ]);
@@ -967,6 +983,8 @@ function buildEditorPlugins(): Plugin[] {
     namedStyleNormalizerPlugin,
     fontSizeClassPlugin,
     buildSimilarSelectionPlugin(effectivePtForNode),
+    tableEditing(),
+    columnResizing(),
     buildPastePlugin({
       condenseOnPaste: () => settings.get('condenseOnPaste'),
       paragraphIntegrity: () => settings.get('paragraphIntegrity'),

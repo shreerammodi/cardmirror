@@ -33,6 +33,9 @@ interface NodeCounts {
   undertag: number;
   paragraph: number;
   image: number;
+  table: number;
+  table_row: number;
+  table_cell: number;
   totalParagraphs: number;
   totalTextLength: number;
 }
@@ -47,6 +50,9 @@ function countNodes(doc: PMNode): NodeCounts {
     undertag: 0,
     paragraph: 0,
     image: 0,
+    table: 0,
+    table_row: 0,
+    table_cell: 0,
     totalParagraphs: 0,
     totalTextLength: 0,
   };
@@ -107,6 +113,15 @@ const FIXTURES: DocFixture[] = [
       hat: 2,
       block: 26,
       card: 50,
+    },
+  },
+  {
+    // Has 4 tables, 28 rows, 103 cells (after vMerge collapse).
+    filename: 'Retrenchment TAP - 26-27.docx',
+    expected: {
+      table: 4,
+      table_row: 28,
+      table_cell: 103,
     },
   },
 ];
