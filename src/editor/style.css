@@ -408,14 +408,24 @@ body {
   letter-spacing: -0.05em;
 }
 
-/* The ▲ glyph naturally sits high in the line box (its visual mass
-   is in the upper half), while the ▼ glyph sits low — so without
+/* Both step-button arrows: small gap between the A and the arrow
+   glyph so they don't read as one combined character. */
+.ribbon-font-size-step-arrow {
+  margin-left: 0.15rem;
+}
+
+/* The ▴ glyph naturally sits high in the line box (its visual mass
+   is in the upper half), while the ▾ glyph sits low — so without
    adjustment they don't visually align horizontally with the row of
-   ▾ arrows on neighboring controls. Push ▲ DOWN so its visual
-   center matches the ▾s on the same ribbon row. */
+   ▾ arrows on neighboring controls. Past iterations of this rule
+   landed too high (translateY: -0.18em) or too low (+0.18em /
+   +0.08em); the natural position turned out to read best alongside
+   the row's other dropdown ▾s. Kept as an explicit `translateY(0)`
+   so a future reader sees the deliberate "no shift" rather than
+   suspecting a missing override. */
 .ribbon-font-size-step-up-arrow {
   display: inline-block;
-  transform: translateY(0.18em);
+  transform: translateY(0);
 }
 
 /* Dropdown popup — preset pt sizes, styled like the color picker. */
@@ -2018,10 +2028,14 @@ body.pmd-nav-resize-active {
 
 /* Doc / Card dropdown-arrow chevron — gray to match the color-panel
    arrows. Only the A▴ / A▾ font-size increment / decrement buttons
-   keep black arrows (they're action buttons, not dropdown triggers). */
+   keep black arrows (they're action buttons, not dropdown triggers).
+   Margin-left because the smaller font-size on the chevron span
+   would otherwise eat the visual space between "Doc" / "Card" and
+   the arrow. */
 .ribbon-doc-menu-arrow {
   color: var(--pmd-c-text-secondary, #666);
   font-size: 0.65rem;
+  margin-left: 0.35rem;
 }
 
 .pmd-doc-menu {
