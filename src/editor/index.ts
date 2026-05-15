@@ -1500,47 +1500,120 @@ function refreshReadModeBtn(): void {
 const navPanel = new NavigationPanel(navEl);
 
 function makeStarterDoc(): PMNode {
-  return schema.nodes['doc']!.createChecked(null, [
-    schema.nodes['pocket']!.create({ id: newHeadingId() }, schema.text('CardMirror playground')),
-    schema.nodes['paragraph']!.create(null, [
-      schema.text('Drop a .docx in the input above to load it. The schema renders here as the canonical Verbatim layout (Pocket = box, Hat = centered double underline, Block = centered single underline, Tag = inline-bold).'),
-    ]),
-    schema.nodes['hat']!.create({ id: newHeadingId() }, schema.text('Example structures')),
-    schema.nodes['block']!.create({ id: newHeadingId() }, schema.text('A block containing a card and an analytic')),
-    schema.nodes['paragraph']!.create(null, schema.text('Loose paragraphs are first-class — they can sit between a heading and the cards beneath it. Paragraphs typed after a card auto-absorb as card_body; insert a heading to bound a region of loose text.')),
-    schema.nodes['card']!.create(null, [
-      schema.nodes['tag']!.create({ id: newHeadingId() }, schema.text('Climate action delays catastrophic — IPCC')),
-      // Undertags belong to the tag — they sit inside the card, not after it.
-      schema.nodes['undertag']!.create(null, schema.text('Sub-tag note that explains the tag.')),
-      schema.nodes['cite_paragraph']!.create(null, [
-        schema.text('IPCC AR6 ', [schema.marks['cite_mark']!.create()]),
-        schema.text('2023, '),
-        schema.text('Synthesis Report', [schema.marks['italic']!.create()]),
-        schema.text(', '),
-        schema.text('https://ipcc.ch', [schema.marks['link']!.create({ href: 'https://www.ipcc.ch' })]),
+  const n = schema.nodes;
+  const m = schema.marks;
+  // Shorthand factories. Marks-on-text uses ProseMirror's array-of-
+  // marks form; nodes get an `id` only where the schema requires
+  // one for stable heading IDs (per ARCHITECTURE.md §4).
+  const t = (text: string, marks?: ReturnType<(typeof m)[string]['create']>[]) =>
+    marks && marks.length ? schema.text(text, marks) : schema.text(text);
+  const para = (...children: PMNode[]) => n['paragraph']!.create(null, children);
+  const paraText = (text: string) => n['paragraph']!.create(null, schema.text(text));
+
+  return n['doc']!.createChecked(null, [
+    n['pocket']!.create({ id: newHeadingId() }, schema.text('Welcome to CardMirror')),
+    paraText(
+      'This is the live web preview of CardMirror — a ProseMirror-based editor that round-trips Microsoft Word .docx files against Verbatim and Advanced Verbatim. The boxed heading above is a Pocket: Verbatim\'s name for a top-level argument section. The structures below are interactive — type, edit, and try the keyboard shortcuts as you read.',
+    ),
+    paraText(
+      'One bit of vocabulary first: this guide writes "Mod" for the platform\'s primary modifier key — Ctrl on Windows and Linux, ⌘ Cmd on macOS. So "Mod-Shift-S" means Ctrl-Shift-S or ⌘-Shift-S depending on what you\'re running.',
+    ),
+
+    // Section 1: Try it
+    n['hat']!.create({ id: newHeadingId() }, schema.text('1. Try it with your own files')),
+    paraText(
+      'Click the 📂 folder icon in the ribbon to open one of your real Verbatim files. The editor renders styles, marks, and structure with full fidelity, and Save As (💾 in the ribbon, or Mod-Shift-S) round-trips back to a Verbatim-native .docx.',
+    ),
+    paraText(
+      'Heads up: this is the alpha web preview. Edits live only in this tab — there\'s no autosave yet, so use Save As before you close the page if you want to keep what you\'ve done. Don\'t use this for important work.',
+    ),
+
+    // Section 2: Structural styles
+    n['hat']!.create({ id: newHeadingId() }, schema.text('2. Structural styles')),
+    paraText(
+      'CardMirror uses the same four-level hierarchy as Verbatim — Pocket → Hat → Block → Tag — plus body paragraphs, Analytics, and Undertags. Each lives behind a function key (defaults; all rebindable in Settings → Keyboard shortcuts):',
+    ),
+    paraText('F4 = Pocket  ·  F5 = Hat  ·  F6 = Block  ·  F7 = Tag  ·  Mod-F7 = Analytic  ·  Mod-F8 = Undertag'),
+    paraText(
+      'Click a paragraph and press the matching key to convert it. Multi-paragraph selections convert every touched paragraph in one go. F12 clears formatting back to plain body text.',
+    ),
+
+    n['block']!.create({ id: newHeadingId() }, schema.text('Blocks group related cards under a Hat')),
+    paraText(
+      'Loose paragraphs like this one are first-class — they can sit between any structures. Paragraphs typed right after a card auto-absorb into it as card body; type a heading to break out.',
+    ),
+
+    n['card']!.create(null, [
+      n['tag']!.create({ id: newHeadingId() }, schema.text('Cards are the unit of evidence — Tag goes on top')),
+      n['undertag']!.create(null, schema.text('Undertags (Mod-F8) annotate the tag — qualifiers or sub-claims.')),
+      n['cite_paragraph']!.create(null, [
+        t('John '),
+        t('Smith 24', [m['cite_mark']!.create()]),
+        t(', Professor of Climate Science at Yale University, "Title of the Source," '),
+        t('Publication Name', [m['italic']!.create()]),
+        t(', 9/23/2024, '),
+        t('https://example.com', [m['link']!.create({ href: 'https://example.com' })]),
       ]),
-      schema.nodes['card_body']!.create(null, [
-        schema.text('Plain context. '),
-        schema.text('Underlined evidence claim ', [schema.marks['underline_mark']!.create()]),
-        schema.text('plus highlighted ', [
-          schema.marks['underline_mark']!.create(),
-          schema.marks['highlight']!.create({ color: 'yellow' }),
-        ]),
-        schema.text('and emphasized.', [
-          schema.marks['emphasis_mark']!.create(),
-          schema.marks['highlight']!.create({ color: 'yellow' }),
-        ]),
+      n['card_body']!.create(null, [
+        t('A card\'s body holds the evidence text. The standard emphasis marks: '),
+        t('F9 underlines selected text', [m['underline_mark']!.create()]),
+        t(', '),
+        t('F10 emphasizes it', [m['emphasis_mark']!.create()]),
+        t(', and '),
+        t('F11 highlights it', [m['highlight']!.create({ color: 'yellow' })]),
+        t(' (cycle colors in the ribbon swatch picker). F9 and F11 are toggles — press once to apply, again to remove. F10 is apply-only (it strips any underline / highlight in the range as it goes); to remove emphasis, select the run and use F12 Clear or F9 Underline to swap it back. Mod-8 cycles the whole card through Verbatim\'s shrink sizes (11pt → 8 → 7 → 6 → 5 → 4 → back to normal) for tournament use. "Smith 24" in the Cite paragraph above carries the F8 cite mark.',
+        ),
       ]),
     ]),
-    schema.nodes['analytic_unit']!.create(null, [
-      schema.nodes['analytic']!.create(
+
+    n['analytic_unit']!.create(null, [
+      n['analytic']!.create(
         { id: newHeadingId() },
-        schema.text('A standalone analytic between cards.'),
+        schema.text('Analytics (Mod-F7) hold standalone analysis — claims without a card behind them.'),
       ),
-      schema.nodes['card_body']!.create(null, [
-        schema.text('Body paragraphs after the analytic are absorbed into the unit, so the whole thing drags as one. Hover to see the gray bar — same boundary indicator as cards.'),
-      ]),
+      n['card_body']!.create(
+        null,
+        schema.text(
+          'Like a card, an analytic_unit absorbs the paragraphs below it as one structural block. Hover over it and the gray boundary bar appears on the left — same indicator cards get.',
+        ),
+      ),
     ]),
+
+    // Section 3: Moving things around
+    n['hat']!.create({ id: newHeadingId() }, schema.text('3. Moving things around')),
+    paraText(
+      'The nav pane on the left shows your doc\'s outline. Click any entry to jump to it. Ctrl-click adds an entry to the current selection; Shift-click selects a contiguous range. To reorder, just drag a nav entry (or your multi-selection) up or down — that picks up the whole heading and its contents (Pocket and everything under it, Hat and its blocks, etc.) and drops them somewhere schema-legal. Hold Ctrl (or Alt on macOS) while dragging to copy instead of move.',
+    ),
+    paraText(
+      'To pick up a card or analytic directly from the editor surface (not the nav pane), hold Mod + Shift + Alt and click-and-drag it. While the modifier is held the cursor switches to a grab cursor and hovering a card highlights its boundary. Drag-and-drop is schema-aware throughout: drop targets that would produce an invalid structure don\'t light up, and invalid drops are refused.',
+    ),
+
+    // Section 4: Read mode
+    n['hat']!.create({ id: newHeadingId() }, schema.text('4. Read mode')),
+    paraText(
+      'When it\'s time to read at the podium, click 👁️ in the ribbon to enter Read mode. Non-read-aloud content (loose paragraphs, undertags, plain text without highlights) hides; only Tags, Cites, Analytics, and highlighted body text stay visible. Keyboard input is locked down so stray keystrokes can\'t edit the doc. Click 👁️ again or Esc to exit.',
+    ),
+
+    // Section 5: Multi-doc workspace
+    n['hat']!.create({ id: newHeadingId() }, schema.text('5. Multi-doc workspace')),
+    paraText(
+      'Open ⚙ → General → Multi-doc workspace and reload the page to switch into the three-slot side-by-side layout. Each slot is independent: it has its own ribbon focus, its own nav-pane section, its own word-count strip in the footer, and its own doc stack (back / forward / close-and-restore history). Mod-1, Mod-2, and Mod-3 focus the corresponding slot from the keyboard.',
+    ),
+    paraText(
+      'Two layouts apply when all three slots are filled: Compact (all three visible side by side, narrow) and Wide-scroll (two full panes plus the edge of a third; click the peek to snap). Pick which one in ⚙ → General → Multi-doc layout. With only one or two docs open the modes look identical.',
+    ),
+    paraText(
+      'To get content from one slot to another, drag a card or a nav-pane heading across — cross-pane drops always copy (the source pane keeps its content). Comments are disabled while multi-doc is on, so the comments column and the comment / AI-ask shortcuts go inert until you switch back.',
+    ),
+
+    // Section 6: Settings
+    n['hat']!.create({ id: newHeadingId() }, schema.text('6. Customize everything')),
+    paraText(
+      'Click the ⚙ icon in the ribbon to open Settings. Click 📖 to open the keyboard-shortcut reference any time.',
+    ),
+    paraText(
+      'When you\'re ready, open a real .docx with the 📂 icon — or just start editing this one. Welcome aboard!',
+    ),
   ]);
 }
 

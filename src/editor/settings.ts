@@ -475,7 +475,7 @@ const DEFAULTS: Settings = {
   displaySizes: { ...DEFAULT_DISPLAY_SIZES },
   displayTypography: { ...DEFAULT_DISPLAY_TYPOGRAPHY },
   displayColors: { ...DEFAULT_DISPLAY_COLORS },
-  bodyFont: 'Calibri',
+  bodyFont: 'Times New Roman',
   lineHeight: 1.3,
   lineHeightCite: 1.2,
   lineHeightTag: 1.2,
@@ -531,6 +531,18 @@ const DEFAULTS: Settings = {
 export const SETTINGS_DEFAULTS: Readonly<Settings> = DEFAULTS;
 
 /**
+ * Tabs in the settings dialog. Each setting carries a `category`
+ * and is rendered under the matching tab. Order here is the tab
+ * order in the dialog.
+ */
+export type SettingsCategory =
+  | 'general'
+  | 'appearance'
+  | 'editing'
+  | 'shortcuts'
+  | 'comments-ai';
+
+/**
  * Human-readable metadata for each setting, used by the settings UI.
  * Add new entries when introducing new settings.
  */
@@ -559,18 +571,32 @@ export interface SettingMeta {
     | 'clod'
     | 'aiCitePrompt'
     | 'multiDocLayoutMode';
-  /** Setting depends on the AI master toggle — greyed out and
-   *  disabled in the UI when `aiFeaturesEnabled` is false. */
-  aiOnly?: boolean;
+  /** Which tab this setting lives under in the settings dialog. */
+  category: SettingsCategory;
+  /** When set, this row is greyed out and its controls disabled
+   *  unless the named boolean setting evaluates to true. Used for
+   *  e.g. greying out the multi-doc layout picker when multi-doc is
+   *  off, or AI-key rows when AI features are disabled. */
+  dependsOn?: keyof Settings;
 }
 
 export const SETTING_METADATA: SettingMeta[] = [
+  // ─── General ────────────────────────────────────────────────────
+  {
+    key: 'readers',
+    label: 'Readers for read-time estimates',
+    description:
+      'Each reader has a name and a words-per-minute rate. The first two are displayed live in the bottom bar; all show up in the Word Count Selection dialog.',
+    kind: 'readers',
+    category: 'general',
+  },
   {
     key: 'multiDocWorkspace',
     label: 'Multi-doc workspace',
     description:
       'Enable a three-slot side-by-side workspace for working with up to three documents at once. Comments are unavailable while this is on. Reload the page after toggling for the change to take effect.',
     kind: 'toggle',
+    category: 'general',
   },
   {
     key: 'multiDocLayoutMode',
@@ -578,6 +604,8 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'When three docs are open, choose compact (all three visible at once, narrow) or wide-scroll (two full panes + edge of third; click the peek to snap). With 1 or 2 docs open, both modes render identically.',
     kind: 'multiDocLayoutMode',
+    category: 'general',
+    dependsOn: 'multiDocWorkspace',
   },
   {
     key: 'showCitePreview',
@@ -585,6 +613,7 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'Show the cite-formatted text from a card on the right side of its nav-pane entry when you hover.',
     kind: 'toggle',
+    category: 'general',
   },
   {
     key: 'editorSpellcheck',
@@ -592,6 +621,7 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       "Show browser spell-check red underlines under typed text. Off by default — on large docs the dictionary lookups + underline overlay add visible per-keystroke cost, and debate evidence (technical jargon, author names, citations) generates a lot of false-positive squiggles.",
     kind: 'toggle',
+    category: 'general',
   },
   {
     key: 'enableTextDragDrop',
@@ -599,25 +629,23 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       "Allow click-and-drag of selected text to move it to another position. On by default. Disabling stops you (and the browser) from initiating a text-move drag — useful if you keep accidentally dragging selections. Doesn't affect the card / heading pickup-modifier drag.",
     kind: 'toggle',
+    category: 'general',
   },
-  {
-    key: 'readers',
-    label: 'Readers for read-time estimates',
-    description:
-      'Each reader has a name and a words-per-minute rate. The first two are displayed live in the bottom bar; all show up in the Word Count Selection dialog.',
-    kind: 'readers',
-  },
+
+  // ─── Appearance ─────────────────────────────────────────────────
   {
     key: 'displaySizes',
     label: 'Style font sizes (pt)',
     description:
       "Render size for each named style. Doesn't change the underlying doc — only how it looks here.",
     kind: 'displaySizes',
+    category: 'appearance',
   },
   {
     key: 'displayTypography',
     label: 'Style typography',
     kind: 'displayTypography',
+    category: 'appearance',
   },
   {
     key: 'displayColors',
@@ -625,6 +653,7 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'Pick the color used for Analytic and Undertag text.',
     kind: 'displayColors',
+    category: 'appearance',
   },
   {
     key: 'bodyFont',
@@ -632,90 +661,7 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'Font family for body text.',
     kind: 'bodyFont',
-  },
-  {
-    key: 'formattingPanelMode',
-    label: 'Formatting panel',
-    description:
-      'How the Pocket / Hat / Block / Tag / Analytic buttons in the ribbon are displayed. "Labels" shows the style name, "Shortcuts" shows the keyboard binding, "Both" shows name · shortcut, "Hidden" removes the panel.',
-    kind: 'formattingPanelMode',
-  },
-  {
-    key: 'formattingPanelPreview',
-    label: 'Preview styles in formatting panel',
-    description:
-      'When on, formatting-panel buttons preview the visual treatment of the style they apply.',
-    kind: 'toggle',
-  },
-  {
-    key: 'showCharacterStyles',
-    label: 'Show character styles',
-    description:
-      'Show the cite / underline / emphasis character-style buttons in the ribbon. When off, just that sub-panel is hidden; the rest of the formatting panel stays visible.',
-    kind: 'toggle',
-  },
-  {
-    key: 'paragraphIntegrity',
-    label: 'F3 condense: preserve paragraph integrity',
-    description:
-      'When on, F3 only removes intra-paragraph whitespace — paragraphs stay separate. When off, F3 merges consecutive collapsible paragraphs.',
-    kind: 'toggle',
-  },
-  {
-    key: 'usePilcrows',
-    label: 'F3 condense: use pilcrow markers',
-    description:
-      'When paragraph integrity is off and this is on, F3 inserts a 6-pt ¶ at each original paragraph boundary in the merged result, so that the split can be reversed via Ctrl/Cmd+Alt+Shift+F3 (Uncondense).',
-    kind: 'toggle',
-  },
-  {
-    key: 'condenseOnPaste',
-    label: 'Condense after Paste Text (F2)',
-    description:
-      'When on, text that you paste will be condensed using your default "condense" settings.',
-    kind: 'toggle',
-  },
-  {
-    key: 'headingMode',
-    label: 'Condense: heading handling',
-    description:
-      'How selection-based condense without paragraph integrity treats structural elements (headings, cites, undertags) inside the selection. "Strict" blocks attempts to condense that include structural elements. "Respect" (default) keeps structural paragraphs unmerged and merges everything else in the selection. "Demolish" merges everything in the selection.',
-    kind: 'headingMode',
-  },
-  {
-    key: 'clearFormattingOnNamedStyleToggleOff',
-    label: 'F9 toggle-off also clears direct formatting',
-    description:
-      'When on, pressing F9 to toggle underlining off also strips direct formatting in the range. When off, only the underline style mark is removed; direct formatting applied to the underlined text is preserved.',
-    kind: 'toggle',
-  },
-  {
-    key: 'forReferenceUseGray50',
-    label: 'Create Reference uses Gray-50% text',
-    description:
-      'When on, the body text of a "Create Reference" excerpt is rendered in Gray-50% (#808080) instead of black. The heading line stays black either way.',
-    kind: 'toggle',
-  },
-  {
-    key: 'shrinkRestoresOmissionsToNormal',
-    label: 'Shrink keeps protected text at Normal size',
-    description:
-      'When on, Shrink (Mod-8) leaves bracketed "Omitted" spans, the PARAGRAPH INTEGRITY PAUSES/RESUMES markers from "Condense with warning", and any custom protections (below) at Normal size so they stay visible in the shrunken output. When off, all of these are shrunk along with the rest of the text.',
-    kind: 'toggle',
-  },
-  {
-    key: 'shrinkCustomProtections',
-    label: 'Custom shrink protections',
-    description:
-      'Strings (or regex sources, if the box is checked) that Shrink should leave at Normal size whenever protection is on. Literal entries are matched case-insensitively after escaping; regex entries are compiled with `gi` flags. Invalid regex entries are skipped.',
-    kind: 'shrinkCustomProtections',
-  },
-  {
-    key: 'condenseWarningDelimiter',
-    label: 'Condense with warning: marker delimiter',
-    description:
-      'Which bracket style wraps the PARAGRAPH INTEGRITY PAUSES / RESUMES markers added by "Condense with warning" (Card menu).',
-    kind: 'condenseWarningDelimiter',
+    category: 'appearance',
   },
   {
     key: 'lineHeight',
@@ -723,25 +669,131 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'Line-spacing multiplier per paragraph type (unitless × font-size).',
     kind: 'lineHeights',
+    category: 'appearance',
   },
+  {
+    key: 'formattingPanelMode',
+    label: 'Formatting panel',
+    description:
+      'How the Pocket / Hat / Block / Tag / Analytic buttons in the ribbon are displayed. "Labels" shows the style name, "Shortcuts" shows the keyboard binding, "Both" shows name · shortcut, "Hidden" removes the panel.',
+    kind: 'formattingPanelMode',
+    category: 'appearance',
+  },
+  {
+    key: 'formattingPanelPreview',
+    label: 'Preview styles in formatting panel',
+    description:
+      'When on, formatting-panel buttons preview the visual treatment of the style they apply.',
+    kind: 'toggle',
+    category: 'appearance',
+  },
+  {
+    key: 'showCharacterStyles',
+    label: 'Show character styles',
+    description:
+      'Show the cite / underline / emphasis character-style buttons in the ribbon. When off, just that sub-panel is hidden; the rest of the formatting panel stays visible.',
+    kind: 'toggle',
+    category: 'appearance',
+  },
+
+  // ─── Editing ────────────────────────────────────────────────────
+  {
+    key: 'paragraphIntegrity',
+    label: 'F3 condense: preserve paragraph integrity',
+    description:
+      'When on, F3 only removes intra-paragraph whitespace — paragraphs stay separate. When off, F3 merges consecutive collapsible paragraphs.',
+    kind: 'toggle',
+    category: 'editing',
+  },
+  {
+    key: 'usePilcrows',
+    label: 'F3 condense: use pilcrow markers',
+    description:
+      'When paragraph integrity is off and this is on, F3 inserts a 6-pt ¶ at each original paragraph boundary in the merged result, so that the split can be reversed via Ctrl/Cmd+Alt+Shift+F3 (Uncondense).',
+    kind: 'toggle',
+    category: 'editing',
+  },
+  {
+    key: 'condenseOnPaste',
+    label: 'Condense after Paste Text (F2)',
+    description:
+      'When on, text that you paste will be condensed using your default "condense" settings.',
+    kind: 'toggle',
+    category: 'editing',
+  },
+  {
+    key: 'headingMode',
+    label: 'Condense: heading handling',
+    description:
+      'How selection-based condense without paragraph integrity treats structural elements (headings, cites, undertags) inside the selection. "Strict" blocks attempts to condense that include structural elements. "Respect" (default) keeps structural paragraphs unmerged and merges everything else in the selection. "Demolish" merges everything in the selection.',
+    kind: 'headingMode',
+    category: 'editing',
+  },
+  {
+    key: 'condenseWarningDelimiter',
+    label: 'Condense with warning: marker delimiter',
+    description:
+      'Which bracket style wraps the PARAGRAPH INTEGRITY PAUSES / RESUMES markers added by "Condense with warning" (Card menu).',
+    kind: 'condenseWarningDelimiter',
+    category: 'editing',
+  },
+  {
+    key: 'shrinkRestoresOmissionsToNormal',
+    label: 'Shrink keeps protected text at Normal size',
+    description:
+      'When on, Shrink (Mod-8) leaves bracketed "Omitted" spans, the PARAGRAPH INTEGRITY PAUSES/RESUMES markers from "Condense with warning", and any custom protections (below) at Normal size so they stay visible in the shrunken output. When off, all of these are shrunk along with the rest of the text.',
+    kind: 'toggle',
+    category: 'editing',
+  },
+  {
+    key: 'shrinkCustomProtections',
+    label: 'Custom shrink protections',
+    description:
+      'Strings (or regex sources, if the box is checked) that Shrink should leave at Normal size whenever protection is on. Literal entries are matched case-insensitively after escaping; regex entries are compiled with `gi` flags. Invalid regex entries are skipped.',
+    kind: 'shrinkCustomProtections',
+    category: 'editing',
+  },
+  {
+    key: 'clearFormattingOnNamedStyleToggleOff',
+    label: 'F9 toggle-off also clears direct formatting',
+    description:
+      'When on, pressing F9 to toggle underlining off also strips direct formatting in the range. When off, only the underline style mark is removed; direct formatting applied to the underlined text is preserved.',
+    kind: 'toggle',
+    category: 'editing',
+  },
+  {
+    key: 'forReferenceUseGray50',
+    label: 'Create Reference uses Gray-50% text',
+    description:
+      'When on, the body text of a "Create Reference" excerpt is rendered in Gray-50% (#808080) instead of black. The heading line stays black either way.',
+    kind: 'toggle',
+    category: 'editing',
+  },
+
+  // ─── Keyboard shortcuts ─────────────────────────────────────────
   {
     key: 'ribbonKeyOverrides',
     label: 'Keyboard shortcuts',
     description:
       'Rebind any ribbon / menu command to your own keys. Click + on a row to add a binding; click × on a chip to remove one; click ↺ to restore that row\'s defaults.',
     kind: 'keybindings',
+    category: 'shortcuts',
   },
+
+  // ─── Comments & AI ──────────────────────────────────────────────
   {
     key: 'commentAuthor',
     label: 'Comment author name',
     description: 'Display name attached to comments you create. Stored locally.',
     kind: 'text',
+    category: 'comments-ai',
   },
   {
     key: 'commentAuthorInitials',
     label: 'Comment author initials',
     description: 'Short badge shown on your comments. Auto-derived from the name if left empty.',
     kind: 'text',
+    category: 'comments-ai',
   },
   {
     key: 'aiFeaturesEnabled',
@@ -749,6 +801,7 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'Master switch for AI-powered comment features (in-comment "Explain" prompts, @AI mentions). Requires an Anthropic API key below.',
     kind: 'toggle',
+    category: 'comments-ai',
   },
   {
     key: 'anthropicApiKey',
@@ -756,7 +809,8 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'Used only when AI features are enabled. Stored locally in browser settings; sent only to api.anthropic.com.',
     kind: 'password',
-    aiOnly: true,
+    category: 'comments-ai',
+    dependsOn: 'aiFeaturesEnabled',
   },
   {
     key: 'clodEnabled',
@@ -764,7 +818,8 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'When the AI is composing a reply, the in-flight placeholder cycles through time-of-day Clod activities ("Clod is making toast…") instead of plain "Thinking…".',
     kind: 'clod',
-    aiOnly: true,
+    category: 'comments-ai',
+    dependsOn: 'aiFeaturesEnabled',
   },
   {
     key: 'aiCitePrompt',
@@ -772,7 +827,8 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'System prompt the cite-creator hands to the model. Click "Edit prompt" to open a full-size editor. Leave blank to use the built-in default.',
     kind: 'aiCitePrompt',
-    aiOnly: true,
+    category: 'comments-ai',
+    dependsOn: 'aiFeaturesEnabled',
   },
 ];
 

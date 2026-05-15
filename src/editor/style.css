@@ -779,7 +779,7 @@ code {
      body font family (settings.bodyFont), and global line-height
      multiplier (settings.lineHeight). All updated at runtime. */
   --pmd-emphasis-box-size: 1pt;
-  --pmd-body-font: "Calibri";
+  --pmd-body-font: "Times New Roman";
 
   /* Per-paragraph-type line-height multipliers. Body (`--pmd-line-height`)
      is the only one that propagates via #editor's `line-height: var(...)`
@@ -797,7 +797,7 @@ code {
   flex: 1 1 auto;
   min-height: 400px;
   padding: 0.75rem 1.25rem;
-  font-family: var(--pmd-body-font), 'Helvetica Neue', sans-serif;
+  font-family: var(--pmd-body-font), 'Times New Roman', Times, serif;
   font-size: var(--pmd-size-normal);
   line-height: var(--pmd-line-height);
 }
@@ -1718,7 +1718,7 @@ body.pmd-nav-resize-active {
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
   width: 90%;
-  max-width: 480px;
+  max-width: 640px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -1754,10 +1754,50 @@ body.pmd-nav-resize-active {
   color: var(--pmd-c-text-strong);
 }
 
+/* Tab strip below the header. Horizontal scroll if the labels
+   don't fit (narrow dialog on small screens). Active tab is
+   indicated by a bottom border + heavier weight. */
+.pmd-settings-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--pmd-c-divider);
+}
+
+.pmd-settings-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--pmd-c-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.6rem 0.85rem;
+  margin-bottom: -1px; /* Active-tab border overlays the strip border. */
+  white-space: nowrap;
+  transition: color 0.1s ease, border-color 0.1s ease;
+}
+
+.pmd-settings-tab:hover {
+  color: var(--pmd-c-text-strong);
+}
+
+.pmd-settings-tab-active {
+  color: var(--pmd-c-text-strong);
+  border-bottom-color: var(--pmd-c-accent, currentColor);
+  font-weight: 600;
+}
+
 .pmd-settings-list {
   flex: 1 1 auto;
   overflow-y: auto;
   padding: 0.5rem 1.25rem 1.25rem;
+}
+
+.pmd-settings-panel[hidden] {
+  display: none;
 }
 
 .pmd-settings-empty {
@@ -4046,7 +4086,7 @@ body.pmd-multi-doc #word-count-display {
   /* Inherit the body font picked in Settings. `--pmd-body-font` is
    * set on documentElement by `applyBodyFont`, so it cascades here
    * even though `.pmd-pane-editor` is not a descendant of #editor. */
-  font-family: var(--pmd-body-font, "Calibri", "Helvetica Neue", sans-serif);
+  font-family: var(--pmd-body-font, "Times New Roman", Times, serif);
   /* Match the single-doc editor: preserve typed whitespace + tab
    * stops. Also wrap long words rather than letting them push the
    * pane wider than 1/3 of the row. */

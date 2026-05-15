@@ -14,6 +14,8 @@ import {
   DISPLAY_SIZE_KEYS,
   DISPLAY_COLOR_KEYS,
   type SettingMeta,
+  type SettingsCategory,
+  type Settings,
   type ReaderConfig,
   type DisplaySizes,
   type DisplayTypography,
@@ -71,16 +73,29 @@ const DISPLAY_SIZE_LABELS: Record<keyof DisplaySizes, string> = {
   undertag: 'Undertag',
 };
 
+/** Tab labels shown in the settings dialog, in display order. */
+const CATEGORY_TABS: { id: SettingsCategory; label: string }[] = [
+  { id: 'general', label: 'General' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'editing', label: 'Editing' },
+  { id: 'shortcuts', label: 'Keyboard shortcuts' },
+  { id: 'comments-ai', label: 'Comments & AI' },
+];
+
 class SettingsModal {
   private overlay: HTMLDivElement;
   private dialog: HTMLDivElement;
-  /** Set of currently-rendered rows that are gated on the AI
-   *  master toggle. Updated each open() via the renderEntry
-   *  bookkeeping; consumed by `refreshAiDependents`. */
-  private aiDependentRows: HTMLElement[] = [];
+  /** Rows whose enabled state is gated on another boolean setting,
+   *  keyed by the setting that drives them. Refilled each open()
+   *  via renderEntry bookkeeping; consumed by `refreshDependents`. */
+  private dependentRows: Map<keyof Settings, HTMLElement[]> = new Map();
   /** Unsubscribe handle returned by `settings.subscribe` while the
    *  dialog is open. Cleared on close. */
-  private aiToggleUnsubscribe: (() => void) | null = null;
+  private settingsUnsubscribe: (() => void) | null = null;
+  /** Currently-selected tab. Persists for the lifetime of the modal
+   *  instance (across opens) so reopening lands you back where you
+   *  were, but resets if the page reloads. */
+  private activeCategory: SettingsCategory = 'general';
 
   constructor() {
     this.overlay = document.createElement('div');
@@ -109,16 +124,17 @@ class SettingsModal {
   open(): void {
     this.render();
     this.overlay.style.display = '';
-    // Subscribe so toggling the AI master switch greys / un-greys
-    // the dependent rows live without needing a re-open.
-    this.aiToggleUnsubscribe = settings.subscribe(() => this.refreshAiDependents());
-    this.refreshAiDependents();
+    // Subscribe so toggling any "parent" setting (AI master switch,
+    // multi-doc, etc.) greys / un-greys the dependent rows live
+    // without needing a re-open.
+    this.settingsUnsubscribe = settings.subscribe(() => this.refreshDependents());
+    this.refreshDependents();
   }
 
   close(): void {
-    if (this.aiToggleUnsubscribe) {
-      this.aiToggleUnsubscribe();
-      this.aiToggleUnsubscribe = null;
+    if (this.settingsUnsubscribe) {
+      this.settingsUnsubscribe();
+      this.settingsUnsubscribe = null;
     }
     this.overlay.style.display = 'none';
   }
@@ -140,35 +156,92 @@ class SettingsModal {
     header.appendChild(closeBtn);
     this.dialog.appendChild(header);
 
-    this.aiDependentRows = [];
-    const list = document.createElement('div');
-    list.className = 'pmd-settings-list';
-    for (const meta of SETTING_METADATA) {
-      const row = this.renderEntry(meta);
-      if (meta.aiOnly) this.aiDependentRows.push(row);
-      list.appendChild(row);
+    // Tab strip.
+    const tabStrip = document.createElement('nav');
+    tabStrip.className = 'pmd-settings-tabs';
+    tabStrip.setAttribute('role', 'tablist');
+    const tabButtons: Partial<Record<SettingsCategory, HTMLButtonElement>> = {};
+    for (const { id, label } of CATEGORY_TABS) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pmd-settings-tab';
+      btn.setAttribute('role', 'tab');
+      btn.textContent = label;
+      btn.addEventListener('click', () => this.setActiveCategory(id));
+      tabStrip.appendChild(btn);
+      tabButtons[id] = btn;
     }
-    if (SETTING_METADATA.length === 0) {
-      const empty = document.createElement('p');
-      empty.className = 'pmd-settings-empty';
-      empty.textContent = 'No settings to configure yet.';
-      list.appendChild(empty);
+    this.dialog.appendChild(tabStrip);
+
+    // Panels — one per category. Only the active panel is visible
+    // (set via `hidden`); we build all of them up-front so the
+    // refreshDependents pass can find rows under inactive tabs too.
+    this.dependentRows.clear();
+    const panels: Partial<Record<SettingsCategory, HTMLDivElement>> = {};
+    for (const { id } of CATEGORY_TABS) {
+      const panel = document.createElement('div');
+      panel.className = 'pmd-settings-list pmd-settings-panel';
+      panel.setAttribute('role', 'tabpanel');
+      const entries = SETTING_METADATA.filter((m) => m.category === id);
+      for (const meta of entries) {
+        const row = this.renderEntry(meta);
+        if (meta.dependsOn) {
+          const bucket = this.dependentRows.get(meta.dependsOn) ?? [];
+          bucket.push(row);
+          this.dependentRows.set(meta.dependsOn, bucket);
+        }
+        panel.appendChild(row);
+      }
+      if (entries.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'pmd-settings-empty';
+        empty.textContent = 'No settings in this section yet.';
+        panel.appendChild(empty);
+      }
+      this.dialog.appendChild(panel);
+      panels[id] = panel;
     }
-    this.dialog.appendChild(list);
+
+    // Wire tab selection logic.
+    const applyActive = (): void => {
+      for (const { id } of CATEGORY_TABS) {
+        const isActive = id === this.activeCategory;
+        const btn = tabButtons[id];
+        const panel = panels[id];
+        if (btn) {
+          btn.classList.toggle('pmd-settings-tab-active', isActive);
+          btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+          btn.tabIndex = isActive ? 0 : -1;
+        }
+        if (panel) panel.hidden = !isActive;
+      }
+    };
+    this.setActiveCategory = (id: SettingsCategory) => {
+      this.activeCategory = id;
+      applyActive();
+    };
+    applyActive();
   }
 
-  /** Toggle the `pmd-settings-row-disabled` class on every AI-only
-   *  row whenever `aiFeaturesEnabled` changes. Also disables every
-   *  input / button inside those rows so the controls don't fire
-   *  events while the row reads as "off". */
-  private refreshAiDependents(): void {
-    const enabled = settings.get('aiFeaturesEnabled');
-    for (const row of this.aiDependentRows) {
-      row.classList.toggle('pmd-settings-row-disabled', !enabled);
-      const controls = row.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLTextAreaElement | HTMLSelectElement>(
-        'input, button, textarea, select',
-      );
-      for (const c of controls) c.disabled = !enabled;
+  /** Re-binding handle so tab buttons can change the active panel
+   *  without re-rendering the whole dialog. Reassigned each
+   *  `render()` to point at the just-built tabButtons / panels. */
+  private setActiveCategory: (id: SettingsCategory) => void = () => {};
+
+  /** Toggle the `pmd-settings-row-disabled` class on every row that
+   *  has `dependsOn` set, whenever the parent setting changes. Also
+   *  disables every input / button inside those rows so the controls
+   *  don't fire events while the row reads as "off". */
+  private refreshDependents(): void {
+    for (const [parentKey, rows] of this.dependentRows) {
+      const enabled = Boolean(settings.get(parentKey));
+      for (const row of rows) {
+        row.classList.toggle('pmd-settings-row-disabled', !enabled);
+        const controls = row.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLTextAreaElement | HTMLSelectElement>(
+          'input, button, textarea, select',
+        );
+        for (const c of controls) c.disabled = !enabled;
+      }
     }
   }
 
