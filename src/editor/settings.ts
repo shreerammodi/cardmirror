@@ -120,6 +120,13 @@ export interface Settings {
   navMaxLevel: number;
   /** Whether to show the cite preview on hover in the nav pane. */
   showCitePreview: boolean;
+  /** Browser-level spellcheck on the editor surface. Off by default
+   *  because on large debate docs the dictionary tokenization +
+   *  underline overlay is a visible per-keystroke cost; debate
+   *  evidence (technical jargon, author names) also produces mostly
+   *  false-positive squiggles. Users who prefer the safety net can
+   *  flip it on. */
+  editorSpellcheck: boolean;
   /** Whether read mode is currently active (dims non-read-aloud content,
    *  blocks editing). Persisted across sessions because some users may
    *  want it to be the default state. */
@@ -443,6 +450,7 @@ const DEFAULTS: Settings = {
   navWidth: 300,
   navMaxLevel: 3,
   showCitePreview: true,
+  editorSpellcheck: false,
   readMode: false,
   hideEmphasisBordersInReadMode: false,
   zoomPct: 100,
@@ -562,6 +570,13 @@ export const SETTING_METADATA: SettingMeta[] = [
     label: 'Cite preview on hover',
     description:
       'Show the cite-formatted text from a card on the right side of its nav-pane entry when you hover.',
+    kind: 'toggle',
+  },
+  {
+    key: 'editorSpellcheck',
+    label: 'Editor spellcheck',
+    description:
+      "Show browser spell-check red underlines under typed text. Off by default — on large docs the dictionary lookups + underline overlay add visible per-keystroke cost, and debate evidence (technical jargon, author names, citations) generates a lot of false-positive squiggles.",
     kind: 'toggle',
   },
   {
@@ -819,6 +834,7 @@ function sanitize(s: Settings): Settings {
     navWidth: clamp(s.navWidth, 150, 800),
     navMaxLevel: clamp(Math.round(s.navMaxLevel), 1, 4),
     showCitePreview: !!s.showCitePreview,
+    editorSpellcheck: !!s.editorSpellcheck,
     readMode: !!s.readMode,
     hideEmphasisBordersInReadMode: !!s.hideEmphasisBordersInReadMode,
     zoomPct: clamp(Math.round(s.zoomPct / 10) * 10, 50, 200),

@@ -427,6 +427,16 @@ class MultiPaneShell {
       }
       // Pane word counts depend on reader settings.
       for (const id of SLOT_IDS) this.slots[id].refreshWordCount();
+      // Editor spellcheck toggle — apply to every record's view in
+      // every slot's stack, including hidden stack members (their
+      // editorEl is detached but the attribute still sticks for
+      // when they swap into view).
+      const spellcheck = s.editorSpellcheck ? 'true' : 'false';
+      for (const id of SLOT_IDS) {
+        for (const rec of this.slots[id].stack) {
+          rec.view.dom.setAttribute('spellcheck', spellcheck);
+        }
+      }
     });
 
     // Drag-hover focus + post-drop collapse:
@@ -702,10 +712,11 @@ function buildDocRecord(filename: string, doc: PMNode, slot: Slot): DocRecord {
   // changes.
   const view: EditorView = new EditorView(editorEl, {
     state,
-    // Match the single-doc shell — browser spellcheck on a large
-    // contenteditable carries continuous layout/paint cost. See
-    // the matching comment in `editor/index.ts`.
-    attributes: { spellcheck: 'false' },
+    // Browser spellcheck — driven by the `editorSpellcheck` setting,
+    // off by default. The MultiPaneShell's settings subscriber pushes
+    // runtime toggles onto every record's `view.dom` so the user
+    // can flip it across all open panes without a reload.
+    attributes: { spellcheck: settings.get('editorSpellcheck') ? 'true' : 'false' },
     dispatchTransaction(tx) {
       const next = view.state.apply(tx);
       view.updateState(next);

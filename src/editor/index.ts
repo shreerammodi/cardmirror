@@ -836,6 +836,13 @@ settings.subscribe((s) => {
       );
     }
   }
+  // Editor spellcheck toggle — push the new value directly onto
+  // `view.dom`. PM's `attributes` prop only re-applies on state
+  // updates, but settings changes shouldn't require a state update
+  // to take effect.
+  if (view) {
+    view.dom.setAttribute('spellcheck', s.editorSpellcheck ? 'true' : 'false');
+  }
 });
 applyReadMode(settings.get('readMode'));
 applyZoom(settings.get('zoomPct'));
@@ -1334,14 +1341,13 @@ function mountView(doc: PMNode, threads: Thread[] = []): void {
   view = new EditorView(editorEl, {
     state,
     editable: () => !settings.get('readMode'),
-    // Browser spellcheck on a 31k-element contenteditable is a
-    // visible per-keystroke cost: the engine tokenizes every
-    // changed text node, queries the dictionary, and maintains the
-    // red-squiggly underline overlay on top of normal layout/paint.
-    // Disable globally; debate evidence is often technical /
-    // jargon-heavy where spellcheck would mostly be false-positive
-    // noise anyway.
-    attributes: { spellcheck: 'false' },
+    // Browser spellcheck on a large contenteditable is a visible
+    // per-keystroke cost (dictionary tokenization + underline
+    // overlay). Off by default via the `editorSpellcheck` setting;
+    // a settings subscriber below pushes runtime toggles into
+    // `view.dom.setAttribute` so the user can flip it without a
+    // reload.
+    attributes: { spellcheck: settings.get('editorSpellcheck') ? 'true' : 'false' },
     dispatchTransaction(tx) {
       if (!view) return;
       const prevState = view.state;

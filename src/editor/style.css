@@ -868,26 +868,22 @@ code {
 .pmd-analytic-unit {
   border-left: 2px solid transparent;
   padding-left: 0.5rem;
-  /* `contain: layout style` tells the browser that layout changes
-     inside this element (e.g. user typing inserts a character into
-     a card_body) never propagate up to ancestors. Without this,
-     every keystroke makes the browser walk the entire 31k-element
-     doc tree to recompute layout. With it, layout is scoped to the
-     edited container — measured 65% layout cost per keystroke is
-     where the recent profiling pointed.
+  /* `contain: layout style` tells the browser that layout (and
+     style invalidation) inside this element never propagates up
+     to ancestors. Without this, every keystroke makes the browser
+     walk the entire 31k-element doc tree to recompute layout;
+     profiling on a long doc showed Layout at ~65% of per-keystroke
+     self time. With it, layout is scoped to the edited container.
 
-     `content-visibility: auto` is the stronger move: off-screen
-     cards are skipped from layout AND paint entirely until they
-     scroll near the viewport. For a doc with hundreds of cards
-     and the user focused on one, that's a huge reduction. The
-     `contain-intrinsic-size` is the placeholder height the browser
-     uses while a card is skipped; `auto 200px` means "use the last
-     measured value once we've seen the card; 200px as the initial
-     guess before that." `200px` is a reasonable mid-range for our
-     card sizes. */
+     `content-visibility: auto` was added alongside this for an
+     extra win (skip off-screen cards from layout AND paint) but
+     pulled because its implicit size containment uses
+     `contain-intrinsic-size` as the rendered size for both axes
+     when skipped — and finding a width value that works cleanly
+     across single-doc / multi-pane compact / wide-scroll proved
+     fiddly. The layout-only containment captures the bulk of the
+     win without that complication. */
   contain: layout style;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 200px;
 }
 
 .pmd-card:hover,
@@ -897,15 +893,11 @@ code {
 
 /* Heading containers (pocket / hat / block) — same `contain: layout
    style` as cards so their interior changes don't reflow the whole
-   doc. They're typically short headings so `content-visibility: auto`
-   buys less per element here than for cards, but with hundreds of
-   them in a long doc the savings still add up. */
+   doc. */
 .pmd-pocket,
 .pmd-hat,
 .pmd-block {
   contain: layout style;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 40px;
 }
 
 /* Undertag paragraph. Color is settings-driven (--pmd-color-undertag);
