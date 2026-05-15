@@ -265,20 +265,6 @@ formatting `bold`, `italic`, `strikethrough`, `superscript`,
 See [`src/schema/`](./src/schema/) for full specs and
 [`ARCHITECTURE.md §4`](./ARCHITECTURE.md) for design rationale.
 
-## Performance baseline
-
-(One-shot import + export on the example docs, taken from
-`benchmarks/round-trip.bench.ts`. Single-threaded Node 24 LTS, x86_64 Linux.)
-
-| File                                | Import   | Export   | Round-trip |
-|-------------------------------------|---------:|---------:|-----------:|
-| CP - Bifurcation PIC vs Fed Workers |    76 ms |    62 ms |     130 ms |
-| DA - Reconciliation                 |   397 ms |   262 ms |     642 ms |
-| Aff - Merp!                         |   528 ms |   304 ms |     826 ms |
-
-Well within tolerable bounds for tournament-day use; further optimization
-deferred until specific operations require it.
-
 ## License
 
 (TBD — currently private.)

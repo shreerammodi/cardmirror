@@ -28,3 +28,8 @@ build/
 # Vite build output
 dist/
 .vite/
+
+# Reference docs (Verbatim upstream, example .docx files, Debate.dotm,
+# custom macro exports). Kept locally for development reference but
+# not part of the repo.
+reference-docs/
