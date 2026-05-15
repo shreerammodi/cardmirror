@@ -203,24 +203,32 @@ class Slot {
     // a fixed pixel fallback that'd be wrong for narrow multi-pane
     // slots). ResizeObserver covers every resize: layout-mode
     // toggle, active-count change, window resize, nav drag.
-    this.bodyResizeObserver = new ResizeObserver(() => {
-      this.scheduleCardIntrinsicWidthSync();
+    this.bodyResizeObserver = new ResizeObserver((entries) => {
+      this.scheduleCardIntrinsicWidthSync(entries[0]);
     });
     this.bodyResizeObserver.observe(this.bodyEl);
   }
 
   /** Coalesce a burst of observer fires into one write per animation
-   *  frame, and bail when the width is unchanged. Without both
-   *  guards the observer feedback-loops in multi-doc mode: setting
-   *  the variable triggers a re-layout that toggles scrollbar
-   *  presence, which changes clientWidth, which re-fires the
-   *  observer, with each iteration drifting wider until it hits a
-   *  ceiling. */
-  private scheduleCardIntrinsicWidthSync(): void {
+   *  frame, and bail when the width is unchanged. Reads the body's
+   *  border-box width from the entry (or falls back to offsetWidth)
+   *  rather than clientWidth — clientWidth shrinks by the scrollbar
+   *  gutter when vertical scrolling kicks in, and that change was
+   *  triggering the feedback loop: variable write → relayout →
+   *  scrollbar toggles → clientWidth shifts → observer re-fires.
+   *  Border-box size is scrollbar-independent, so the cache check
+   *  actually stabilizes. */
+  private scheduleCardIntrinsicWidthSync(entry?: ResizeObserverEntry): void {
     if (this.intrinsicWidthRaf !== null) return;
     this.intrinsicWidthRaf = requestAnimationFrame(() => {
       this.intrinsicWidthRaf = null;
-      const width = Math.round(this.bodyEl.clientWidth);
+      let width = 0;
+      const box = entry?.borderBoxSize?.[0];
+      if (box) {
+        width = Math.round(box.inlineSize);
+      } else {
+        width = Math.round(this.bodyEl.offsetWidth);
+      }
       if (width <= 0) return;
       if (width === this.lastIntrinsicWidth) return;
       this.lastIntrinsicWidth = width;

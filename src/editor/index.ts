@@ -1430,18 +1430,29 @@ let lastCardIntrinsicWidth = -1;
 let cardIntrinsicWidthRaf: number | null = null;
 function setupCardIntrinsicWidthObserver(): void {
   if (cardIntrinsicWidthObserver) return;
-  const schedule = (): void => {
+  const schedule = (entry?: ResizeObserverEntry): void => {
     if (cardIntrinsicWidthRaf !== null) return;
     cardIntrinsicWidthRaf = requestAnimationFrame(() => {
       cardIntrinsicWidthRaf = null;
-      const width = Math.round(editorEl.clientWidth);
+      // Use border-box size (or offsetWidth) rather than clientWidth.
+      // clientWidth shifts when a vertical scrollbar appears /
+      // disappears inside the editor — and the variable-write
+      // triggers exactly that kind of re-layout, which would
+      // feedback-loop the observer without this guard.
+      let width = 0;
+      const box = entry?.borderBoxSize?.[0];
+      if (box) {
+        width = Math.round(box.inlineSize);
+      } else {
+        width = Math.round(editorEl.offsetWidth);
+      }
       if (width <= 0) return;
       if (width === lastCardIntrinsicWidth) return;
       lastCardIntrinsicWidth = width;
       editorEl.style.setProperty('--pmd-card-intrinsic-width', `${width}px`);
     });
   };
-  cardIntrinsicWidthObserver = new ResizeObserver(schedule);
+  cardIntrinsicWidthObserver = new ResizeObserver((entries) => schedule(entries[0]));
   cardIntrinsicWidthObserver.observe(editorEl);
   schedule();
 }
