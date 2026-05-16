@@ -83,11 +83,11 @@ launch CardMirror like any other app.
 Two options for any distro:
 
 - **AppImage** (works on every modern distro): download
-  `CardMirror-x.x.x.AppImage`. In a terminal, in the download
+  `cardmirror-x.x.x.AppImage`. In a terminal, in the download
   folder, run:
   ```sh
-  chmod +x CardMirror-x.x.x.AppImage
-  ./CardMirror-x.x.x.AppImage
+  chmod +x cardmirror-x.x.x.AppImage
+  ./cardmirror-x.x.x.AppImage
   ```
   Or double-click after `chmod +x` if your file manager supports
   launching AppImages.

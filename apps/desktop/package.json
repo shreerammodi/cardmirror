@@ -51,10 +51,15 @@
     },
     "linux": {
       "category": "Office",
+      "maintainer": "Anthony Trufanov <ant981228@gmail.com>",
       "target": [
         { "target": "AppImage", "arch": ["x64"] },
-        { "target": "pacman", "arch": ["x64"] }
-      ]
+        {
+          "target": "pacman",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "cardmirror-${version}.${ext}"
     },
     "publish": {
       "provider": "github",

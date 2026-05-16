@@ -30,17 +30,17 @@ depends=('zlib' 'gtk3' 'nss' 'libxss' 'libxcrypt-compat')
 provides=('cardmirror')
 conflicts=('cardmirror' 'cardmirror-git')
 options=('!strip')
-source=("https://github.com/ant981228/cardmirror/releases/download/v${_origver}/CardMirror-${_origver}.AppImage")
+source=("https://github.com/ant981228/cardmirror/releases/download/v${_origver}/cardmirror-${_origver}.AppImage")
 # Alpha policy: SKIP until release sha256s stabilize. Once the
 # binary publishing cadence is steady, swap in real hashes here so
 # pacman / yay verifies downloads. (Run `updpkgsums` after editing
 # `_origver` to refresh.)
 sha256sums=('SKIP')
-noextract=("CardMirror-${_origver}.AppImage")
+noextract=("cardmirror-${_origver}.AppImage")
 
 package() {
   cd "$srcdir"
-  local appimage="CardMirror-${_origver}.AppImage"
+  local appimage="cardmirror-${_origver}.AppImage"
   chmod +x "$appimage"
   "./$appimage" --appimage-extract > /dev/null
 
