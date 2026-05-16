@@ -13,8 +13,9 @@ without needing Word installed at all.
 CardMirror is a native editor — no Word, no macros, no add-in
 surface. That keeps it fast on the multi-megabyte evidence files
 Verbatim users live in, and it makes the same editor first-class
-on Windows, macOS, and Linux (Verbatim's macOS support is
-limited; there's no official Linux option). The deeper
+on Windows, macOS, and Linux (Word for macOS is meaningfully
+rougher than Word for Windows, and there's no Word for Linux at
+all — sidestepping Word sidesteps both gaps). The deeper
 architectural payoff is search: because every doc is a structured
 tree of cards, cites, and headings rather than a flat stream of
 styled paragraphs, a future release will let you search your
