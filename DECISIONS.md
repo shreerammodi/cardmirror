@@ -3,6 +3,84 @@
 Append-only log of implementation decisions and their rationale. Each
 entry has a date, a one-line summary, and the reasoning.
 
+## 2026-05-15: NewSpeech spawn-with-mark + speech-doc format setting
+
+Closes the multi-window NewSpeech gap. The flow:
+
+  1. User clicks New Speech Document (or fires its key) in
+     single-doc multi-window mode.
+  2. Modal prompt asks for a round name (Verbatim parity: "1NC",
+     "2AC vs Hogwarts"). Routes through the new
+     `src/editor/text-prompt.ts` helper because Electron's
+     BrowserWindows disable `window.prompt()` outright — it
+     throws "prompt() is not supported."
+  3. Renderer builds a `Pocket + paragraph` starter doc titled
+     to match, serializes via `serializeNative` or `toDocx`
+     depending on the `defaultSpeechDocFormat` setting.
+  4. If `defaultSpeechDocFolder` is set, saves the doc bytes to
+     `{folder}/{filename}` via the existing `host.saveExisting`
+     IPC so the new window opens with a real handle. Otherwise
+     handle is `null` — user picks a save location later.
+  5. `host.spawnWindow({ ..., markAsSpeech: true })` opens the
+     new window. `SpawnWindowPayload.markAsSpeech` is the new
+     flag; `mountFromSpawnPayload` calls
+     `resolver.setSpeechByUid(currentDocUid)` after the view is
+     registered, so main broadcasts the new speech-doc
+     designation to every window and the per-window banner +
+     ribbon button light up correctly.
+
+`window.prompt` is replaced everywhere it's reachable from
+Electron — `text-prompt.ts` is the shared modal. Esc cancels,
+Enter submits, click-outside cancels.
+
+### `defaultSpeechDocFormat` setting
+
+New General-tab radio: `.docx` (default, Verbatim parity) vs
+`.cmir` (autosave-eligible). Description tells the user why
+.cmir matters — autosave only fires for .cmir because `toDocx`
+is too expensive to run on a debounce.
+
+Both NewSpeech entry points (single-doc + multi-pane) consult
+the setting: extension on the filename, serializer choice on
+single-doc's spawn bytes, DocRecord.format on multi-pane.
+
+## 2026-05-15: Per-doc autosave + tri-state ribbon button
+
+Autosave joins read mode as a per-doc workflow toggle:
+
+  - **Multi-pane**: `DocRecord.autosaveEnabled` + per-record
+    `autosaveTimer`. The shell's `toggleFocusedAutosave()` flips
+    the focused pane only; other panes are untouched. Per-record
+    `scheduleAutosaveForRecord` replaces the multi-pane call to
+    the single-doc global `notifyEditForAutosave`, so edits in
+    pane A flush to A's file even when focus has since moved to
+    B. Closing a record clears its pending timer.
+  - **Single-doc multi-window**: `autosaveEnabled` joins
+    `readMode` in `TRANSIENT_SETTING_KEYS`. Never persists,
+    never cross-window-syncs, resets to off on reload.
+
+Plumbing mirrors `readMode`'s pattern: new
+`setAutosaveStateResolver(fn)` (multi-pane installs a focused-
+DocRecord resolver), new `toggleAutosave` hook in
+`enableMultiDocMode` opts.
+
+### Tri-state button coloring
+
+The autosave ribbon button now distinguishes three visible
+states via a `data-autosave-effective` attribute:
+
+  - **Off** (`aria-pressed="false"`): resting button — no rule.
+  - **On + effective** (`.cmir` + handle present): blue. The
+    autosave will actually fire on the next debounced edit.
+  - **On + inert** (no handle yet, or doc is `.docx`): amber
+    (`#b45309` on `rgba(234, 179, 8, 0.16)`). Distinct from
+    both blue and the green success-flash overlay.
+
+`refreshAutosaveBtn` writes the data attribute alongside the
+`aria-pressed`; hooks are wired to fire on focus change
+(`setActiveView`), save completion (`commitSaveResult`),
+toggle click, and resolver swaps.
+
 ## 2026-05-15: F2 on Electron is a one-keystroke plain paste
 
 Restored Verbatim-parity F2 behavior on Electron: pressing F2

@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     handle: string | null;
     format: 'cmir' | 'docx' | null;
     uid: string | null;
+    markAsSpeech?: boolean;
   } | null) => ipcRenderer.invoke('host:spawn-window', payload),
 
   /** Called once at renderer boot to retrieve any initial-doc

@@ -28,6 +28,7 @@ import {
   sendToSpeech as runSendToSpeech,
   installIncomingSpeechSliceHandler,
 } from './speech-doc-send.js';
+import { promptForText } from './text-prompt.js';
 import { openDocMenu } from './doc-menu-ui.js';
 import { createReference } from './create-reference.js';
 import { showToast } from './toast.js';
@@ -113,6 +114,12 @@ const speechSendEndBtn = document.getElementById('speech-send-end-btn') as HTMLB
  *  bottom-of-file declarations execute — a TDZ access otherwise. */
 let readModeStateForActive: () => boolean = () => settings.get('readMode');
 
+/** Resolver for "is autosave on for the doc the ribbon should
+ *  reflect?". Single-doc reads the (transient) `settings.autosaveEnabled`
+ *  value; multi-doc swaps in a resolver that asks the focused
+ *  pane's per-DocRecord state via `setAutosaveStateResolver`. */
+let autosaveStateForActive: () => boolean = () => settings.get('autosaveEnabled');
+
 // Install the Electron-aware speech-doc resolver before any
 // subscribers attach. On the browser this is a no-op; on Electron
 // it swaps in the main-process-mirroring resolver so doc
@@ -159,15 +166,121 @@ function runSingleDocSendToSpeech(sourceView: EditorView, atEnd: boolean): void 
   runSendToSpeech(sourceView, atEnd);
 }
 
-/** Single-doc new-speech-document. In multi-window mode (Electron),
- *  the long-term plan is to spawn a new window pre-loaded with a
- *  fresh speech doc that auto-registers as the speech designation.
- *  Until that flow lands, surface a placeholder that points users at
- *  the manual mark-as-speech path. */
+/** Single-doc new-speech-document. Verbatim's `NewSpeech` prompts
+ *  for a round name ("1NC", "2AC vs Hogwarts") and builds a fresh
+ *  speech doc titled accordingly. In multi-window mode we spawn a
+ *  new window pre-loaded with that doc and ask the spawned window
+ *  to self-mark as the speech doc once it mounts. If the
+ *  `defaultSpeechDocFolder` setting is set, we save the doc into
+ *  that folder before spawning so the new window opens with a
+ *  real handle (subsequent ⌘S writes silently in place); when
+ *  unset, the new window opens unsaved and the user picks a save
+ *  location later via Save As. */
 async function runNewSpeechDocumentSingleDoc(): Promise<void> {
-  window.alert(
-    'New Speech Document is not yet wired for multi-window mode. For now: open or create a new window, then use "Mark active doc as speech" on it.',
-  );
+  const host = getHost();
+  if (!host.canSpawnWindow) {
+    window.alert(
+      'New Speech Document requires the desktop edition (multi-window).',
+    );
+    return;
+  }
+  // Electron disables window.prompt(); use an in-renderer modal
+  // instead. Trims the result for us and returns null on cancel.
+  const roundName = await promptForText({
+    message: 'Which speech? (e.g. 1NC, 2AC Round 3 vs Hogwarts)',
+    placeholder: '1NC',
+    okLabel: 'Create',
+  });
+  if (roundName == null) return;
+  if (!roundName) return;
+  const trimmed = roundName;
+
+  const format = settings.get('defaultSpeechDocFormat');
+  const filename = formatSpeechFilename(trimmed, format);
+  // Pocket heading is the filename minus its extension — matches
+  // multi-pane's `createNewSpeechDocument` shape.
+  const pocketTitle = filename.replace(/\.(cmir|docx)$/i, '');
+  const docNode = makeSpeechBlankDoc(pocketTitle);
+
+  let docBytes: Uint8Array;
+  try {
+    docBytes =
+      format === 'cmir' ? serializeNative(docNode) : await toDocx(docNode);
+  } catch (err) {
+    console.error('Speech-doc serialization failed:', err);
+    alert(
+      `Couldn't create speech document: ${err instanceof Error ? err.message : err}`,
+    );
+    return;
+  }
+
+  // Optional auto-save into the user's configured speech-doc
+  // folder. Skipped silently when the setting is empty (matches
+  // the user's intent that no folder = no automatic save).
+  let handle: string | null = null;
+  const defaultFolder = settings.get('defaultSpeechDocFolder').trim();
+  if (defaultFolder) {
+    const targetPath = joinSpeechDocPath(defaultFolder, filename);
+    try {
+      await host.saveExisting(targetPath, docBytes);
+      handle = targetPath;
+    } catch (err) {
+      console.warn('Auto-save of new speech doc to default folder failed:', err);
+      // Continue without a handle; the user can Save As later.
+    }
+  }
+
+  const uid = newSessionDocUid();
+  try {
+    await host.spawnWindow({
+      filename,
+      bytes: docBytes,
+      handle,
+      format,
+      uid,
+      markAsSpeech: true,
+    });
+  } catch (err) {
+    console.error('Failed to spawn new speech window:', err);
+    alert(
+      `Failed to open new speech window: ${err instanceof Error ? err.message : err}`,
+    );
+  }
+}
+
+/** Format a Verbatim-style speech filename: "Speech <round> M-D
+ *  H-MMam/pm.<ext>". Extension comes from the configured
+ *  `defaultSpeechDocFormat` setting — `.docx` (Verbatim parity) or
+ *  `.cmir` (autosave-eligible). */
+function formatSpeechFilename(round: string, format: 'cmir' | 'docx'): string {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+  let hour = now.getHours();
+  const minute = now.getMinutes();
+  const ampm = hour < 12 ? 'AM' : 'PM';
+  if (hour === 0) hour = 12;
+  else if (hour > 12) hour -= 12;
+  const m = String(minute).padStart(2, '0');
+  return `Speech ${round} ${month}-${day} ${hour}-${m}${ampm}.${format}`;
+}
+
+/** Speech-doc starter: a Pocket heading carrying the user-supplied
+ *  title plus a trailing empty paragraph for the cursor to land in.
+ *  Same shape as multi-pane's `makeSpeechBlankDoc`. */
+function makeSpeechBlankDoc(title: string): PMNode {
+  return schema.nodes['doc']!.createChecked(null, [
+    schema.nodes['pocket']!.create({ id: newHeadingId() }, schema.text(title)),
+    schema.nodes['paragraph']!.create(null),
+  ]);
+}
+
+/** Concatenate a folder path with a filename, handling trailing
+ *  separators on the folder. Forward slash works on every platform
+ *  Electron supports (Windows accepts both `/` and `\` in fs paths). */
+function joinSpeechDocPath(folder: string, filename: string): string {
+  const trimmedFolder = folder.replace(/[/\\]+$/, '');
+  return `${trimmedFolder}/${filename}`;
 }
 // Subscribe to the speech-doc registry so the button stays in sync
 // when the designation changes outside of a focus event (e.g., the
@@ -216,6 +329,7 @@ let multiDocOnNewDoc: (() => Promise<void> | void) | null = null;
 /** When the multi-pane shell is active, this delegates the
  *  read-mode ribbon button to the shell's per-pane toggle. */
 let multiDocToggleReadMode: (() => void) | null = null;
+let multiDocToggleAutosave: (() => void) | null = null;
 /** Speech-doc command hooks. Installed by the multi-pane shell; in
  *  single-doc mode these stay null and the commands no-op (no
  *  second doc to send TO, and a single doc doesn't gain anything
@@ -270,6 +384,7 @@ export function enableMultiDocMode(opts: {
   onFileOpen: (opened: OpenedFile) => Promise<void> | void;
   onNewDoc?: () => Promise<void> | void;
   toggleReadMode?: () => void;
+  toggleAutosave?: () => void;
   newSpeechDocument?: () => void;
   markActiveAsSpeech?: () => void;
   sendToSpeechAtCursor?: () => void;
@@ -293,6 +408,7 @@ export function enableMultiDocMode(opts: {
   multiDocOnFileOpen = opts.onFileOpen;
   multiDocOnNewDoc = opts.onNewDoc ?? null;
   multiDocToggleReadMode = opts.toggleReadMode ?? null;
+  multiDocToggleAutosave = opts.toggleAutosave ?? null;
   multiDocNewSpeechDocument = opts.newSpeechDocument ?? null;
   multiDocMarkActiveAsSpeech = opts.markActiveAsSpeech ?? null;
   multiDocSendToSpeechAtCursor = opts.sendToSpeechAtCursor ?? null;
@@ -336,6 +452,7 @@ export function setActiveView(v: EditorView | null): void {
   refreshWordCount();
   refreshReadModeBtn();
   refreshSpeechMarkBtn();
+  refreshAutosaveBtn();
   updateWindowTitle();
 }
 
@@ -472,6 +589,10 @@ const ribbonContext: RibbonContext = {
     void runSaveAsFlow();
   },
   toggleAutosave: () => {
+    if (multiDocActive && multiDocToggleAutosave) {
+      multiDocToggleAutosave();
+      return;
+    }
     settings.set('autosaveEnabled', !settings.get('autosaveEnabled'));
   },
   newSpeechDocument: () => {
@@ -1658,6 +1779,16 @@ export function setReadModeStateResolver(resolver: () => boolean): void {
   refreshReadModeBtn();
 }
 
+/**
+ * Replace the resolver used by `refreshAutosaveBtn`. Mirrors
+ * `setReadModeStateResolver` — single-doc reads the (transient)
+ * setting; multi-pane installs a focused-DocRecord resolver so the
+ * autosave toggle reflects per-pane state. */
+export function setAutosaveStateResolver(resolver: () => boolean): void {
+  autosaveStateForActive = resolver;
+  refreshAutosaveBtn();
+}
+
 function refreshReadModeBtn(): void {
   readModeBtn.classList.toggle('pmd-active', readModeStateForActive());
 }
@@ -2333,6 +2464,10 @@ function commitSaveResult(filename: string, handle: unknown | null, format: 'cmi
     currentDocFormat = format;
   }
   updateWindowTitle();
+  // Format/handle may have changed (e.g., Save-As from unsaved →
+  // .cmir-with-handle), which flips the autosave button between
+  // inert and effective states.
+  refreshAutosaveBtn();
 }
 
 /** Sync `document.title` with the active filename so Electron's
@@ -2482,10 +2617,12 @@ function flashSavedGlyph(el: HTMLElement): void {
 }
 
 /** Flash the save button (always) and the autosave button (when
- *  on). Both manual saves and autosaves call this. */
+ *  on). Both manual saves and autosaves call this. Reads via
+ *  `autosaveStateForActive` so multi-pane's per-DocRecord flag is
+ *  consulted in addition to the single-doc transient setting. */
 function flashSaveSuccess(): void {
   flashSavedGlyph(exportBtn);
-  if (autosaveBtn && settings.get('autosaveEnabled')) {
+  if (autosaveBtn && autosaveStateForActive()) {
     flashSavedGlyph(autosaveBtn);
   }
 }
@@ -2617,14 +2754,17 @@ async function runAutosaveAttempt(): Promise<void> {
  *  when autosave is on but inert (docx file, brand-new doc, etc.). */
 function refreshAutosaveBtn(): void {
   if (!autosaveBtn) return;
-  const on = settings.get('autosaveEnabled');
+  const on = autosaveStateForActive();
   autosaveBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
   if (!on) {
     autosaveBtn.title = 'Autosave is off — click to turn on';
+    autosaveBtn.dataset['autosaveEffective'] = 'false';
     return;
   }
   const file = activeFile();
-  if (file.format === 'cmir' && file.handle) {
+  const effective = file.format === 'cmir' && !!file.handle;
+  autosaveBtn.dataset['autosaveEffective'] = effective ? 'true' : 'false';
+  if (effective) {
     autosaveBtn.title = 'Autosave is on — saves to .cmir every few seconds after edits';
   } else if (file.format === 'docx') {
     autosaveBtn.title =
@@ -2639,6 +2779,10 @@ function refreshAutosaveBtn(): void {
 if (autosaveBtn) {
   autosaveBtn.addEventListener('mousedown', (e) => e.preventDefault());
   autosaveBtn.addEventListener('click', () => {
+    if (multiDocActive && multiDocToggleAutosave) {
+      multiDocToggleAutosave();
+      return;
+    }
     settings.set('autosaveEnabled', !settings.get('autosaveEnabled'));
   });
   // Initial state + live updates as the setting / focused doc changes.
@@ -2780,6 +2924,15 @@ async function mountFromSpawnPayload(
     currentDocFormat = format;
     currentDocUid = payload.uid ?? newSessionDocUid();
     syncSingleDocSpeechRegistration();
+    if (payload.markAsSpeech) {
+      // New Speech Document flow: the spawning window built the
+      // doc + flagged us as the destination, so we self-mark now
+      // that our view is registered with the resolver. Main will
+      // broadcast `speech:changed` to every window, including the
+      // originator, so the per-window banner + ribbon button
+      // reflect the new state.
+      getSpeechDocResolver().setSpeechByUid(currentDocUid);
+    }
     markNonPristineStarter();
     updateWindowTitle();
     console.log(`Spawned with ${payload.filename}: ${countSummary(docNode)}`);

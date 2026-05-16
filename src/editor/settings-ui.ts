@@ -312,6 +312,10 @@ class SettingsModal {
       row.appendChild(text);
       row.appendChild(buildMultiDocLayoutModeEditor());
       return row;
+    } else if (meta.kind === 'speechDocFormat') {
+      row.appendChild(text);
+      row.appendChild(buildSpeechDocFormatEditor());
+      return row;
     } else if (meta.kind === 'headingMode') {
       row.appendChild(text);
       row.appendChild(buildHeadingModeEditor());
@@ -957,6 +961,35 @@ function buildFormattingPanelModeEditor(): HTMLElement {
     settings.set('formattingPanelMode', select.value as FormattingPanelMode);
   });
   return select;
+}
+
+function buildSpeechDocFormatEditor(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'pmd-multi-doc-layout-mode-editor';
+  const options: { value: 'docx' | 'cmir'; label: string }[] = [
+    { value: 'docx', label: '.docx — Verbatim-compatible (default)' },
+    { value: 'cmir', label: '.cmir — CardMirror native (enables autosave)' },
+  ];
+  const groupName = `pmd-speech-doc-format-${Math.random().toString(36).slice(2, 8)}`;
+  for (const o of options) {
+    const row = document.createElement('label');
+    row.className = 'pmd-multi-doc-layout-mode-row';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = groupName;
+    input.value = o.value;
+    input.checked = o.value === settings.get('defaultSpeechDocFormat');
+    input.addEventListener('change', () => {
+      if (input.checked) settings.set('defaultSpeechDocFormat', o.value);
+    });
+    row.appendChild(input);
+    const labelText = document.createElement('span');
+    labelText.className = 'pmd-multi-doc-layout-mode-row-label';
+    labelText.textContent = o.label;
+    row.appendChild(labelText);
+    wrap.appendChild(row);
+  }
+  return wrap;
 }
 
 function buildMultiDocLayoutModeEditor(): HTMLElement {

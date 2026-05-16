@@ -201,11 +201,22 @@ body {
   animation: pmd-save-flash-pulse 1400ms ease-out;
 }
 
-/* Autosave toggle, when on. `aria-pressed="true"` selector pairs
-   with the speech-mark button's existing styling pattern. */
-#ribbon #autosave-btn[aria-pressed="true"] {
+/* Autosave toggle: three visible states.
+   - Off (default unpressed): no rule, inherits the resting button look.
+   - On + effective (cmir + saved-once): accent blue, "this IS saving."
+   - On + inert (no handle yet, OR doc is .docx): amber, "armed but
+     not firing." `data-autosave-effective` is maintained by
+     `refreshAutosaveBtn` whenever focus / file format / handle
+     changes, so the color tracks live state.
+   The green flash (`pmd-save-flash`) runs as an animation override
+   on top of either color and reverts cleanly. */
+#ribbon #autosave-btn[aria-pressed="true"][data-autosave-effective="true"] {
   color: var(--pmd-c-accent);
   background: var(--pmd-c-accent-soft, rgba(37, 99, 235, 0.12));
+}
+#ribbon #autosave-btn[aria-pressed="true"][data-autosave-effective="false"] {
+  color: #b45309; /* amber-700 — distinct from both blue and green */
+  background: rgba(234, 179, 8, 0.16); /* amber-500 soft */
 }
 
 /* Speech-doc button stack. Same layout rhythm as the file stack
@@ -4529,6 +4540,47 @@ body.pmd-multi-doc #word-count-display {
   color: var(--pmd-c-text-muted);
 }
 .pmd-route-cancel:hover { color: var(--pmd-c-text); }
+
+/* Text-prompt dialog — wider than the route dialog (needs room for
+   a single-line input), with the input flush above an OK / Cancel
+   row. Re-uses `pmd-route-overlay` + `pmd-route-dialog` for the
+   chrome so it sits in the same modal vocabulary as the New-doc
+   overwrite dialog. */
+.pmd-text-prompt-dialog {
+  min-width: 420px;
+}
+.pmd-text-prompt-input {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.95rem;
+  border: 1px solid var(--pmd-c-border, #999);
+  border-radius: 4px;
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.pmd-text-prompt-input:focus {
+  outline: 2px solid var(--pmd-c-accent, #4a90e2);
+  outline-offset: -1px;
+}
+.pmd-text-prompt-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.pmd-text-prompt-ok {
+  background: var(--pmd-c-accent, #4a90e2);
+  color: #fff;
+  border: 1px solid var(--pmd-c-accent, #4a90e2);
+  border-radius: 4px;
+  padding: 0.3rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pmd-text-prompt-ok:hover { background: var(--pmd-c-accent-hover, #3a7dd0); }
 
 /* ---- Multi-pane: typography parity ----
  *

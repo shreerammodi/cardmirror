@@ -46,6 +46,10 @@ interface InitialDocPayload {
   handle: string | null;
   format: 'cmir' | 'docx' | null;
   uid: string | null;
+  /** New Speech Document flow: spawned window self-marks the new
+   *  doc as the speech doc after mounting. Optional / absent for
+   *  normal Open + New spawns. */
+  markAsSpeech?: boolean;
 }
 const pendingInitialDocs = new Map<number, InitialDocPayload>();
 

@@ -202,4 +202,9 @@ export interface SpawnWindowPayload {
   /** Pre-existing doc uid (when the doc is being moved between
    *  windows or recovered from a journal). Null for fresh docs. */
   uid: string | null;
+  /** When true, the spawned window self-marks the new doc as the
+   *  speech doc after mounting + registering its view. Used by
+   *  the New Speech Document flow so the freshly-spawned window
+   *  becomes the routing target for subsequent ` send-to-speech. */
+  markAsSpeech?: boolean;
 }

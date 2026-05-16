@@ -34,8 +34,10 @@ const STORAGE_KEY = 'pmd-settings';
  *  defaults on reload. Read mode is the canonical case — Verbatim
  *  exits read mode on document close, and we already treat it as
  *  per-pane in multi-doc mode; making it per-window matches that
- *  intent for the multi-window case. */
-const TRANSIENT_SETTING_KEYS = new Set<string>(['readMode']);
+ *  intent for the multi-window case. Autosave joins it for the
+ *  same reason: a workflow toggle the user wants to control per
+ *  doc, not a global preference. */
+const TRANSIENT_SETTING_KEYS = new Set<string>(['readMode', 'autosaveEnabled']);
 
 /** Reader profile for read-time estimates: name + words-per-minute. */
 export interface ReaderConfig {
@@ -154,6 +156,12 @@ export interface Settings {
    *  keep the current behavior of waiting for an explicit Save."
    *  Stored as an absolute path. */
   defaultSpeechDocFolder: string;
+  /** Format that "New Speech Document" creates the doc in. `docx`
+   *  is the Verbatim-compatible default. `cmir` is CardMirror's
+   *  native format — the only format that supports autosave (the
+   *  background save path skips .docx because `toDocx` is too
+   *  expensive to run on a debounce). */
+  defaultSpeechDocFormat: 'cmir' | 'docx';
   /** Whether to show the cite preview on hover in the nav pane. */
   showCitePreview: boolean;
   /** Browser-level spellcheck on the editor surface. Off by default
@@ -502,6 +510,7 @@ const DEFAULTS: Settings = {
   navMaxLevel: 3,
   showOnboardingStarter: true,
   defaultSpeechDocFolder: '',
+  defaultSpeechDocFormat: 'docx',
   showCitePreview: true,
   editorSpellcheck: false,
   // Default OFF — autosave is meaningful only when the user has
@@ -624,6 +633,7 @@ export interface SettingMeta {
     | 'keybindings'
     | 'text'
     | 'folder'
+    | 'speechDocFormat'
     | 'password'
     | 'clod'
     | 'aiCitePrompt'
@@ -683,6 +693,14 @@ export const SETTING_METADATA: SettingMeta[] = [
     kind: 'folder',
     category: 'general',
     electronOnly: true,
+  },
+  {
+    key: 'defaultSpeechDocFormat',
+    label: 'Default format for new speech documents',
+    description:
+      'Docx is the Verbatim-compatible default — best when you\'re sharing speech docs with teammates who use Verbatim. Picking .cmir enables autosave on the new doc (autosave only fires for .cmir files; the Docx serializer is too expensive to run on a debounce).',
+    kind: 'speechDocFormat',
+    category: 'general',
   },
   {
     key: 'showCitePreview',
@@ -1036,6 +1054,8 @@ function sanitize(s: Settings): Settings {
       typeof s.defaultSpeechDocFolder === 'string'
         ? s.defaultSpeechDocFolder
         : '',
+    defaultSpeechDocFormat:
+      s.defaultSpeechDocFormat === 'cmir' ? 'cmir' : 'docx',
     showCitePreview: !!s.showCitePreview,
     editorSpellcheck: !!s.editorSpellcheck,
     autosaveEnabled: !!s.autosaveEnabled,

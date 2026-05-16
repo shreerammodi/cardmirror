@@ -50,6 +50,7 @@ import { countReadAloudWords, formatReadTime, formatNumber } from './word-count.
 import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
 import { getSpeechDocResolver } from './speech-doc-registry.js';
 import { sendToSpeech as runSendToSpeech } from './speech-doc-send.js';
+import { promptForText } from './text-prompt.js';
 import {
   buildEditorPlugins,
   enableMultiDocMode,
@@ -57,7 +58,7 @@ import {
   getActiveView,
   applyReadModeToTarget,
   setReadModeStateResolver,
-  notifyEditForAutosave,
+  setAutosaveStateResolver,
 } from './index.js';
 
 type SlotId = 'slot1' | 'slot2' | 'slot3';
@@ -119,6 +120,51 @@ async function clearJournalForRecord(record: DocRecord): Promise<void> {
   }
 }
 
+/** Debounce delay before an autosave attempt fires after the user
+ *  pauses editing. Matches the single-doc constant in editor/index.ts. */
+const AUTOSAVE_DELAY_MS = 5000;
+
+/** Per-DocRecord autosave attempt. Like the single-doc
+ *  `runAutosaveAttempt`, but bound to `record` instead of the
+ *  module-level focused view — so edits in pane A flush to A's
+ *  file even when focus has since moved to B. Same gates: opt-in
+ *  per-record, .cmir + saved-once only, supportsInPlaceSave host. */
+async function runAutosaveForRecord(record: DocRecord): Promise<void> {
+  if (!record.autosaveEnabled) return;
+  if (record.format !== 'cmir') return;
+  if (typeof record.handle !== 'string' || !record.handle) return;
+  const host = getHost();
+  if (!host.supportsInPlaceSave) return;
+  try {
+    const state = record.view.state;
+    const threads = Array.from(getCommentsState(state).threads.values());
+    const bytes = serializeNative(state.doc, threads.length ? { threads } : undefined);
+    await host.saveExisting(record.handle, bytes);
+    // Successful save → drop the journal. Mirrors the single-doc
+    // post-save journal cleanup so a re-crash doesn't surface a
+    // recovery offer for a doc that's already on disk.
+    try {
+      await host.deleteJournal(record.uid);
+    } catch {
+      /* best-effort */
+    }
+  } catch (err) {
+    console.warn('Autosave (record) failed:', err);
+  }
+}
+
+/** (Re-)arm the per-record autosave debounce. No-op when autosave
+ *  is off for the record. Cheap to fire unconditionally; the
+ *  inner check short-circuits before scheduling. */
+function scheduleAutosaveForRecord(record: DocRecord): void {
+  if (!record.autosaveEnabled) return;
+  if (record.autosaveTimer !== null) window.clearTimeout(record.autosaveTimer);
+  record.autosaveTimer = window.setTimeout(() => {
+    record.autosaveTimer = null;
+    void runAutosaveForRecord(record);
+  }, AUTOSAVE_DELAY_MS);
+}
+
 /**
  * One loaded document inside a slot's stack. Owns a live EditorView
  * (so swapping back to this record in the stack restores selection /
@@ -168,6 +214,13 @@ interface DocRecord {
    *  property of an individual open doc — the ribbon toggle flips
    *  this for the focused pane only, leaving other panes untouched. */
   readMode: boolean;
+  /** Per-doc autosave state. Same per-doc story as `readMode`: the
+   *  ribbon toggle flips this for the focused pane only. When true
+   *  AND the record is saved-as-.cmir, edits debounce into a
+   *  per-record `saveExisting` call after `AUTOSAVE_DELAY_MS`. */
+  autosaveEnabled: boolean;
+  /** Debounce timer for the per-record autosave write. */
+  autosaveTimer: number | null;
 }
 
 class Slot {
@@ -405,6 +458,10 @@ class Slot {
       window.clearTimeout(closing.journalTimer);
       closing.journalTimer = null;
     }
+    if (closing.autosaveTimer !== null) {
+      window.clearTimeout(closing.autosaveTimer);
+      closing.autosaveTimer = null;
+    }
     // Explicit close → drop the journal. Recovery is for crashes,
     // not "I changed my mind." If the user wanted to keep this
     // doc, they should have saved.
@@ -568,6 +625,10 @@ class Slot {
       cancelIdle(rec.heavyUpdateTimer);
       rec.heavyUpdateTimer = null;
     }
+    if (rec.autosaveTimer !== null) {
+      window.clearTimeout(rec.autosaveTimer);
+      rec.autosaveTimer = null;
+    }
     // Clear speech-doc designation if the closing record was it.
     const speechResolver = getSpeechDocResolver();
     if (speechResolver.isSpeechByUid(rec.uid)) {
@@ -688,6 +749,8 @@ class MultiPaneShell {
     // read-mode button show?" — in multi-doc that's the focused
     // pane's per-doc state, not the global setting.
     setReadModeStateResolver(() => this.focusedSlot?.visible?.readMode ?? false);
+    // Same story for the autosave button — per-pane in multi-doc.
+    setAutosaveStateResolver(() => this.focusedSlot?.visible?.autosaveEnabled ?? false);
 
     // Keep the speech chip / button state in sync with the
     // registry — the registry fires on every set/clear, including
@@ -963,6 +1026,21 @@ class MultiPaneShell {
     setActiveView(rec.view);
   }
 
+  /** Flip the autosave state of the focused pane's visible doc.
+   *  Per-pane just like read mode — toggling on one pane leaves
+   *  other open docs untouched. Routes through `setActiveView` so
+   *  the ribbon's autosave button re-reads the resolver. */
+  toggleFocusedAutosave(): void {
+    const rec = this.focusedSlot?.visible;
+    if (!rec) return;
+    rec.autosaveEnabled = !rec.autosaveEnabled;
+    if (!rec.autosaveEnabled && rec.autosaveTimer !== null) {
+      window.clearTimeout(rec.autosaveTimer);
+      rec.autosaveTimer = null;
+    }
+    setActiveView(rec.view);
+  }
+
   /** The filename currently shown in the focused pane's chip, or
    *  null when no pane is focused. Used by Save-As to prefill
    *  with the active doc's name. */
@@ -1217,32 +1295,35 @@ class MultiPaneShell {
    *  fresh doc auto-registers as the speech doc — that's the
    *  whole point of `NewSpeech` (vs the generic `New doc`). */
   async createNewSpeechDocument(): Promise<void> {
-    const roundName = window.prompt(
-      'Which speech? (e.g. 1NC, 2AC Round 3 vs Hogwarts)',
-      '',
-    );
-    if (roundName == null) return;
-    const trimmed = roundName.trim();
-    if (!trimmed) return;
+    // Electron disables window.prompt(); route through the in-
+    // renderer modal so the desktop edition works too.
+    const roundName = await promptForText({
+      message: 'Which speech? (e.g. 1NC, 2AC Round 3 vs Hogwarts)',
+      placeholder: '1NC',
+      okLabel: 'Create',
+    });
+    if (!roundName) return;
+    const trimmed = roundName;
     const target = await this.promptForSlot(`Speech ${trimmed}`);
     if (!target) return;
-    const filename = formatSpeechFilename(trimmed);
-    // Title the Pocket heading with the filename (sans `.docx`) —
+    const format = settings.get('defaultSpeechDocFormat');
+    const filename = formatSpeechFilename(trimmed, format);
+    // Title the Pocket heading with the filename (sans extension) —
     // matches what shows in the slot chip at the top of the pane,
     // so the F4 row reads e.g. "Speech 2AC 5-15 12-30AM" instead
     // of the generic "Untitled" the New-doc path uses. Below the
     // pocket sits a trailing empty paragraph the cursor lands in,
     // ready to receive ` sends.
-    const pocketTitle = filename.replace(/\.docx$/i, '');
+    const pocketTitle = filename.replace(/\.(cmir|docx)$/i, '');
     const doc = makeSpeechBlankDoc(pocketTitle);
     const slot = this.slots[target];
-    // Speech docs default to docx (Verbatim-format) since the
-    // immediate use case is sharing with Verbatim-using teammates
-    // at tournaments. The user can Save As to `.cmir` if they want
-    // to migrate to native.
+    // Format follows the user's `defaultSpeechDocFormat` setting —
+    // `.docx` (Verbatim parity) by default, `.cmir` for autosave-
+    // eligible speech docs. The user can still Save As to flip
+    // format later.
     const record = buildDocRecord(filename, doc, slot, {
       handle: null,
-      format: 'docx',
+      format,
     });
     slot.push(record);
     // `slot.push` focused the new view; place the cursor in the
@@ -1329,10 +1410,10 @@ class MultiPaneShell {
 }
 
 /** Format a Verbatim-style speech filename: "Speech <round> M-D
- *  H:MMam/pm.docx". Mirrors `Paperless.NewSpeech`'s filename
- *  construction so users who lean on filename-based workflows
- *  (USB save, recent-files menu) see a consistent shape. */
-function formatSpeechFilename(round: string): string {
+ *  H-MMam/pm.<ext>". Extension follows the `defaultSpeechDocFormat`
+ *  setting — `.docx` (Verbatim parity) or `.cmir` (autosave-
+ *  eligible). */
+function formatSpeechFilename(round: string, format: 'cmir' | 'docx'): string {
   const now = new Date();
   const month = now.getMonth() + 1;
   const day = now.getDate();
@@ -1342,7 +1423,7 @@ function formatSpeechFilename(round: string): string {
   if (hour === 0) hour = 12;
   else if (hour > 12) hour -= 12;
   const m = String(minute).padStart(2, '0');
-  return `Speech ${round} ${month}-${day} ${hour}-${m}${ampm}.docx`;
+  return `Speech ${round} ${month}-${day} ${hour}-${m}${ampm}.${format}`;
 }
 
 /** Minimal valid doc — one empty paragraph. Used by `createNewDoc`
@@ -1403,10 +1484,13 @@ function buildDocRecord(
     dispatchTransaction(tx) {
       const next = view.state.apply(tx);
       view.updateState(next);
-      // Re-arm the autosave debounce on doc-changing transactions.
-      // No-ops when autosave is off; cheap to fire unconditionally.
+      // Re-arm the autosave + journal debounces on doc-changing
+      // transactions. Autosave is per-record now (each DocRecord
+      // owns its own enabled flag + timer), so we schedule the
+      // record's own save instead of the single-doc global path.
+      // No-ops when autosave is off for this record.
       if (tx.docChanged) {
-        notifyEditForAutosave();
+        scheduleAutosaveForRecord(record);
         scheduleJournalForRecord(record);
       }
       // Debounce both O(doc-size) updates into a single timer:
@@ -1459,6 +1543,11 @@ function buildDocRecord(
     // New docs always start with read mode OFF. The user toggles
     // it per-pane via the ribbon command after opening.
     readMode: false,
+    // Autosave is per-pane in multi-doc — same intent as read mode.
+    // Off by default; the user opts in per-doc via the ribbon
+    // toggle once the doc has been saved as .cmir.
+    autosaveEnabled: false,
+    autosaveTimer: null,
   };
   // Publish (uid, view) so the speech-doc resolver can resolve uids
   // back to live views and (on Electron) so main learns which
@@ -1482,6 +1571,7 @@ export function mountMultiPaneShell(): void {
     onFileOpen: (file) => shell!.onFileOpen(file),
     onNewDoc: () => shell!.createNewDoc(),
     toggleReadMode: () => shell!.toggleFocusedReadMode(),
+    toggleAutosave: () => shell!.toggleFocusedAutosave(),
     newSpeechDocument: () => { void shell!.createNewSpeechDocument(); },
     markActiveAsSpeech: () => shell!.markFocusedAsSpeech(),
     sendToSpeechAtCursor: () => shell!.sendToSpeech(false),
