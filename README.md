@@ -62,8 +62,16 @@ is installed.
    folder. Double-click it to unzip.
 5. You'll get a folder called **`cardmirror-main`**. Move it
    somewhere you can find later — your **Desktop** is fine, or
-   **Documents**. The exact location doesn't matter, only that you
-   can get back to it.
+   **Documents**. So the path to it ends up looking like:
+   - macOS: `/Users/yourname/Desktop/cardmirror-main`
+   - Windows: `C:\Users\yourname\Desktop\cardmirror-main`
+   - Linux: `/home/yourname/Desktop/cardmirror-main`
+6. **Open the `cardmirror-main` folder** so you can see what's
+   inside. You should see files like `README.md`, `package.json`,
+   `index.html`, and folders like `src/` and `apps/`. **This is
+   the folder you'll point your terminal at in step 3** — not the
+   outer Desktop folder, not the `cardmirror-main.zip` archive,
+   but the unzipped `cardmirror-main` folder itself.
 
 ### 3. Open a "terminal" inside that folder
 
@@ -106,8 +114,23 @@ CardMirror folder*, so you don't have to navigate anywhere.
   — then press **Enter**.
 
 You should now have a terminal window open, "inside" the
-CardMirror folder. The next two steps are just two commands you
-type into that window.
+`cardmirror-main` folder.
+
+**Quick sanity check before continuing.** The terminal prompt
+typically shows the current folder. You're in the right place if
+it shows a path ending in `cardmirror-main`, e.g.:
+
+- macOS / Linux: prompt ends with `…/cardmirror-main %` or
+  `…/cardmirror-main $`
+- Windows Command Prompt: prompt shows `…\cardmirror-main>`
+
+If the prompt shows something else (like `…/Desktop>` or just
+your home folder), the terminal isn't inside the right folder
+yet — go back to step 3 and make sure you're opening it from
+*inside* `cardmirror-main`, not from the folder that contains it.
+
+The next two steps are just two commands you type into that
+window.
 
 ### 4. Install CardMirror's pieces
 
