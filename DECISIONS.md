@@ -73,6 +73,28 @@ mode now permits both: `body:not(.pmd-multi-doc):not(.pmd-multi-window)
 #speech-stack { display: none }`. Single-doc on browser still hides
 it (nowhere to send TO).
 
+### Speech-doc banner + dest-side nav refresh
+
+Two follow-up tweaks from first-round testing:
+
+  - `body.pmd-multi-window` mode gets a prominent `#speech-doc-
+    banner` strip (🎤 + "This is the speech document") fixed below
+    the ribbon, shown only on the window that holds the speech-
+    doc designation. The body class `pmd-speech-banner-visible`
+    shifts #app down by the banner's height so the editor doesn't
+    overlap. Suppressed in multi-pane mode (per-pane chips serve
+    the same purpose there).
+  - `SpeechDocResolver.registerView(uid, view, { onSliceLanded })`
+    captures a destination-side callback that fires whenever a
+    slice lands in this view — same call point regardless of
+    whether the slice came from a same-window send or a cross-
+    window IPC. Both multi-pane DocRecords and the single-doc
+    renderer register a callback that runs
+    `navPanel.applyMaxLevelToNewHeadings()`, so newly arrived
+    headings collapse per the doc's `maxLevel` setting. Previously
+    only same-window multi-pane sends got this; cross-window
+    arrivals left every new heading expanded.
+
 ### Known scope gap
 
 `newSpeechDocument` (the F-key that creates a fresh speech doc AND

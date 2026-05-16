@@ -27,6 +27,14 @@ import type { EditorView } from 'prosemirror-view';
 import type { ElectronHost } from './host/electron-host.js';
 import type { Host } from './host/types.js';
 
+export interface RegisterViewOptions {
+  /** Fires on the destination side after a speech-doc slice has
+   *  landed in this view (whether from a same-window send or an
+   *  incoming cross-window slice). Hosts use it to refresh nav-
+   *  panel collapse state for newly arrived headings. */
+  onSliceLanded?: () => void;
+}
+
 export interface SpeechDocResolver {
   /** The uid currently designated as the speech doc, or `null` when
    *  no doc has been marked. May reference a uid that lives in
@@ -37,6 +45,10 @@ export interface SpeechDocResolver {
   /** The view for `uid` if it's mounted in THIS renderer, else
    *  `null`. */
   viewForUid(uid: string): EditorView | null;
+  /** The uid for `view` if it's registered in this renderer, else
+   *  `null`. Used by the send module to look up the uid of a
+   *  destination view so it can fire `notifySliceLanded`. */
+  uidForView(view: EditorView): string | null;
   /** Convenience: the view for the current speech uid IF it lives
    *  in this renderer, else `null`. Returns `null` when no speech
    *  is set OR the speech doc is in another window. */
@@ -48,19 +60,31 @@ export interface SpeechDocResolver {
   setSpeech(view: EditorView | null): void;
   /** Register a doc's (uid, view) so lookups can resolve it.
    *  Idempotent. In Electron mode this ALSO reports the doc to the
-   *  main process. */
-  registerView(uid: string, view: EditorView): void;
+   *  main process. The optional `onSliceLanded` callback is fired
+   *  on the destination side whenever a speech-doc slice lands in
+   *  this view. */
+  registerView(uid: string, view: EditorView, opts?: RegisterViewOptions): void;
   /** Remove a doc's registration. Idempotent. In Electron mode this
    *  ALSO reports the unregistration to the main process. */
   unregisterView(uid: string): void;
+  /** Fire the `onSliceLanded` callback registered for `uid`, if any.
+   *  Called by the send module after `insertSpeechSlice` dispatches —
+   *  same call point regardless of whether the slice came from a
+   *  same-window send or a cross-window IPC. */
+  notifySliceLanded(uid: string): void;
   /** Subscribe to changes. Fires whenever the speech uid changes or
    *  the local view cache changes. */
   subscribe(fn: () => void): () => void;
 }
 
+interface ViewEntry {
+  view: EditorView;
+  onSliceLanded?: () => void;
+}
+
 class DefaultSpeechDocResolver implements SpeechDocResolver {
   protected speechUid: string | null = null;
-  protected views = new Map<string, EditorView>();
+  protected views = new Map<string, ViewEntry>();
   protected viewToUid = new WeakMap<EditorView, string>();
   protected listeners = new Set<() => void>();
 
@@ -73,12 +97,16 @@ class DefaultSpeechDocResolver implements SpeechDocResolver {
   }
 
   viewForUid(uid: string): EditorView | null {
-    return this.views.get(uid) ?? null;
+    return this.views.get(uid)?.view ?? null;
+  }
+
+  uidForView(view: EditorView): string | null {
+    return this.viewToUid.get(view) ?? null;
   }
 
   getSpeechView(): EditorView | null {
     if (!this.speechUid) return null;
-    return this.views.get(this.speechUid) ?? null;
+    return this.views.get(this.speechUid)?.view ?? null;
   }
 
   setSpeechByUid(uid: string | null): void {
@@ -102,9 +130,16 @@ class DefaultSpeechDocResolver implements SpeechDocResolver {
     this.setSpeechByUid(uid);
   }
 
-  registerView(uid: string, view: EditorView): void {
-    if (this.views.get(uid) === view) return;
-    this.views.set(uid, view);
+  registerView(uid: string, view: EditorView, opts?: RegisterViewOptions): void {
+    const existing = this.views.get(uid);
+    if (
+      existing &&
+      existing.view === view &&
+      existing.onSliceLanded === opts?.onSliceLanded
+    ) {
+      return;
+    }
+    this.views.set(uid, { view, onSliceLanded: opts?.onSliceLanded });
     this.viewToUid.set(view, uid);
     this.fire();
   }
@@ -113,6 +148,16 @@ class DefaultSpeechDocResolver implements SpeechDocResolver {
     if (!this.views.has(uid)) return;
     this.views.delete(uid);
     this.fire();
+  }
+
+  notifySliceLanded(uid: string): void {
+    const entry = this.views.get(uid);
+    if (!entry?.onSliceLanded) return;
+    try {
+      entry.onSliceLanded();
+    } catch (err) {
+      console.error('onSliceLanded error', err);
+    }
   }
 
   subscribe(fn: () => void): () => void {
@@ -160,9 +205,9 @@ class ElectronSpeechDocResolver extends DefaultSpeechDocResolver {
     void this.host.speechSet(uid);
   }
 
-  override registerView(uid: string, view: EditorView): void {
+  override registerView(uid: string, view: EditorView, opts?: RegisterViewOptions): void {
     const wasNew = !this.views.has(uid);
-    super.registerView(uid, view);
+    super.registerView(uid, view, opts);
     if (wasNew) void this.host.docRegister(uid);
   }
 

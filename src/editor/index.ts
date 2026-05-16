@@ -122,13 +122,22 @@ installElectronSpeechDocResolver(getHost());
 /** Sync the speech-mark button's aria-pressed with whether the
  *  currently-active view IS the speech doc. Called from
  *  `setActiveView` (focus change) and from the speech-doc
- *  registry subscription installed below. */
+ *  registry subscription installed below. Also drives the
+ *  multi-window speech-doc banner (the prominent "🎤 This is the
+ *  speech document" strip below the ribbon). */
 function refreshSpeechMarkBtn(): void {
-  if (!speechMarkBtn) return;
   const resolver = getSpeechDocResolver();
-  const isPressed =
+  const isSpeechDoc =
     !!view && resolver.getSpeechUid() === currentDocUid;
-  speechMarkBtn.setAttribute('aria-pressed', isPressed ? 'true' : 'false');
+  if (speechMarkBtn) {
+    speechMarkBtn.setAttribute('aria-pressed', isSpeechDoc ? 'true' : 'false');
+  }
+  // Banner is only meaningful when this window IS the speech doc.
+  // Multi-pane mode hides it via CSS (it uses per-pane chips); the
+  // body class toggle here just controls the multi-window case.
+  const banner = document.getElementById('speech-doc-banner');
+  if (banner) banner.hidden = !isSpeechDoc;
+  document.body.classList.toggle('pmd-speech-banner-visible', isSpeechDoc);
 }
 
 /** Single-doc mark-as-speech toggle. Routes through the resolver,
@@ -2139,7 +2148,10 @@ let registeredSingleDocUid: string | null = null;
  *  `currentDocUid = ...` reassignment. Idempotent: registering the
  *  same uid/view pair is a no-op; switching uids unregisters the
  *  old before registering the new. In Electron mode this also
- *  drives the main-process registry via IPC. */
+ *  drives the main-process registry via IPC. The `onSliceLanded`
+ *  hook fires when an incoming speech-doc slice lands in this
+ *  view — refreshes nav-panel collapse state for newly arrived
+ *  headings using the configured `maxLevel`. */
 function syncSingleDocSpeechRegistration(): void {
   if (!view) return;
   const resolver = getSpeechDocResolver();
@@ -2149,7 +2161,9 @@ function syncSingleDocSpeechRegistration(): void {
   ) {
     resolver.unregisterView(registeredSingleDocUid);
   }
-  resolver.registerView(currentDocUid, view);
+  resolver.registerView(currentDocUid, view, {
+    onSliceLanded: () => navPanel.applyMaxLevelToNewHeadings(),
+  });
   registeredSingleDocUid = currentDocUid;
 }
 

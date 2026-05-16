@@ -1300,16 +1300,18 @@ class MultiPaneShell {
       located.slot.showRecord(located.record);
     }
     runSendToSpeech(sourceRec.view, atEnd, () => {
-      // Post-insert: focus the destination slot and clear its
-      // debounced heavy-update timer so nav rebuilds reflect the
-      // freshly-arrived headings on the very next tick.
+      // Post-insert: focus the destination slot and cancel its
+      // debounced heavy-update timer so the new headings show up
+      // in the nav immediately. Nav-collapse-for-new-headings is
+      // handled by the resolver's onSliceLanded hook (registered
+      // in `buildDocRecord`), so it fires the same way for cross-
+      // window receives.
       if (!located) return;
       this.focusSlot(located.slot);
       if (located.record.heavyUpdateTimer !== null) {
         cancelIdle(located.record.heavyUpdateTimer);
         located.record.heavyUpdateTimer = null;
       }
-      located.record.navPanel.applyMaxLevelToNewHeadings();
     });
   }
 
@@ -1460,8 +1462,13 @@ function buildDocRecord(
   };
   // Publish (uid, view) so the speech-doc resolver can resolve uids
   // back to live views and (on Electron) so main learns which
-  // window owns this uid.
-  getSpeechDocResolver().registerView(record.uid, record.view);
+  // window owns this uid. The `onSliceLanded` hook fires on the
+  // destination side whenever a speech-doc slice arrives (same-
+  // window OR cross-window) — refreshes nav-panel collapse state
+  // for newly arrived headings using the local `maxLevel` rule.
+  getSpeechDocResolver().registerView(record.uid, record.view, {
+    onSliceLanded: () => record.navPanel.applyMaxLevelToNewHeadings(),
+  });
   return record;
 }
 

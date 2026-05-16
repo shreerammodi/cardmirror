@@ -163,6 +163,13 @@ export function insertSpeechSlice(
 
     speechView.dispatch(tr.scrollIntoView());
     speechView.focus();
+    // Fire destination-side hook (e.g., nav-panel collapse refresh)
+    // BEFORE the sender's afterInsert so the dest's nav is in its
+    // final state when the sender (in same-window cases) does any
+    // focus-followup work.
+    const resolver = getSpeechDocResolver();
+    const destUid = resolver.uidForView(speechView);
+    if (destUid) resolver.notifySliceLanded(destUid);
     afterInsert?.(speechView);
   }, 0);
 }
