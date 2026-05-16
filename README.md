@@ -1,19 +1,37 @@
 # CardMirror
 
-A ProseMirror-based editor that interoperates with **Advanced Verbatim**
-(the project owner's fork of [Verbatim](https://github.com/ashtarcommunications/verbatim),
-the de facto Microsoft Word add-in for US policy/LD/PF debate).
+CardMirror is a debate-evidence editor for high school and college
+policy, Lincoln–Douglas, and public forum. If you're used to
+**[Verbatim](https://github.com/ashtarcommunications/verbatim)** —
+the Microsoft Word add-in most US debate teams use — CardMirror is
+a from-scratch standalone replacement for the editor side of that
+stack. Same Pocket / Hat / Block / Tag structure, same F-key
+chords (F4 / F5 / F6 / F7 / F8 / F9 / F10 / F11), same
+send-to-speech workflow, same Word-compatible `.docx` round-trip —
+without needing Word installed at all.
+
+It's built for tournament reliability. Crash-recovery is on by
+default; autosave is opt-in per doc; the multi-doc workspace runs
+either as a three-pane single window (for laptops with limited
+screen space) or as one window per doc (for setups with more
+screen real estate or proper window management). Read mode is
+ironclad against accidental input — set it on the speech doc
+before you stand up and the editor refuses to type stray
+characters into your evidence.
+
+You can run CardMirror as a **desktop app** on Windows, macOS, or
+Linux — the recommended path for tournament-day work — or as a
+**web preview** in any modern browser, useful for trying things
+out or working from a Chromebook / school machine where you can't
+install desktop software.
 
 **▶ Try the live web preview: <https://ant981228.github.io/cardmirror/>**
 
-> **🚧 Status: alpha preview.** CardMirror is in active development —
-> expect rough edges, missing features, and occasional breakage. The
-> code you're looking at is the **web preview** of an upcoming
-> desktop-first editor suite. Standalone desktop builds (Windows /
-> macOS / Linux) will be the recommended way to use CardMirror for
-> important work; this web edition exists today so you can try the
-> editor without installing anything. Not yet recommended for actual
-> tournament-day use.
+> **🚧 Status: alpha preview.** CardMirror is in active development.
+> Expect rough edges, missing features, and occasional breakage.
+> Keep a Verbatim copy of anything that matters until the editor
+> proves itself on your workflow — not recommended for actual
+> tournament-day use yet.
 >
 > **Desktop builds are unsigned.** Alpha builds aren't code-signed.
 > On Windows the SmartScreen filter shows a "Windows protected your
@@ -24,179 +42,75 @@ the de facto Microsoft Word add-in for US policy/LD/PF debate).
 > *Open*, then *Open* again in the confirmation dialog. Each is a
 > one-time prompt per machine.
 
-## Where to read
+See [`CHANGELOG.md`](./CHANGELOG.md) for release notes;
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full design;
+[`PROJECT.md`](./PROJECT.md) for project orientation.
 
-- [`PROJECT.md`](./PROJECT.md) — high-level orientation, headline design decisions.
-- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — full design: schema, multi-doc workspace, read mode, send-to-speech, integration boundaries.
-- [`CHANGELOG.md`](./CHANGELOG.md) — user-facing release notes.
+## Install
 
-## Installing and running (first-time guide)
+Desktop builds live on the [Releases page](https://github.com/ant981228/cardmirror/releases).
+Pick the file for your operating system, run the installer, and
+launch CardMirror like any other app.
 
-This guide assumes **no prior experience** with the command line,
-GitHub, or any of the tooling. You'll do four things: install Node.js,
-download the code, open a "terminal" inside the folder, and run two
-commands.
+### macOS
 
-### 1. Install Node.js
+1. Download the `.dmg` for your Mac:
+   - **Apple Silicon (M1 / M2 / M3 / M4)**: `CardMirror-x.x.x-arm64.dmg`.
+   - **Intel**: `CardMirror-x.x.x.dmg` (or `-x64.dmg`).
+2. Open the `.dmg`, drag **CardMirror** to your Applications folder.
+3. **First launch only.** Gatekeeper refuses to open unsigned apps
+   from a double-click. Open Finder → Applications, **right-click**
+   (or Control-click) **CardMirror** → **Open**. Click **Open** in
+   the confirmation dialog. From then on, normal double-click works.
 
-CardMirror is built with JavaScript / TypeScript and needs **Node.js**
-to run. Node is a regular desktop installer.
+### Windows
 
-- **macOS** — open [nodejs.org](https://nodejs.org/) in your browser
-  and click the blue **"LTS"** download button. Open the `.pkg`
-  file from Downloads and click through the installer (Continue,
-  Continue, Agree, Install, enter your password if asked, Close).
-- **Windows** — open [nodejs.org](https://nodejs.org/) and click the
-  green **"LTS"** download button. Open the `.msi` file from
-  Downloads and click through the installer (Next, accept the
-  license, Next, Next, Install, Finish).
-- **Linux** — the easiest path is the official installer at
-  [nodejs.org/en/download](https://nodejs.org/en/download/) — pick
-  your distro and follow the few commands it shows.
+1. Download `CardMirror Setup x.x.x.exe`.
+2. Run the installer (Next → Install → Finish).
+3. **First launch only.** SmartScreen shows "Windows protected your
+   PC." Click **More info** → **Run anyway**.
 
-You don't need to verify the install — if the next step works, Node
-is installed.
+### Linux
 
-### 2. Download CardMirror
+Two options for any distro:
 
-1. Open
-   [the CardMirror page on GitHub](https://github.com/ant981228/cardmirror)
-   in your browser.
-2. Click the **green `<> Code` button** near the top of the file list
-   (right side, above the file table).
-3. In the dropdown that opens, click **"Download ZIP"** at the bottom.
-4. A file called `cardmirror-main.zip` lands in your Downloads
-   folder. Double-click it to unzip.
-5. You'll get a folder called **`cardmirror-main`**. Move it
-   somewhere you can find later — your **Desktop** is fine, or
-   **Documents**.
-6. **Open the `cardmirror-main` folder you just unzipped, and look
-   inside.** Two possibilities:
-   - You see `README.md`, `package.json`, `index.html`, and folders
-     like `src/` and `apps/` → this is the right folder. The path
-     looks like:
-     - macOS: `/Users/yourname/Desktop/cardmirror-main`
-     - Windows: `C:\Users\yourname\Desktop\cardmirror-main`
-     - Linux: `/home/yourname/Desktop/cardmirror-main`
-   - You see *another* folder called `cardmirror-main` and nothing
-     else → some unzippers double-wrap. **Open that inner folder.**
-     *It* contains the files (`README.md`, `package.json`, etc.)
-     and *it* is the one you want. The path looks like:
-     - macOS: `/Users/yourname/Desktop/cardmirror-main/cardmirror-main`
-     - Windows: `C:\Users\yourname\Desktop\cardmirror-main\cardmirror-main`
-     - Linux: `/home/yourname/Desktop/cardmirror-main/cardmirror-main`
+- **AppImage** (works on every modern distro): download
+  `CardMirror-x.x.x.AppImage`. In a terminal, in the download
+  folder, run:
+  ```sh
+  chmod +x CardMirror-x.x.x.AppImage
+  ./CardMirror-x.x.x.AppImage
+  ```
+  Or double-click after `chmod +x` if your file manager supports
+  launching AppImages.
 
-   Either way, **the folder that directly contains `package.json`
-   is the one your terminal needs to be in** for step 3 — not the
-   parent folder, not the `.zip` archive.
+- **Arch / Manjaro** — use the AUR:
+  ```sh
+  yay -S cardmirror-bin
+  # or with paru: paru -S cardmirror-bin
+  ```
+  Or grab `cardmirror-x.x.x.pacman` from the release directly and:
+  ```sh
+  sudo pacman -U cardmirror-x.x.x.pacman
+  ```
 
-### 3. Open a "terminal" inside that folder
+### Updates
 
-A "terminal" is a window where you can type a command and the
-computer runs it. You're going to open one *already pointed at the
-CardMirror folder*, so you don't have to navigate anywhere.
+CardMirror checks the Releases page for new versions on launch and
+downloads them in the background. When one's ready, a dialog asks
+whether to restart now or install on next quit. **Help → Check for
+Updates…** triggers the same check manually.
 
-- **macOS** —
-  1. Open **System Settings** → **Keyboard** → **Keyboard
-     Shortcuts…** → **Services** → **Files and Folders**.
-  2. Tick the box next to **"New Terminal at Folder"** (this is a
-     one-time setup; macOS hides it by default).
-  3. Close Settings.
-  4. Open **Finder** and navigate to the `cardmirror-main`
-     folder you unzipped.
-  5. **Right-click** (or Control-click) the folder itself — *not*
-     double-click — and choose **Services → New Terminal at
-     Folder**.
-  6. A black or white **Terminal** window opens. The folder name
-     should appear in its title bar.
+Linux users who installed via AUR can also update through `yay
+-Syu`; both update paths work, pick whichever feels more natural.
 
-- **Windows** —
-  1. Open **File Explorer** and navigate into the
-     `cardmirror-main` folder (so you can see `package.json`,
-     `README.md`, etc. in the file list).
-  2. Click the **address bar** at the top of the File Explorer window
-     once so the path becomes editable.
-  3. Type `cmd` and press **Enter**. A black **Command Prompt**
-     window opens with the folder path on the prompt line. (Alternate
-     route: hold **Shift**, right-click an empty area of the folder,
-     and pick **"Open in Terminal"** or **"Open PowerShell window
-     here"**.)
-
-- **Linux** — most file managers (Nautilus / Dolphin / Thunar) have an
-  **"Open Terminal Here"** entry in the right-click menu. Right-click
-  inside the `cardmirror-main` folder and pick that. If your
-  file manager doesn't offer it, open a terminal manually and type
-  `cd ` (note the trailing space), then drag the folder from the
-  file manager onto the terminal window — the path gets pasted in
-  — then press **Enter**.
-
-You should now have a terminal window open, "inside" the folder
-that holds `package.json`.
-
-**Quick sanity check before continuing.** Type this and press
-Enter:
-
-- macOS / Linux: `ls`
-- Windows: `dir`
-
-You should see `package.json`, `README.md`, `index.html`, plus
-folders like `src` and `apps`. If you don't see those (or you see
-just a single `cardmirror-main` folder), your terminal is one
-folder too high up — close it and reopen from inside the folder
-that *directly contains* `package.json` (see step 2.6).
-
-The next two steps are just two commands you type into that
-window.
-
-### 4. Install CardMirror's pieces
-
-In the terminal you just opened, **type** (or copy-paste) this and
-press **Enter**:
-
-```
-npm install
-```
-
-This downloads everything CardMirror depends on into a `node_modules`
-folder. It prints a lot of text. **Wait for the prompt to come back**
-(usually 30 seconds to a couple of minutes). You're done with this
-step when you can type into the terminal again.
-
-It's normal to see warnings about deprecated packages — those don't
-matter. If you see a red **`error`** line that stops the install,
-make sure Node.js installed correctly in step 1.
-
-### 5. Start CardMirror
-
-In the same terminal window, type:
-
-```
-npm run dev
-```
-
-After a few seconds you'll see something like:
-
-```
-  VITE v...  ready in ... ms
-
-  ➜  Local:   http://localhost:5173/
-```
-
-Open your browser, type `http://localhost:5173/` into the address
-bar, and press Enter. **CardMirror loads.** You'll see an empty
-starter doc. Click the 📂 icon in the ribbon to open a real document.
-
-**Leave the terminal window open while you use the editor.** Closing
-the terminal stops CardMirror. To stop it intentionally, click the
-terminal window and press **Ctrl-C**.
-
-### 6. (Optional) Set up AI features
+## (Optional) Set up AI features
 
 A few features call out to Anthropic's Claude API:
 
-- AI-formatted citations
-- AI image alt-text and table-from-image (right-click an image)
-- AI commenting / explain features
+- AI-formatted citations from a pasted URL or freeform quote.
+- AI image alt-text and table-from-image (right-click an image).
+- AI commenting / explain features in the comments column.
 
 To enable them:
 
@@ -208,23 +122,102 @@ To enable them:
 3. Toggle **AI features** on and paste your API key into the
    **Anthropic API key** field.
 
-The key is stored locally in your browser (in `localStorage`) and is
-sent directly from your browser to Anthropic when you trigger an AI
-feature. It never travels through a third-party server.
+The key is stored locally on your machine and is sent directly to
+Anthropic when you trigger an AI feature. It doesn't travel through
+a third-party server.
 
-### Coming back later
+## Run from source
 
-Open a terminal in the same folder (step 3 above), and type:
+You only need this if you want to **build CardMirror yourself**
+(contribute, run a development branch, or use the editor on a
+platform we don't publish binaries for). For day-to-day use,
+download a release above.
 
+### 1. Install Node.js
+
+CardMirror is built with JavaScript / TypeScript and needs **Node.js**
+to run. Node is a regular desktop installer.
+
+- **macOS** — open [nodejs.org](https://nodejs.org/) in your browser
+  and click the blue **"LTS"** download button. Open the `.pkg`
+  file from Downloads and click through the installer.
+- **Windows** — open [nodejs.org](https://nodejs.org/) and click the
+  green **"LTS"** download button. Open the `.msi` file from
+  Downloads and click through the installer.
+- **Linux** — the easiest path is the official installer at
+  [nodejs.org/en/download](https://nodejs.org/en/download/) — pick
+  your distro and follow the few commands it shows.
+
+You don't need to verify the install — if the next step works, Node
+is installed.
+
+### 2. Download the source
+
+1. Open
+   [the CardMirror page on GitHub](https://github.com/ant981228/cardmirror)
+   in your browser.
+2. Click the **green `<> Code` button** near the top of the file list.
+3. Click **"Download ZIP"** at the bottom of the dropdown.
+4. Unzip the download. You'll get a folder called
+   **`cardmirror-main`**. Move it somewhere you can find later —
+   your Desktop or Documents is fine.
+5. **Open the `cardmirror-main` folder and look inside.** Some
+   unzippers double-wrap. You want the folder that directly
+   contains `package.json`, `README.md`, `index.html`, and `src/`
+   — if you only see another `cardmirror-main` folder, that's the
+   wrapper; open it.
+
+### 3. Open a terminal inside that folder
+
+A "terminal" is a window where you type commands. You're going to
+open one already pointing at the CardMirror folder.
+
+- **macOS** — enable Finder → right-click → *Services → New
+  Terminal at Folder* once via System Settings → Keyboard →
+  Keyboard Shortcuts → Services → Files and Folders, then
+  right-click the folder.
+- **Windows** — open File Explorer in the folder, click the address
+  bar, type `cmd`, press Enter.
+- **Linux** — right-click inside the folder and pick *Open Terminal
+  Here* (Nautilus / Dolphin / Thunar all offer it).
+
+Sanity check: type `ls` (macOS / Linux) or `dir` (Windows) and
+press Enter. You should see `package.json`, `README.md`, `src`,
+`apps`. If you don't, your terminal is one folder too high up.
+
+### 4. Install dependencies
+
+```sh
+npm install
 ```
+
+Downloads everything CardMirror needs. Takes 30 seconds to a couple
+of minutes. Deprecation warnings are normal; only red `error` lines
+indicate trouble.
+
+### 5. Run the web edition
+
+```sh
 npm run dev
 ```
 
-That's it — CardMirror starts again at `http://localhost:5173/`.
+After a few seconds, open `http://localhost:5173/` in your browser.
 
-To grab a newer version of the code, download the ZIP again (step 2)
-into a fresh folder, and run `npm install` then `npm run dev` in
-that new folder.
+### Run the desktop edition (from source)
+
+```sh
+npm run desktop:dev
+```
+
+This builds the Electron main process, starts the Vite dev server,
+and launches the desktop window. Same code, same renderer — but in
+a native window with file-system access.
+
+### Coming back later
+
+Open a terminal in the same folder; run `npm run dev` (or
+`npm run desktop:dev`) again. To pick up newer code, download a
+fresh ZIP and rerun `npm install` in it.
 
 ## Other commands
 
