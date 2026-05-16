@@ -199,7 +199,7 @@ const zoomPct = document.getElementById('zoom-pct')!;
 // so that `applyReadMode` can read `view` without a temporal-dead-zone
 // ReferenceError on initial call.
 let view: EditorView | null = null;
-let currentDoc: PMNode = makeStarterDoc();
+let currentDoc: PMNode = makeNewDocBody();
 
 /** Multi-doc workspace gate. When true, the multi-pane shell has
  *  taken over the main shell — it manages its own EditorViews and
@@ -534,14 +534,14 @@ async function onNewDocClicked(): Promise<void> {
     void multiDocOnNewDoc();
     return;
   }
-  // Windows mode (single-doc + Electron + non-pristine current
-  // doc): spawn a new window with a fresh starter doc instead of
-  // replacing what's already loaded. If the current doc is still
-  // the pristine starter, "New" is essentially a no-op (and the
-  // user probably misclicked), so we fall through to today's
-  // replace-with-prompt flow which will just reset the starter.
+  // Multi-window mode (single-doc + Electron): New always spawns a
+  // new window. The current window stays put — including when it's
+  // still showing the pristine starter, because the user clicking
+  // New is an unambiguous request for a fresh doc to work in, not
+  // a request to overwrite. No prompt: nothing in the current
+  // window is at risk of being lost.
   const host = getHost();
-  if (host.canSpawnWindow && !isPristineStarter) {
+  if (host.canSpawnWindow) {
     try {
       await host.spawnWindow(null);
     } catch (err) {
@@ -550,27 +550,32 @@ async function onNewDocClicked(): Promise<void> {
     }
     return;
   }
-  const choice = await confirmNewDocOverwrite();
-  if (choice === 'cancel') return;
-  if (choice === 'save') {
-    const saved = await runSaveAsFlow();
-    if (!saved) return;
+  // Web edition: no other window to open into, so New replaces
+  // what's here. Only prompt to save if there are actual edits to
+  // lose — the pristine starter is disposable.
+  if (!isPristineStarter) {
+    const choice = await confirmNewDocOverwrite();
+    if (choice === 'cancel') return;
+    if (choice === 'save') {
+      const saved = await runSaveAsFlow();
+      if (!saved) return;
+    }
   }
   // Drop the old session's journal before swapping in a new doc —
-  // the user's choice (save or discard) above is the authoritative
-  // signal that they're done with the previous content. New doc
-  // gets a fresh uid so future journals key against the new
-  // session.
+  // the user's choice (or the pristine-starter shortcut) above is
+  // the authoritative signal that they're done with the previous
+  // content. New doc gets a fresh uid so future journals key
+  // against the new session.
   void clearCurrentJournal();
-  mountView(makeStarterDoc());
+  mountView(makeNewDocBody());
   currentDocFilename = null;
   currentDocHandle = null;
   currentDocFormat = null;
   currentDocUid = newSessionDocUid();
   syncSingleDocSpeechRegistration();
-  // The fresh starter is conceptually still pristine, but the
-  // user just demonstrated they're done with whatever was here
-  // before. Treat as non-pristine so subsequent Opens spawn.
+  // The fresh doc is conceptually still pristine, but the user
+  // just demonstrated they're done with whatever was here before.
+  // Treat as non-pristine so subsequent Opens spawn.
   markNonPristineStarter();
   updateWindowTitle();
 }
@@ -1810,6 +1815,26 @@ function makeStarterDoc(): PMNode {
       'When you\'re ready, open a real .docx with the 📂 icon — or just start editing this one. Welcome aboard!',
     ),
   ]);
+}
+
+/** Build a doc with no content beyond a single empty paragraph.
+ *  Used when the user has turned the onboarding starter off — new
+ *  docs and newly spawned windows mount this instead of the
+ *  welcome guide. */
+function makeBlankNewDoc(): PMNode {
+  return schema.nodes['doc']!.createChecked(null, [
+    schema.nodes['paragraph']!.create(),
+  ]);
+}
+
+/** Pick between the onboarding starter and a blank doc based on
+ *  the `showOnboardingStarter` setting. Single entry point for
+ *  "what does a fresh doc look like?" so the initial mount and the
+ *  New flow stay in lockstep. */
+function makeNewDocBody(): PMNode {
+  return settings.get('showOnboardingStarter')
+    ? makeStarterDoc()
+    : makeBlankNewDoc();
 }
 
 /**

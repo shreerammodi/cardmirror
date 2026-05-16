@@ -28,6 +28,7 @@ import {
 } from './settings.js';
 import { isFontAvailable } from './font-detect.js';
 import { buildKeybindingsEditor } from './keybindings-editor.js';
+import { getHost } from './host/index.js';
 
 /**
  * Available body fonts. A mix of Microsoft Office defaults (likely
@@ -182,7 +183,10 @@ class SettingsModal {
       const panel = document.createElement('div');
       panel.className = 'pmd-settings-list pmd-settings-panel';
       panel.setAttribute('role', 'tabpanel');
-      const entries = SETTING_METADATA.filter((m) => m.category === id);
+      const hostKind = getHost().kind;
+      const entries = SETTING_METADATA.filter(
+        (m) => m.category === id && (!m.electronOnly || hostKind === 'electron'),
+      );
       for (const meta of entries) {
         const row = this.renderEntry(meta);
         if (meta.dependsOn) {

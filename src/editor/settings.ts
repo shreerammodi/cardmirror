@@ -134,6 +134,18 @@ export interface Settings {
   navWidth: number;
   /** Default depth shown in the navigation pane (1–4). */
   navMaxLevel: number;
+  /** When true (default), `New document` mounts the CardMirror
+   *  welcome / onboarding doc. When false, it mounts a blank
+   *  doc — a single empty paragraph. The starter is the same one
+   *  every fresh window opens with, so this also governs the
+   *  initial content of newly spawned windows. */
+  showOnboardingStarter: boolean;
+  /** Desktop-only. When set, "New Speech Document" saves into this
+   *  directory by default (instead of leaving the doc unsaved until
+   *  the user picks a location). Empty string means "no default —
+   *  keep the current behavior of waiting for an explicit Save."
+   *  Stored as an absolute path. */
+  defaultSpeechDocFolder: string;
   /** Whether to show the cite preview on hover in the nav pane. */
   showCitePreview: boolean;
   /** Browser-level spellcheck on the editor surface. Off by default
@@ -480,6 +492,8 @@ const FORMATTING_PANEL_MODES: FormattingPanelMode[] = ['labels', 'shortcuts', 'b
 const DEFAULTS: Settings = {
   navWidth: 300,
   navMaxLevel: 3,
+  showOnboardingStarter: true,
+  defaultSpeechDocFolder: '',
   showCitePreview: true,
   editorSpellcheck: false,
   // Default OFF — autosave is meaningful only when the user has
@@ -612,6 +626,10 @@ export interface SettingMeta {
    *  e.g. greying out the multi-doc layout picker when multi-doc is
    *  off, or AI-key rows when AI features are disabled. */
   dependsOn?: keyof Settings;
+  /** When true, this setting is only relevant on Electron-style
+   *  hosts (real file paths, native dialogs). The settings UI
+   *  hides the row entirely on the web edition. */
+  electronOnly?: boolean;
 }
 
 export const SETTING_METADATA: SettingMeta[] = [
@@ -639,6 +657,23 @@ export const SETTING_METADATA: SettingMeta[] = [
     kind: 'multiDocLayoutMode',
     category: 'general',
     dependsOn: 'multiDocWorkspace',
+  },
+  {
+    key: 'showOnboardingStarter',
+    label: 'Onboarding doc for new documents',
+    description:
+      'When on (default), New Document opens the CardMirror welcome doc — the same starter you get the first time you launch. When off, New opens a blank doc with a single empty paragraph. Affects every freshly created doc, including newly spawned windows.',
+    kind: 'toggle',
+    category: 'general',
+  },
+  {
+    key: 'defaultSpeechDocFolder',
+    label: 'Default folder for new speech documents',
+    description:
+      'Absolute path. When set, "New Speech Document" saves the new doc into this folder by default. Leave empty (the default) to keep the current behavior of leaving the doc unsaved until you explicitly Save / Save As.',
+    kind: 'text',
+    category: 'general',
+    electronOnly: true,
   },
   {
     key: 'showCitePreview',
@@ -960,6 +995,14 @@ function sanitize(s: Settings): Settings {
   return {
     navWidth: clamp(s.navWidth, 150, 800),
     navMaxLevel: clamp(Math.round(s.navMaxLevel), 1, 4),
+    // Default-on: preserve `false` only when explicitly set so the
+    // onboarding shows up for new installs and survives upgrades
+    // from before this setting existed.
+    showOnboardingStarter: s.showOnboardingStarter === false ? false : true,
+    defaultSpeechDocFolder:
+      typeof s.defaultSpeechDocFolder === 'string'
+        ? s.defaultSpeechDocFolder
+        : '',
     showCitePreview: !!s.showCitePreview,
     editorSpellcheck: !!s.editorSpellcheck,
     autosaveEnabled: !!s.autosaveEnabled,

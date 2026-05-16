@@ -3,6 +3,36 @@
 Append-only log of implementation decisions and their rationale. Each
 entry has a date, a one-line summary, and the reasoning.
 
+## 2026-05-15: Onboarding-starter setting + multi-window New flow
+
+Two related fixes:
+
+  - **`showOnboardingStarter` setting (default on).** Governs
+    whether `New Document` (and the initial doc the first window
+    of a session lands on) shows the CardMirror welcome guide or
+    a blank doc (one empty paragraph). Single entry point
+    `makeNewDocBody()` reads the setting; `makeStarterDoc()`
+    builds the welcome content, `makeBlankNewDoc()` builds the
+    blank shell.
+  - **Multi-window New always spawns.** The previous behavior was
+    "if the current doc is the pristine starter, fall through to
+    the prompt-and-replace flow." That caused a confusing UX —
+    clicking New on a fresh window showed an unnecessary save /
+    discard / cancel prompt (no changes to save) and discard
+    just rebuilt the same starter in place. Now: on any host
+    with `canSpawnWindow`, New unconditionally spawns a new
+    window. The current window stays put. The pristine-starter
+    shortcut still applies to the web edition (no window to
+    spawn → skip the save prompt and replace in place, since the
+    starter is disposable).
+
+Also added desktop-only `defaultSpeechDocFolder` setting —
+placeholder for the (not-yet-wired) New Speech Document spawn
+flow. When set, the eventual spawn-with-mark path will save the
+new speech doc to this folder by default instead of leaving it
+unsaved. New `electronOnly?: boolean` field on `SettingMeta`
+hides the row entirely on the web edition.
+
 ## 2026-05-15: Multi-window send-to-speech (Electron)
 
 Cross-window send-to-speech for the single-doc-per-window workspace
