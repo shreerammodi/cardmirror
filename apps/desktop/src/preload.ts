@@ -63,6 +63,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
    *  window was opened blank. */
   getInitialDoc: () => ipcRenderer.invoke('host:get-initial-doc'),
 
+  /** Mode-switch helper: tell main to broadcast
+   *  `'mode-switch:please-close'` to every other open window and
+   *  resolve once they've all closed. */
+  journalAndCloseOtherWindows: () =>
+    ipcRenderer.invoke('host:journal-and-close-other-windows'),
+
+  /** Close this renderer's window programmatically. Called by the
+   *  please-close handler after journaling. */
+  closeSelf: () => ipcRenderer.invoke('host:close-self'),
+
+  /** Subscribe to mode-switch please-close broadcasts. Returns an
+   *  unsubscribe handle. */
+  onPleaseCloseForModeSwitch(handler: () => void): () => void {
+    const listener = (): void => handler();
+    ipcRenderer.on('mode-switch:please-close', listener);
+    return () => ipcRenderer.removeListener('mode-switch:please-close', listener);
+  },
+
   /** Subscribe to native-menu commands. Main process broadcasts
    *  `'menu-command'` events to the focused window's webContents
    *  whenever the user picks File → Open / Save / etc. The

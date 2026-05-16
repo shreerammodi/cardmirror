@@ -2540,6 +2540,21 @@ if (autosaveBtn) {
           break;
       }
     });
+    // Mode-switch coordination: another window is about to reload
+    // into the new workspace mode and is asking us to journal our
+    // current doc and close. The journal write is best-effort; we
+    // close regardless so the originating window's
+    // `journalAndCloseOtherWindows` promise resolves promptly.
+    electronHost.onPleaseCloseForModeSwitch(() => {
+      void (async (): Promise<void> => {
+        try {
+          await runJournalWrite();
+        } catch (err) {
+          console.warn('Mode-switch journaling failed:', err);
+        }
+        await electronHost.closeSelf();
+      })();
+    });
   }
 }
 
@@ -2651,8 +2666,8 @@ const MODE_SWITCH_MARKER_KEY = 'cardmirror:mode-switch-recovery';
 async function handleModeSwitch(newValue: boolean): Promise<void> {
   modeSwitchInFlight = true;
   const message = newValue
-    ? 'Switch to three-pane workspace?\n\nThe editor will reload and your open documents will reopen in the new layout.'
-    : 'Switch to one-document-per-window mode?\n\nThe editor will reload and your open documents will reopen in the new layout.';
+    ? 'Switch to three-pane workspace?\n\nAny other open CardMirror windows will close, and every open document will reopen as a pane in this window.'
+    : 'Switch to one-document-per-window mode?\n\nThe editor will reload and your open documents will each reopen in their own window.';
   if (!window.confirm(message)) {
     // Revert. The `modeSwitchInFlight` guard prevents the
     // subscriber from re-running and looping.
@@ -2661,6 +2676,14 @@ async function handleModeSwitch(newValue: boolean): Promise<void> {
     return;
   }
   try {
+    // If we're on Electron and other windows are open, have each
+    // of them journal their current doc and close before we
+    // reload. The post-reload recovery picks up every journal and
+    // restores the docs in the new layout.
+    const electronHost = getElectronHost();
+    if (electronHost) {
+      await electronHost.journalAndCloseOtherWindows();
+    }
     await journalAllForModeSwitch();
     sessionStorage.setItem(MODE_SWITCH_MARKER_KEY, '1');
   } catch (err) {

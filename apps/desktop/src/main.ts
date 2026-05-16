@@ -285,6 +285,46 @@ ipcMain.handle('host:get-initial-doc', async (event) => {
   return payload;
 });
 
+// ─── Mode-switch: journal-and-close other windows ─────────────────
+// When the user toggles `multiDocWorkspace` in window A, every
+// OTHER open window needs to journal its current doc and close
+// before A reloads — so the post-reload recovery flow can pick up
+// every doc and restore them in the new layout. Each renderer
+// listens for `'mode-switch:please-close'`; on receipt it journals
+// the current doc and calls `host:close-self`. We wait for the
+// `closed` event on each before resolving, with a generous timeout
+// fallback so a hung renderer doesn't strand the originating window.
+
+const MODE_SWITCH_CLOSE_TIMEOUT_MS = 10000;
+
+ipcMain.handle('host:journal-and-close-other-windows', async (event) => {
+  const sender = BrowserWindow.fromWebContents(event.sender);
+  const others = BrowserWindow.getAllWindows().filter(
+    (w) => w !== sender && !w.isDestroyed(),
+  );
+  await Promise.all(
+    others.map(
+      (w) =>
+        new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            if (!w.isDestroyed()) w.destroy();
+            resolve();
+          }, MODE_SWITCH_CLOSE_TIMEOUT_MS);
+          w.once('closed', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+          w.webContents.send('mode-switch:please-close');
+        }),
+    ),
+  );
+});
+
+ipcMain.handle('host:close-self', async (event) => {
+  const sender = BrowserWindow.fromWebContents(event.sender);
+  if (sender && !sender.isDestroyed()) sender.close();
+});
+
 // ─── Native menu bar ───────────────────────────────────────────────
 
 /** Send a menu-command IPC event to the currently focused window. */

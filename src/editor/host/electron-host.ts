@@ -39,6 +39,9 @@ interface ElectronAPI {
   deleteJournal(uid: string): Promise<void>;
   spawnWindow(payload: SpawnWindowPayload | null): Promise<void>;
   getInitialDoc(): Promise<SpawnWindowPayload | null>;
+  journalAndCloseOtherWindows(): Promise<void>;
+  closeSelf(): Promise<void>;
+  onPleaseCloseForModeSwitch(handler: () => void): () => void;
   /** Subscribe to menu-driven commands from the native menu bar.
    *  Returns an unsubscribe handle. */
   onMenuCommand(handler: (command: string) => void): () => void;
@@ -122,6 +125,25 @@ export class ElectronHost implements Host {
         ? result.bytes
         : new Uint8Array(result.bytes as ArrayBufferLike),
     };
+  }
+
+  /** Mode-switch helper. Asks main to broadcast a please-close
+   *  message to every other window and resolve once they've all
+   *  closed. The originating renderer then journals its own doc
+   *  and reloads. */
+  async journalAndCloseOtherWindows(): Promise<void> {
+    await api().journalAndCloseOtherWindows();
+  }
+
+  /** Programmatic "close this window." Called by the please-close
+   *  handler after the renderer finishes journaling. */
+  async closeSelf(): Promise<void> {
+    await api().closeSelf();
+  }
+
+  /** Subscribe to mode-switch please-close broadcasts. */
+  onPleaseCloseForModeSwitch(handler: () => void): () => void {
+    return api().onPleaseCloseForModeSwitch(handler);
   }
 
   /** Subscribe to menu-driven commands from the native menu bar.
