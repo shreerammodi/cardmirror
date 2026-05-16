@@ -2203,7 +2203,7 @@ exportBtn.addEventListener('click', () => {
 // autosave toggle when it's on. Subtle reassurance that the bytes
 // actually hit disk; doesn't block anything.
 
-const FLASH_DURATION_MS = 900;
+const FLASH_DURATION_MS = 1400;
 /** Per-element pending revert timers. Re-entrant — a save that
  *  fires while a previous flash is still on screen extends the
  *  flash rather than restoring the original glyph mid-animation. */

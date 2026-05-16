@@ -185,12 +185,20 @@ body {
   font-size: 0.78rem;
 }
 
-/* Save-success flash. Briefly tints the button and swaps the glyph
-   to ✓ when a save commits (manual or autosave). Subtle reassurance
-   — the user sees the bytes hit disk without a modal interruption. */
+/* Save-success flash. Briefly tints the button green, gives it a
+   matching background pulse, and swaps the glyph to ✓ when a save
+   commits (manual or autosave). Green is distinct from both the
+   resting button color AND the accent-blue used for the pressed-on
+   autosave toggle, so the flash reads even when the underlying
+   button is already styled. */
+@keyframes pmd-save-flash-pulse {
+  0%   { transform: scale(1);    background: rgba(22, 163, 74, 0); }
+  20%  { transform: scale(1.18); background: rgba(22, 163, 74, 0.20); }
+  100% { transform: scale(1);    background: rgba(22, 163, 74, 0); }
+}
 #ribbon .ribbon-button-stack button.pmd-save-flash {
-  color: var(--pmd-c-accent);
-  transition: color 200ms ease;
+  color: #16a34a; /* green-600 — universally "saved" */
+  animation: pmd-save-flash-pulse 1400ms ease-out;
 }
 
 /* Autosave toggle, when on. `aria-pressed="true"` selector pairs
