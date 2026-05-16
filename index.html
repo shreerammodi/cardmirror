@@ -10,9 +10,11 @@
     <header id="ribbon">
       <div class="ribbon-section ribbon-left">
         <div class="ribbon-button-stack">
-          <button id="open-btn" type="button" title="Open .docx" aria-label="Open">📂</button>
+          <button id="open-btn" type="button" title="Open a document" aria-label="Open">📂</button>
           <button id="new-btn" type="button" title="New document" aria-label="New document">🆕</button>
-          <button id="export-btn" type="button" disabled title="Save As…" aria-label="Save As">💾</button>
+          <button id="export-btn" type="button" disabled title="Save" aria-label="Save">💾</button>
+          <button id="autosave-btn" type="button" aria-pressed="false"
+                  title="Autosave is off — click to turn on" aria-label="Toggle autosave">⏱</button>
         </div>
         <!-- Speech-doc buttons. Same 2-row stack rhythm as the file
              buttons so they line up. Visible only in multi-doc mode

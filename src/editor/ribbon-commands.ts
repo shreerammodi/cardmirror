@@ -2865,6 +2865,7 @@ export type RibbonCommandId =
   | 'openFile'
   | 'save'
   | 'saveAs'
+  | 'toggleAutosave'
   | 'newSpeechDocument'
   | 'markActiveAsSpeech'
   | 'sendToSpeechAtCursor'
@@ -2932,6 +2933,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'openFile',
   'save',
   'saveAs',
+  'toggleAutosave',
   'newSpeechDocument',
   'markActiveAsSpeech',
   'sendToSpeechAtCursor',
@@ -2996,6 +2998,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   openFile: 'Open file',
   save: 'Save',
   saveAs: 'Save as…',
+  toggleAutosave: 'Toggle autosave',
   newSpeechDocument: 'New speech document',
   markActiveAsSpeech: 'Mark / unmark active doc as the speech doc',
   sendToSpeechAtCursor: 'Send to speech (at cursor)',
@@ -3077,6 +3080,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   openFile: 'Mod-o',
   save: 'Mod-s',
   saveAs: 'Mod-Shift-s',
+  toggleAutosave: '',
   // Verbatim's "Send to speech" — bare backtick (next to 1 on US
   // layouts) for at-cursor, Alt-backtick for at-end-of-doc. Same
   // chord as the desktop app. Trade-off: a bare backtick keystroke
@@ -3159,6 +3163,7 @@ export interface RibbonContext {
   openFile: () => void;
   save: () => void;
   saveAs: () => void;
+  toggleAutosave: () => void;
   /** Speech-doc commands (Verbatim's `Paperless.SendToSpeech` family).
    *  All four are wired via the speech-doc registry — when the host
    *  hasn't installed a real implementation, the defaults are
@@ -3202,6 +3207,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   openFile: () => {},
   save: () => {},
   saveAs: () => {},
+  toggleAutosave: () => {},
   newSpeechDocument: () => {},
   markActiveAsSpeech: () => {},
   sendToSpeechAtCursor: () => {},
@@ -3390,6 +3396,12 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return (_state, dispatch) => {
         if (!dispatch) return true;
         ctx.saveAs();
+        return true;
+      };
+    case 'toggleAutosave':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.toggleAutosave();
         return true;
       };
     case 'newSpeechDocument':

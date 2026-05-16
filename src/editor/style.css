@@ -185,6 +185,21 @@ body {
   font-size: 0.78rem;
 }
 
+/* Save-success flash. Briefly tints the button and swaps the glyph
+   to ✓ when a save commits (manual or autosave). Subtle reassurance
+   — the user sees the bytes hit disk without a modal interruption. */
+#ribbon .ribbon-button-stack button.pmd-save-flash {
+  color: var(--pmd-c-accent);
+  transition: color 200ms ease;
+}
+
+/* Autosave toggle, when on. `aria-pressed="true"` selector pairs
+   with the speech-mark button's existing styling pattern. */
+#ribbon #autosave-btn[aria-pressed="true"] {
+  color: var(--pmd-c-accent);
+  background: var(--pmd-c-accent-soft, rgba(37, 99, 235, 0.12));
+}
+
 /* Speech-doc button stack. Same layout rhythm as the file stack
    (Open/New/Save), placed immediately to its right. Hidden in
    single-doc — the speech-send gesture requires a separate

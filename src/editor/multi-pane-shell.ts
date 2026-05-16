@@ -56,6 +56,7 @@ import {
   getActiveView,
   applyReadModeToTarget,
   setReadModeStateResolver,
+  notifyEditForAutosave,
 } from './index.js';
 
 type SlotId = 'slot1' | 'slot2' | 'slot3';
@@ -1461,6 +1462,9 @@ function buildDocRecord(
     dispatchTransaction(tx) {
       const next = view.state.apply(tx);
       view.updateState(next);
+      // Re-arm the autosave debounce on doc-changing transactions.
+      // No-ops when autosave is off; cheap to fire unconditionally.
+      if (tx.docChanged) notifyEditForAutosave();
       // Debounce both O(doc-size) updates into a single timer:
       //   - navPanel.update walks the doc for headings (and
       //     rebuilds every `<li>`, which would invalidate any

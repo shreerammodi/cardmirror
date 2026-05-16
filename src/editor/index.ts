@@ -85,6 +85,7 @@ const navEl = document.getElementById('nav-panel')!;
 const openBtn = document.getElementById('open-btn') as HTMLButtonElement;
 const newBtn = document.getElementById('new-btn') as HTMLButtonElement | null;
 const exportBtn = document.getElementById('export-btn') as HTMLButtonElement;
+const autosaveBtn = document.getElementById('autosave-btn') as HTMLButtonElement | null;
 const settingsBtn = document.getElementById('settings-btn') as HTMLButtonElement;
 const referenceBtn = document.getElementById('reference-btn') as HTMLButtonElement | null;
 const readModeBtn = document.getElementById('read-mode-btn') as HTMLButtonElement;
@@ -380,6 +381,9 @@ const ribbonContext: RibbonContext = {
   },
   saveAs: () => {
     void runSaveAsFlow();
+  },
+  toggleAutosave: () => {
+    settings.set('autosaveEnabled', !settings.get('autosaveEnabled'));
   },
   newSpeechDocument: () => {
     // Multi-doc owns the speech-doc lifecycle (creates the doc,
@@ -1139,6 +1143,7 @@ function runViewlessRibbon(id: RibbonCommandId): void {
     case 'openFile': ribbonContext.openFile(); return;
     case 'save': ribbonContext.save(); return;
     case 'saveAs': ribbonContext.saveAs(); return;
+    case 'toggleAutosave': ribbonContext.toggleAutosave(); return;
     case 'openShortcutsReference': ribbonContext.openShortcutsReference(); return;
     case 'newSpeechDocument': ribbonContext.newSpeechDocument(); return;
   }
@@ -1785,6 +1790,9 @@ function mountView(doc: PMNode, threads: Thread[] = []): void {
       view.updateState(next);
       if (tx.docChanged) {
         currentDoc = next.doc;
+        // Re-arm the autosave debounce. No-ops when the setting
+        // is off, so the call is cheap to fire unconditionally.
+        notifyEditForAutosave();
       }
       // Cheap; runs on every transaction (selection moves included)
       // so the readout always reflects the cursor's current run.
@@ -2142,6 +2150,7 @@ async function runSaveAsFlow(): Promise<boolean> {
     });
     if (!result) return false;
     commitSaveResult(result.name, result.handle ?? null, choice.format);
+    flashSaveSuccess();
     return true;
   } catch (err) {
     console.error('Save failed:', err);
@@ -2171,6 +2180,7 @@ async function runSaveFlow(): Promise<boolean> {
       readMode: false,
     });
     await getHost().saveExisting(file.handle, bytes);
+    flashSaveSuccess();
     return true;
   } catch (err) {
     console.error('Save failed:', err);
@@ -2179,9 +2189,137 @@ async function runSaveFlow(): Promise<boolean> {
   }
 }
 
+// Floppy = Save (was Save As). The Save command falls through to
+// the Save-As dialog automatically when no handle exists or the
+// host can't do silent in-place saves, so the first save of a new
+// doc still prompts the user for a location and format.
 exportBtn.addEventListener('click', () => {
-  void runSaveAsFlow();
+  void runSaveFlow();
 });
+
+// ─── Save visual feedback ──────────────────────────────────────────
+// On every successful save (manual or autosave) we briefly swap the
+// save button's glyph for a check mark, and do the same for the
+// autosave toggle when it's on. Subtle reassurance that the bytes
+// actually hit disk; doesn't block anything.
+
+const FLASH_DURATION_MS = 900;
+/** Per-element pending revert timers. Re-entrant — a save that
+ *  fires while a previous flash is still on screen extends the
+ *  flash rather than restoring the original glyph mid-animation. */
+const flashTimers = new WeakMap<HTMLElement, number>();
+
+function flashSavedGlyph(el: HTMLElement): void {
+  const existing = flashTimers.get(el);
+  if (existing !== undefined) {
+    window.clearTimeout(existing);
+  } else {
+    el.dataset['flashOrig'] = el.textContent ?? '';
+  }
+  el.textContent = '✓';
+  el.classList.add('pmd-save-flash');
+  const id = window.setTimeout(() => {
+    flashTimers.delete(el);
+    el.textContent = el.dataset['flashOrig'] ?? '';
+    delete el.dataset['flashOrig'];
+    el.classList.remove('pmd-save-flash');
+  }, FLASH_DURATION_MS);
+  flashTimers.set(el, id);
+}
+
+/** Flash the save button (always) and the autosave button (when
+ *  on). Both manual saves and autosaves call this. */
+function flashSaveSuccess(): void {
+  flashSavedGlyph(exportBtn);
+  if (autosaveBtn && settings.get('autosaveEnabled')) {
+    flashSavedGlyph(autosaveBtn);
+  }
+}
+
+// ─── Autosave ──────────────────────────────────────────────────────
+// Debounced ~5s after the last doc-changing edit. Only fires for
+// `.cmir` files with an existing on-disk handle and a host that
+// supports in-place saves. `.docx` is skipped because `toDocx` is
+// expensive enough that per-edit autosaves would visibly stutter
+// the editor on large debate files.
+
+const AUTOSAVE_DELAY_MS = 5000;
+let autosaveTimer: number | null = null;
+
+/** Called from every view's `dispatchTransaction` when `tx.docChanged`
+ *  is true. Re-arms the debounce timer if autosave is enabled.
+ *  Cheap; no-ops when the setting is off so the call site can fire
+ *  unconditionally. */
+export function notifyEditForAutosave(): void {
+  if (!settings.get('autosaveEnabled')) return;
+  if (autosaveTimer !== null) window.clearTimeout(autosaveTimer);
+  autosaveTimer = window.setTimeout(() => {
+    autosaveTimer = null;
+    void runAutosaveAttempt();
+  }, AUTOSAVE_DELAY_MS);
+}
+
+async function runAutosaveAttempt(): Promise<void> {
+  if (!settings.get('autosaveEnabled')) return;
+  const file = activeFile();
+  // Autosave only saves `.cmir` files. The toDocx path is too
+  // expensive for background firing; users keep manual control
+  // over when docx files hit disk.
+  if (file.format !== 'cmir' || !file.handle) return;
+  if (!getHost().supportsInPlaceSave) return;
+  try {
+    const bytes = await serializeForSave('cmir', {
+      includeComments: true,
+      includeAnalytics: true,
+      includeUndertags: true,
+      readMode: false,
+    });
+    await getHost().saveExisting(file.handle, bytes);
+    flashSaveSuccess();
+  } catch (err) {
+    // Autosave failures are noisy if we alert(); the user will
+    // notice manual saves failing if anything's actually broken.
+    console.warn('Autosave failed:', err);
+  }
+}
+
+// ─── Autosave button wiring ────────────────────────────────────────
+
+/** Update the autosave button's pressed state + tooltip based on
+ *  the current setting and the active file's format. The button
+ *  stays pressed regardless of whether autosave is actually firing
+ *  (the user's preference is sovereign), but the tooltip clarifies
+ *  when autosave is on but inert (docx file, brand-new doc, etc.). */
+function refreshAutosaveBtn(): void {
+  if (!autosaveBtn) return;
+  const on = settings.get('autosaveEnabled');
+  autosaveBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  if (!on) {
+    autosaveBtn.title = 'Autosave is off — click to turn on';
+    return;
+  }
+  const file = activeFile();
+  if (file.format === 'cmir' && file.handle) {
+    autosaveBtn.title = 'Autosave is on — saves to .cmir every few seconds after edits';
+  } else if (file.format === 'docx') {
+    autosaveBtn.title =
+      'Autosave is on, but only fires for .cmir files (this doc is .docx). ' +
+      'Save As to .cmir to enable.';
+  } else {
+    autosaveBtn.title =
+      'Autosave is on, but this doc has not been saved yet. Save once to enable.';
+  }
+}
+
+if (autosaveBtn) {
+  autosaveBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  autosaveBtn.addEventListener('click', () => {
+    settings.set('autosaveEnabled', !settings.get('autosaveEnabled'));
+  });
+  // Initial state + live updates as the setting / focused doc changes.
+  refreshAutosaveBtn();
+  settings.subscribe(() => refreshAutosaveBtn());
+}
 
 // ─── Native menu wiring (Electron only) ────────────────────────────
 // When running inside the Electron shell, the menu bar's File items

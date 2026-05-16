@@ -127,6 +127,13 @@ export interface Settings {
    *  false-positive squiggles. Users who prefer the safety net can
    *  flip it on. */
   editorSpellcheck: boolean;
+  /** Whether autosave is on. When true, doc-changing edits schedule
+   *  a background write-back to the file's existing on-disk
+   *  location, debounced by ~5s of idle. Only fires for `.cmir`
+   *  documents (native format serialization is cheap); `.docx`
+   *  files are skipped because `toDocx` is expensive enough that
+   *  per-keystroke autosaves would visibly stutter the editor. */
+  autosaveEnabled: boolean;
   /** Whether the user can click-and-drag selected text to move it to
    *  another position. On by default (matches PM / browser default).
    *  Turning this off suppresses the browser's `dragstart` on the
@@ -459,6 +466,11 @@ const DEFAULTS: Settings = {
   navMaxLevel: 3,
   showCitePreview: true,
   editorSpellcheck: false,
+  // Default OFF — autosave is meaningful only when the user has
+  // saved at least once (so we have a handle) AND the doc is in
+  // .cmir format. We let the user opt in via the ribbon toggle
+  // rather than silently saving in the background.
+  autosaveEnabled: false,
   // Default OFF — the user reported that PM's native click-and-drag
   // of arbitrary selected text sometimes produces a doc edit that
   // can't be cleanly undone, and they'd rather lose the feature
@@ -912,6 +924,7 @@ function sanitize(s: Settings): Settings {
     navMaxLevel: clamp(Math.round(s.navMaxLevel), 1, 4),
     showCitePreview: !!s.showCitePreview,
     editorSpellcheck: !!s.editorSpellcheck,
+    autosaveEnabled: !!s.autosaveEnabled,
     // Default to `false` when missing — matches the persisted
     // default. Saved settings from before this option existed
     // explicitly opt out of text drag, since the inconsistent-undo
