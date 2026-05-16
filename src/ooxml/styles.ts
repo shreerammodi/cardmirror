@@ -333,10 +333,18 @@ export const PSTYLE_TO_NODE: Record<string, string> = {
   Undertag: 'undertag',
 };
 
-/** Reverse: docx rStyle styleId → schema mark name. */
+/** Reverse: docx rStyle styleId → schema mark name.
+ *
+ *  `StyleUnderline` is the canonical Verbatim styleId for the named
+ *  Underline character style. `Underline` is the legacy/alias styleId
+ *  some non-Verbatim tools emit (and stylepox-cross-contaminated docs
+ *  pick up); same semantic, just a different identifier. Treat both
+ *  as underline_mark on import — the exporter normalizes back to
+ *  `StyleUnderline`. */
 export const RSTYLE_TO_MARK: Record<string, string> = {
   Style13ptBold: 'cite_mark',
   StyleUnderline: 'underline_mark',
+  Underline: 'underline_mark',
   Emphasis: 'emphasis_mark',
   UndertagChar: 'undertag_mark',
   AnalyticChar: 'analytic_mark',
