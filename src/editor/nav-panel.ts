@@ -1350,7 +1350,7 @@ export class NavigationPanel {
     if (entry.id) {
       const target = this.view.dom.querySelector<HTMLElement>(`[data-id="${cssEscape(entry.id)}"]`);
       if (target) {
-        target.scrollIntoView({ behavior: 'auto', block: 'start' });
+        this.scrollTargetIntoView(target);
         return;
       }
     }
@@ -1361,8 +1361,56 @@ export class NavigationPanel {
     let el: Node | null = domAtPos.node;
     while (el && el.nodeType !== Node.ELEMENT_NODE) el = el.parentNode;
     if (el && (el as Element).scrollIntoView) {
-      (el as Element).scrollIntoView({ behavior: 'auto', block: 'start' });
+      this.scrollTargetIntoView(el as HTMLElement);
     }
+  }
+
+  /** Scroll `target` to the top of its scroll container, with a
+   *  multi-pass refine so `content-visibility: auto` cards between
+   *  current viewport and target materialize and revise their
+   *  layout before the final scroll position is committed.
+   *
+   *  The bug we're working around: cards have
+   *  `contain-intrinsic-height: auto 200px`. Subtrees that have
+   *  never rendered use the 200px placeholder; cumulative
+   *  estimates up to the target can be off by tens of pixels per
+   *  skipped subtree, so a single `scrollIntoView` on a large doc
+   *  lands slightly above or below the intended heading. Each
+   *  subsequent pass narrows the gap as the now-visible content
+   *  flips from intrinsic-size to actual-size.
+   *
+   *  We also briefly force the target's own subtree to visible so
+   *  the target's contribution to layout is accurate from frame 1
+   *  — the browser then has a concrete height to land on.
+   *  Three RAFs is more than enough for any reasonable doc. */
+  private scrollTargetIntoView(target: HTMLElement): void {
+    const prevContentVisibility = target.style.contentVisibility;
+    target.style.contentVisibility = 'visible';
+    // Read offsetHeight to force the materialization to flush
+    // before the first scrollIntoView call.
+    void target.offsetHeight;
+
+    target.scrollIntoView({ behavior: 'auto', block: 'start' });
+
+    let pass = 1;
+    const refine = (): void => {
+      if (!target.isConnected) {
+        target.style.contentVisibility = prevContentVisibility;
+        return;
+      }
+      target.scrollIntoView({ behavior: 'auto', block: 'start' });
+      pass++;
+      if (pass < 3) {
+        requestAnimationFrame(refine);
+      } else {
+        // Restore content-visibility. Target is now at top of
+        // viewport so it stays materialized regardless; the
+        // override was only needed for the early-pass position
+        // calculations.
+        target.style.contentVisibility = prevContentVisibility;
+      }
+    };
+    requestAnimationFrame(refine);
   }
 }
 
