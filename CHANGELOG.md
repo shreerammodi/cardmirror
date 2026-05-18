@@ -57,6 +57,10 @@ internal refactors live in commit messages, not here.
   running no longer offers to "recover" the docs you have open
   in other windows. Only the first window of an app session
   surfaces the startup-recovery sidebar.
+- The caret no longer hides behind the fixed ribbon (top) or
+  status bar (bottom) after Enter / arrow / new-heading actions.
+  The browser's auto-scroll-into-view now reserves space for both
+  fixed bars via `scroll-padding`.
 - Legacy Verbatim character-style ids are now recognized on import
   — pre-modern distributions used `StyleBoldUnderline` for the
   underline mark and `StyleStyleBold12pt` for the cite mark. Files
