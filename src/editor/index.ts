@@ -139,6 +139,8 @@ const autosaveBtn = document.getElementById('autosave-btn') as HTMLButtonElement
 const settingsBtn = document.getElementById('settings-btn') as HTMLButtonElement;
 const referenceBtn = document.getElementById('reference-btn') as HTMLButtonElement | null;
 const readModeBtn = document.getElementById('read-mode-btn') as HTMLButtonElement;
+const navPaneToggleBtn = document.getElementById('nav-pane-toggle-btn') as HTMLButtonElement | null;
+const navPanePullTab = document.getElementById('nav-pane-pull-tab') as HTMLButtonElement | null;
 const insertImageBtn = document.getElementById('insert-image-btn') as HTMLButtonElement | null;
 // Speech-doc buttons. Only visible in multi-doc mode (CSS-gated on
 // `body.pmd-multi-doc`); the click handlers below route into the
@@ -1083,6 +1085,31 @@ if (cardMenuBtn) {
 readModeBtn.addEventListener('click', () => runRibbon('toggleReadMode'));
 wordCountBtn.addEventListener('click', () => runRibbon('wordCountSelection'));
 
+/** Push the current `navPaneVisible` setting into a body class so
+ *  the CSS rules at the top of style.css can hide/show the nav
+ *  pane (single-doc panel + multi-doc rail) + the left-edge pull-
+ *  tab. Called on boot and on every setting change. */
+function applyNavPaneVisible(visible: boolean): void {
+  document.body.classList.toggle('pmd-nav-hidden', !visible);
+  if (navPaneToggleBtn) {
+    navPaneToggleBtn.setAttribute('aria-pressed', visible ? 'true' : 'false');
+  }
+}
+if (navPaneToggleBtn) {
+  navPaneToggleBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  navPaneToggleBtn.addEventListener('click', () => {
+    settings.set('navPaneVisible', !settings.get('navPaneVisible'));
+  });
+}
+if (navPanePullTab) {
+  // Pull-tab is only ever shown when the nav pane is hidden;
+  // clicking it always re-shows.
+  navPanePullTab.addEventListener('click', () => {
+    settings.set('navPaneVisible', true);
+  });
+}
+applyNavPaneVisible(settings.get('navPaneVisible'));
+
 // Speech-doc buttons — multi-doc only (CSS hides them in
 // single-doc). All four route into the shell's ctx hooks. The new-
 // speech button uses ribbonContext directly because it works
@@ -1390,6 +1417,7 @@ let lastRibbonOverrides = settings.get('ribbonKeyOverrides');
 // setting changes (and once now to handle the persisted value).
 settings.subscribe((s) => {
   applyReadMode(s.readMode);
+  applyNavPaneVisible(s.navPaneVisible);
   applyZoom(s.zoomPct);
   applyDisplaySizes(s.displaySizes);
   applyDisplayTypography(s.displayTypography);

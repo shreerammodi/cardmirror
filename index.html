@@ -142,13 +142,16 @@
                   aria-pressed="false" title="Paste Text (F2) — when on, Ctrl/Cmd+V pastes as unformatted text">T</button>
         </div>
         <div id="view-ops-panel" class="ribbon-doc-ops-panel" role="group" aria-label="View tools">
-          <!-- View tools stacked vertically. Read mode toggle on top,
-               word-count selection-summary trigger below. Same 2-row
-               grid layout as the doc-ops panel so they line up. -->
+          <!-- View tools stacked vertically: read mode on top,
+               nav-pane toggle below. Word-count selection summary
+               lives on the status bar (next to the live read-aloud
+               counter) since they answer the same family of
+               question. -->
           <button id="read-mode-btn" class="ribbon-doc-ops-btn" type="button"
                   title="Read mode" aria-label="Read mode">👁</button>
-          <button id="word-count-btn" class="ribbon-doc-ops-btn" type="button"
-                  title="Word Count Selection" aria-label="Word count">Σ</button>
+          <button id="nav-pane-toggle-btn" class="ribbon-doc-ops-btn" type="button"
+                  aria-pressed="true" title="Show / hide the navigation pane"
+                  aria-label="Toggle nav pane">☰</button>
         </div>
         <div id="comments-ops-panel" class="ribbon-doc-ops-panel" role="group" aria-label="Comments">
           <!-- 💬 toggles the side column, + adds a comment to the
@@ -186,7 +189,11 @@
            width. -->
       <aside id="comments-column" class="pmd-comments-column" aria-label="Comments" hidden></aside>
     </main>
+    <button id="nav-pane-pull-tab" type="button"
+            title="Show navigation pane" aria-label="Show navigation pane">›</button>
     <div id="status-bar">
+      <button id="word-count-btn" class="status-bar-btn" type="button"
+              title="Word Count Selection" aria-label="Word count selection summary">Σ</button>
       <div id="word-count-display" class="status-segment" title="Read-aloud word count and read time">
         <span id="word-count-text">—</span>
       </div>

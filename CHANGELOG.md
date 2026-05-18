@@ -57,6 +57,17 @@ internal refactors live in commit messages, not here.
   running no longer offers to "recover" the docs you have open
   in other windows. Only the first window of an app session
   surfaces the startup-recovery sidebar.
+- The navigation pane can now be hidden. Three ways to toggle:
+  the new ☰ button in the View tools section of the ribbon, the
+  × close button in the top-right of the nav pane itself, and a
+  small pull-tab pinned to the left edge of the viewport (only
+  visible when the nav pane is hidden). State is per-window; in
+  multi-doc mode the toggle applies to all panes' nav at once.
+- The word-count selection button (Σ) moved off the ribbon to
+  the left edge of the status bar, next to the live read-aloud
+  word counter — same family of question, fewer ribbon buttons.
+- Zoom-strip controls (zoom in/out/reset + word-count) are
+  slightly smaller and stay centered on the bar.
 - Triple-click + drag now extends the selection paragraph-by-
   paragraph (instead of switching back to character-level on the
   first move). Matches Word and most browsers' contenteditable

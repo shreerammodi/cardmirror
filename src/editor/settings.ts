@@ -37,7 +37,16 @@ const STORAGE_KEY = 'pmd-settings';
  *  intent for the multi-window case. Autosave joins it for the
  *  same reason: a workflow toggle the user wants to control per
  *  doc, not a global preference. */
-const TRANSIENT_SETTING_KEYS = new Set<string>(['readMode', 'autosaveEnabled']);
+const TRANSIENT_SETTING_KEYS = new Set<string>([
+  'readMode',
+  'autosaveEnabled',
+  // Nav-pane visibility — the user might want the outline open in
+  // one window (a doc they're navigating heavily) and hidden in
+  // another (a doc they're reading). Per-window matches that
+  // intent; on the web edition there's only one tab so it's
+  // effectively a session preference.
+  'navPaneVisible',
+]);
 
 /** Reader profile for read-time estimates: name + words-per-minute. */
 export interface ReaderConfig {
@@ -167,6 +176,13 @@ export interface Settings {
    *  on-disk files always Save As in their current format — the
    *  handle wins over this default. */
   defaultSaveFormat: 'cmir' | 'docx';
+  /** Whether the navigation pane (outline) is visible in THIS
+   *  window. Default on. Toggled via the ribbon's nav-pane
+   *  button or the left-edge pull-tab that appears when the pane
+   *  is hidden. Transient: not persisted to disk, not propagated
+   *  to other windows — each window starts with the pane visible
+   *  and the user can hide it independently. */
+  navPaneVisible: boolean;
   /** When read mode is toggled (either direction), scroll the
    *  editor to the very top of the doc and place the cursor at
    *  the start. Default off — toggling read mode keeps the
@@ -553,6 +569,7 @@ const DEFAULTS: Settings = {
   defaultSpeechDocFolder: '',
   defaultSpeechDocFormat: 'docx',
   defaultSaveFormat: 'docx',
+  navPaneVisible: true,
   jumpToDocTopOnReadModeToggle: false,
   findResultsExpanded: false,
   findRememberLastQuery: false,
@@ -1148,6 +1165,11 @@ function sanitize(s: Settings): Settings {
       s.defaultSpeechDocFormat === 'cmir' ? 'cmir' : 'docx',
     defaultSaveFormat:
       s.defaultSaveFormat === 'cmir' ? 'cmir' : 'docx',
+    // navPaneVisible defaults to TRUE when missing — the user
+    // opens to an outline-visible window unless they've already
+    // dismissed it during the session (transient — see
+    // TRANSIENT_SETTING_KEYS).
+    navPaneVisible: s.navPaneVisible === false ? false : true,
     jumpToDocTopOnReadModeToggle: !!s.jumpToDocTopOnReadModeToggle,
     findResultsExpanded: !!s.findResultsExpanded,
     findRememberLastQuery:

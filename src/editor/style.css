@@ -823,6 +823,30 @@ body.pmd-host-browser #autosave-btn { display: none; }
   min-width: 0;
 }
 
+/* Status-bar buttons. Sized to the same vertical rhythm as the
+   zoom controls so the bar reads as a single coherent strip.
+   The fixed width/height + flex centering on the status bar
+   itself keep them vertically centered on the strip. */
+.status-bar-btn {
+  font-family: inherit;
+  background: var(--pmd-c-bg);
+  border: 1px solid var(--pmd-c-border);
+  border-radius: 3px;
+  cursor: pointer;
+  width: 1.15rem;
+  height: 1.15rem;
+  padding: 0;
+  font-size: 0.8rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pmd-c-text);
+}
+.status-bar-btn:hover {
+  background: var(--pmd-c-hover);
+}
+
 .status-spacer {
   flex: 1 1 auto;
 }
@@ -843,10 +867,10 @@ body.pmd-host-browser #autosave-btn { display: none; }
   border: 1px solid var(--pmd-c-border);
   border-radius: 3px;
   cursor: pointer;
-  width: 1.4rem;
-  height: 1.4rem;
+  width: 1.15rem;
+  height: 1.15rem;
   padding: 0;
-  font-size: 0.95rem;
+  font-size: 0.8rem;
   line-height: 1;
   display: inline-flex;
   align-items: center;
@@ -1302,6 +1326,57 @@ img[data-pmd-image].ProseMirror-selectednode,
 
 /* ---------------------------------------------- Navigation panel */
 
+/* When the user collapses the nav pane: hide the panel itself and
+   reclaim its width so `#app` (and the status bar, which both
+   inset from `--nav-width`) expand to the left. The pull-tab
+   below appears as the "bring it back" affordance. */
+body.pmd-nav-hidden .pmd-nav-panel,
+body.pmd-nav-hidden .pmd-multi-nav { display: none; }
+body.pmd-nav-hidden #app,
+body.pmd-nav-hidden #status-bar { margin-left: 0; left: 0; }
+body.pmd-nav-hidden #speech-doc-banner { left: 0; }
+/* Multi-doc layout sets `#app { margin-left: var(--nav-width) }`
+   with class-level specificity; override here to win. */
+body.pmd-nav-hidden.pmd-multi-doc #app { margin-left: 0; }
+
+/* Pull-tab — a thin sliver pinned to the left edge of the
+   viewport when the nav pane is hidden. Click to re-show. Kept
+   small and unobtrusive so it doesn't clutter the editor; users
+   who hide the pane usually don't want a permanent ribbon-y
+   thing in their face. */
+#nav-pane-pull-tab {
+  position: fixed;
+  left: 0;
+  /* Vertically centered on the viewport so it doesn't collide
+     with the speech-doc banner (multi-window) or the multi-doc
+     section title chips at the top of each nav section. */
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 150;
+  width: 14px;
+  height: 56px;
+  padding: 0;
+  background: var(--pmd-c-surface);
+  color: var(--pmd-c-text-muted);
+  border: 1px solid var(--pmd-c-border-soft);
+  border-left: none;
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  display: none;
+}
+body.pmd-nav-hidden #nav-pane-pull-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#nav-pane-pull-tab:hover {
+  background: var(--pmd-c-hover);
+  color: var(--pmd-c-text);
+}
+
 .pmd-nav-panel {
   background: var(--pmd-c-bg);
   border-right: 1px solid var(--pmd-c-border-soft);
@@ -1399,6 +1474,31 @@ body.pmd-nav-resize-active {
 
 .pmd-nav-level-btn-active:hover {
   background: var(--pmd-c-accent-hover);
+}
+
+/* Close (×) button in the nav-pane header. Sized to match the
+   level buttons' rhythm; sits at the right edge of the header
+   because the header's flex justifies space-between. */
+.pmd-nav-close {
+  flex: 0 0 auto;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--pmd-c-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pmd-nav-close:hover {
+  background: var(--pmd-c-hover);
+  color: var(--pmd-c-text);
+  border-color: var(--pmd-c-border-soft);
 }
 
 .pmd-nav-list {

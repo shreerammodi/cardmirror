@@ -146,6 +146,20 @@ export class NavigationPanel {
     }
     header.appendChild(levelGroup);
 
+    // Close × in the top-right — mirrors the ribbon's nav-pane
+    // toggle but lives where the user is already looking when
+    // they want to dismiss the outline.
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'pmd-nav-close';
+    closeBtn.textContent = '×';
+    closeBtn.title = 'Hide navigation pane';
+    closeBtn.setAttribute('aria-label', 'Hide navigation pane');
+    closeBtn.addEventListener('click', () => {
+      settings.set('navPaneVisible', false);
+    });
+    header.appendChild(closeBtn);
+
     this.root.appendChild(header);
     this.updateLevelButtonsActive();
 
