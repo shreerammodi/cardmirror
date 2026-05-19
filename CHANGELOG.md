@@ -6,6 +6,36 @@ internal refactors live in commit messages, not here.
 
 ## Unreleased
 
+- **Dark mode.** Settings → Appearance → Theme: Light / Dark /
+  System (default). System mode tracks the OS-level
+  `prefers-color-scheme` and switches live when the user changes
+  their system appearance. Sibling toggle, **Apply theme to the
+  document area**, defaults off — the chrome (ribbon, nav, status
+  bar, settings panels) follows the dark theme but the document
+  itself stays light / paper-like. Flip on for full dark. User
+  per-token color overrides win over either theme via inline
+  style on `<html>`.
+- **Accessibility settings section** (new tab, far right of the
+  Settings dialog).
+  - Highlight + shading display overrides moved here from
+    Appearance. Replaced the single-color picker with **1–3
+    ordered slots** that map to source colors by usage
+    frequency. Slot 1 → most-common color in the doc, slot 2 →
+    second-most-common, last slot = catch-all for everything
+    else. Frequency ranking is incremental + debounced, and
+    inactive when only one slot is set, so big docs don't pay
+    perf cost unless they're using the multi-color feature.
+  - **Per-token color overrides** panel: every UI color in the
+    interface (background, borders, accent, hover, status, find
+    decorations, table chrome, etc.) is overridable with a
+    color picker + alpha slider. Reset-per-row + reset-all
+    affordances. Overrides win over the active theme and any
+    future preset (high-contrast, colorblind-friendly, etc.).
+- **Cursor-position color readout** on the status bar. Visible
+  only when an override is on. Shows the ACTUAL stored colors on
+  the run at the cursor ("Hl: Yellow · Sh: Protected Grey") so
+  you don't lose awareness of what's encoded in the doc while
+  the override hides it from view.
 - New setting: **default file format for new docs**. Pick `.docx`
   (default — Word- / Verbatim-compatible) or `.cmir` (CardMirror's
   native format, enables autosave); the Save-As dialog defaults to

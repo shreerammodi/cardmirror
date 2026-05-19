@@ -200,6 +200,20 @@ export interface Settings {
   /** 1–3 hex/rgba colors mirroring `overrideHighlightSlots` for
    *  shading marks. */
   overrideShadingSlots: string[];
+  /** Theme. `'light'` and `'dark'` force the corresponding
+   *  palette. `'system'` (default) follows the OS-level
+   *  `prefers-color-scheme` and tracks live changes. Setting
+   *  resolves to the `data-theme` attribute on the document
+   *  root; CSS rules at `:root[data-theme="dark"]` (in style.css)
+   *  swap the `--pmd-c-*` token values. */
+  theme: 'light' | 'dark' | 'system';
+  /** Whether the active theme applies to the editor document
+   *  area too. Default OFF: the chrome (ribbon, nav, status bar)
+   *  follows the theme, but the document itself keeps a light /
+   *  paper-like surface — the configuration most people want
+   *  when running dark mode. Turn on to make the document area
+   *  follow the chrome theme as well. */
+  themeAppliesToDocument: boolean;
   /** Per-token UI color overrides. Keyed by CSS-variable name
    *  WITHOUT the `--` prefix (e.g. `"pmd-c-accent"`); values are
    *  CSS color strings the user picked in the accessibility
@@ -601,6 +615,8 @@ const DEFAULTS: Settings = {
   defaultSpeechDocFolder: '',
   defaultSpeechDocFormat: 'docx',
   defaultSaveFormat: 'docx',
+  theme: 'system',
+  themeAppliesToDocument: false,
   overrideHighlightColor: false,
   overrideHighlightSlots: ['#ffff00'],
   overrideShadingColor: false,
@@ -742,6 +758,7 @@ export interface SettingMeta {
     | 'color'
     | 'colorSlots'
     | 'colorOverrides'
+    | 'theme'
     | 'password'
     | 'clod'
     | 'aiCitePrompt'
@@ -876,6 +893,22 @@ export const SETTING_METADATA: SettingMeta[] = [
   },
 
   // ─── Appearance ─────────────────────────────────────────────────
+  {
+    key: 'theme',
+    label: 'Theme',
+    description:
+      "Light, dark, or follow the operating system's preference. System mode tracks OS-level changes live.",
+    kind: 'theme',
+    category: 'appearance',
+  },
+  {
+    key: 'themeAppliesToDocument',
+    label: 'Apply theme to the document area',
+    description:
+      "Off by default: when the theme is dark (or system-resolved dark), only the chrome — ribbon, nav, status bar — goes dark. The document area stays light, so cards still read like paper. Turn on to make the document itself follow the theme.",
+    kind: 'toggle',
+    category: 'appearance',
+  },
   {
     key: 'displaySizes',
     label: 'Style font sizes (pt)',
@@ -1246,6 +1279,9 @@ function sanitize(s: Settings): Settings {
       s.defaultSpeechDocFormat === 'cmir' ? 'cmir' : 'docx',
     defaultSaveFormat:
       s.defaultSaveFormat === 'cmir' ? 'cmir' : 'docx',
+    theme:
+      s.theme === 'light' || s.theme === 'dark' ? s.theme : 'system',
+    themeAppliesToDocument: !!s.themeAppliesToDocument,
     overrideHighlightColor: !!s.overrideHighlightColor,
     overrideHighlightSlots: sanitizeColorSlots(
       s.overrideHighlightSlots,

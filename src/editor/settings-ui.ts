@@ -302,6 +302,17 @@ class SettingsModal {
       checkbox.addEventListener('change', () => {
         settings.set(meta.key as 'showCitePreview', checkbox.checked as never);
       });
+      // Sync the checkbox visual state back to the setting on
+      // every settings change — covers the case where another
+      // subscriber rejects the toggle (e.g., the multi-doc
+      // workspace switch shows a confirm dialog and reverts when
+      // the user cancels; without this listener, the checkbox
+      // visually stays flipped even though the setting reverted).
+      const unsub = settings.subscribe(() => {
+        const cur = !!settings.get(meta.key);
+        if (checkbox.checked !== cur) checkbox.checked = cur;
+      });
+      onDetached(checkbox, () => unsub());
       label.appendChild(checkbox);
     } else if (meta.kind === 'readers') {
       // Description above, list editor below — different shape from
@@ -354,6 +365,10 @@ class SettingsModal {
     } else if (meta.kind === 'colorSlots') {
       row.appendChild(text);
       row.appendChild(buildColorSlotsEditor(meta.key as keyof Settings));
+      return row;
+    } else if (meta.kind === 'theme') {
+      row.appendChild(text);
+      row.appendChild(buildThemeEditor());
       return row;
     } else if (meta.kind === 'colorOverrides') {
       row.appendChild(text);
@@ -1093,6 +1108,37 @@ function buildColorEditor(key: string): HTMLElement {
   });
 
   refreshActive();
+  return wrap;
+}
+
+/** Theme selector — light / dark / system. Renders as a small
+ *  segmented control. */
+function buildThemeEditor(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'pmd-theme-editor';
+  const options: { value: 'light' | 'dark' | 'system'; label: string }[] = [
+    { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
+    { value: 'system', label: 'System' },
+  ];
+  for (const o of options) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pmd-theme-editor-btn';
+    btn.textContent = o.label;
+    btn.dataset['value'] = o.value;
+    btn.addEventListener('click', () => settings.set('theme', o.value));
+    wrap.appendChild(btn);
+  }
+  function refresh(): void {
+    const cur = settings.get('theme');
+    for (const btn of wrap.querySelectorAll<HTMLButtonElement>('.pmd-theme-editor-btn')) {
+      btn.setAttribute('aria-pressed', btn.dataset['value'] === cur ? 'true' : 'false');
+    }
+  }
+  refresh();
+  const unsub = settings.subscribe(refresh);
+  onDetached(wrap, () => unsub());
   return wrap;
 }
 

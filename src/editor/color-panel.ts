@@ -323,9 +323,17 @@ function buildFontColorControl(): ColorControlSetup {
       const bar = document.getElementById('fontcolor-bar');
       const glyph = document.getElementById('fontcolor-glyph');
       const v = settings.get('lastFontColor');
-      const display = v ?? '000000';
-      if (bar) bar.style.background = `#${display}`;
-      if (glyph) glyph.style.color = `#${display}`;
+      // No explicit color picked ("Automatic") — show the
+      // theme's default text color so the A is readable in both
+      // light and dark mode. Otherwise show the chosen color.
+      if (bar) bar.style.background = `#${v ?? '000000'}`;
+      if (glyph) {
+        if (v) {
+          glyph.style.color = `#${v}`;
+        } else {
+          glyph.style.color = '';
+        }
+      }
     },
   };
 }
