@@ -6111,13 +6111,18 @@ html.pmd-emphasis-box .pmd-pane-editor .pmd-emphasis {
 .pmd-timer-prep-time {
   font-variant-numeric: tabular-nums;
 }
-#ribbon .pmd-timer-aff {
+/* Aff blue / Neg red. Specificity has to beat
+   `#ribbon .pmd-timer-panel button` (1,1,1) so include
+   `button.X` to bring this to (1,2,1) — otherwise the base
+   `color: var(--pmd-c-text)` wins and the buttons appear in
+   the default text color. */
+#ribbon .pmd-timer-panel button.pmd-timer-aff {
   color: var(--pmd-c-aff, #1e6fcc);
   border-color: var(--pmd-c-aff, #1e6fcc);
   grid-column: 5;
   grid-row: 1;
 }
-#ribbon .pmd-timer-neg {
+#ribbon .pmd-timer-panel button.pmd-timer-neg {
   color: var(--pmd-c-neg, #c53030);
   border-color: var(--pmd-c-neg, #c53030);
   grid-column: 5;
@@ -6132,9 +6137,16 @@ html.pmd-emphasis-box .pmd-pane-editor .pmd-emphasis {
    - 'both' (default): A: / N: prefix + blue / red color.
    - 'text': prefix present, colors stripped back to the
      default text + border tokens.
-   - 'color': prefix hidden, colors remain. */
+   - 'color': prefix hidden, colors remain. Buttons can also
+     shrink horizontally — no prefix means no need to reserve
+     the extra ~0.8rem for "A: ". */
 #ribbon .pmd-timer-panel[data-prep-label="color"] .pmd-timer-prep-prefix {
   display: none;
+}
+#ribbon .pmd-timer-panel[data-prep-label="color"] button.pmd-timer-aff,
+#ribbon .pmd-timer-panel[data-prep-label="color"] button.pmd-timer-neg {
+  min-width: 2.5rem;
+  padding: 0 0.25rem;
 }
 #ribbon .pmd-timer-panel[data-prep-label="text"] button.pmd-timer-aff,
 #ribbon .pmd-timer-panel[data-prep-label="text"] button.pmd-timer-neg {
