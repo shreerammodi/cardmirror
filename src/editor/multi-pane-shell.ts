@@ -1162,11 +1162,18 @@ class MultiPaneShell {
 
   /** Journal every DocRecord across every slot's stack. Called by
    *  the mode-switch flow before reloading so the post-reload
-   *  startup-recovery can rebuild the workspace in the new layout. */
+   *  startup-recovery can rebuild the workspace in the new layout.
+   *  Cancels each record's pending debounced timer first so the
+   *  explicit write we're about to fire isn't shadowed by a
+   *  redundant timer-driven write a few hundred ms later. */
   async journalAll(): Promise<void> {
     const tasks: Promise<void>[] = [];
     for (const id of SLOT_IDS) {
       for (const rec of this.slots[id].stack) {
+        if (rec.journalTimer !== null) {
+          window.clearTimeout(rec.journalTimer);
+          rec.journalTimer = null;
+        }
         tasks.push(runJournalForRecord(rec));
       }
     }

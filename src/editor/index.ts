@@ -3737,13 +3737,18 @@ async function handleModeSwitch(newValue: boolean): Promise<void> {
 }
 
 /** Journal every currently-open doc so the post-reload recovery
- *  flow can restore them in the new layout. */
+ *  flow can restore them in the new layout. Cancels the single-
+ *  doc debounce timer so a pending edit-driven write doesn't
+ *  fire alongside the explicit one. */
 async function journalAllForModeSwitch(): Promise<void> {
   if (multiDocActive && multiDocJournalAll) {
     await multiDocJournalAll();
     return;
   }
-  // Single-doc: write one journal for the current view.
+  if (journalTimer !== null) {
+    window.clearTimeout(journalTimer);
+    journalTimer = null;
+  }
   await runJournalWrite();
 }
 

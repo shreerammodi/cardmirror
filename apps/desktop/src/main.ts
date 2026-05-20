@@ -394,25 +394,58 @@ async function ensureJournalsDir(): Promise<void> {
   await fs.mkdir(journalsDir(), { recursive: true });
 }
 
-ipcMain.handle('host:write-journal', async (_event, entry: JournalEntryIpc) => {
+// Per-uid serialization tail. The renderer can dispatch two
+// `host:write-journal` invokes for the same uid in quick
+// succession (e.g. a debounced edit-driven write still in flight
+// when the mode-switch path fires `journalAll`). Two raw
+// `fs.writeFile` calls to the same path then race: the kernel
+// extends the file to fit whichever write's tail comes second,
+// producing a JSON-then-garbage file that the recovery reader
+// throws out as corrupt. Chaining writes for a given uid onto
+// the previous one's settle keeps the on-disk file always valid.
+const journalWriteTails = new Map<string, Promise<void>>();
+
+ipcMain.handle('host:write-journal', (_event, entry: JournalEntryIpc) => {
   if (!entry || typeof entry.uid !== 'string' || !entry.uid) {
     throw new Error('host:write-journal: entry.uid is required.');
   }
-  await ensureJournalsDir();
-  const buf = bytesToBuffer(entry.bytes);
-  // Wrap the doc bytes in a small JSON envelope so the file is
-  // self-describing. base64 the doc bytes (cmir JSON text → b64 →
-  // ASCII string we can stick inside the outer JSON). Slight size
-  // overhead but keeps the file fully readable / inspectable.
-  const envelope = {
-    uid: entry.uid,
-    filename: entry.filename,
-    handle: entry.handle,
-    format: entry.format,
-    savedAt: entry.savedAt,
-    bytesB64: buf.toString('base64'),
-  };
-  await fs.writeFile(journalPathFor(entry.uid), JSON.stringify(envelope));
+  const previous = journalWriteTails.get(entry.uid) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(async () => {
+    await ensureJournalsDir();
+    const buf = bytesToBuffer(entry.bytes);
+    // Wrap the doc bytes in a small JSON envelope so the file is
+    // self-describing. base64 the doc bytes (cmir JSON text → b64 →
+    // ASCII string we can stick inside the outer JSON). Slight size
+    // overhead but keeps the file fully readable / inspectable.
+    const envelope = {
+      uid: entry.uid,
+      filename: entry.filename,
+      handle: entry.handle,
+      format: entry.format,
+      savedAt: entry.savedAt,
+      bytesB64: buf.toString('base64'),
+    };
+    // Atomic write: stage into a sibling .tmp file then rename
+    // over the real path. fs.rename is atomic on POSIX, so a
+    // crash mid-write can't leave a half-written real journal,
+    // and a concurrent reader either sees the previous valid
+    // file or the new one — never a torn mix.
+    const finalPath = journalPathFor(entry.uid);
+    const tmpPath = `${finalPath}.tmp`;
+    await fs.writeFile(tmpPath, JSON.stringify(envelope));
+    await fs.rename(tmpPath, finalPath);
+  });
+  journalWriteTails.set(entry.uid, next);
+  // GC the chain entry when this write settles, so the map
+  // doesn't grow forever across long sessions. Only clear if
+  // we're still the tail — a later write may have already
+  // chained onto us.
+  void next.finally(() => {
+    if (journalWriteTails.get(entry.uid) === next) {
+      journalWriteTails.delete(entry.uid);
+    }
+  });
+  return next;
 });
 
 ipcMain.handle('host:read-journals', async () => {
