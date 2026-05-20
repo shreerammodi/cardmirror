@@ -78,6 +78,53 @@ const pendingInitialDocs = new Map<number, InitialDocPayload>();
  *  and useless. */
 let firstWindowId: number | null = null;
 
+/** A file path the OS asked us to open during the brief window
+ *  between process start and `app.whenReady()`. macOS fires
+ *  `open-file` very early (before whenReady) when the user
+ *  double-clicks a registered .docx/.cmir, so we stash the
+ *  path here and consume it inside the `whenReady` handler
+ *  instead of dropping it on the floor. Cleared once consumed. */
+let pendingLaunchFile: string | null = null;
+
+/** Pick the first argv element that looks like one of our
+ *  associated file types. Used for Windows / Linux launches —
+ *  the OS passes the clicked file as a regular CLI argument
+ *  rather than firing a dedicated event the way macOS does. */
+function pickFileFromArgv(argv: readonly string[]): string | null {
+  for (const a of argv) {
+    if (typeof a !== 'string') continue;
+    const lower = a.toLowerCase();
+    if (lower.endsWith('.cmir') || lower.endsWith('.docx')) return a;
+  }
+  return null;
+}
+
+/** Read a file from disk and spawn a fresh window with it as
+ *  the initial doc. Used by the OS-driven open paths (macOS
+ *  `open-file`, Windows / Linux argv at launch or
+ *  second-instance). Spawning a new window per externally-
+ *  opened file mirrors VS Code / Word behavior — avoids
+ *  fighting with whatever's loaded in the focused window. */
+async function openExternalFile(filePath: string): Promise<void> {
+  try {
+    const buf = await fs.readFile(filePath);
+    const name = path.basename(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const format: 'cmir' | 'docx' | null =
+      ext === '.cmir' ? 'cmir' : ext === '.docx' ? 'docx' : null;
+    if (!format) return;
+    createWindow({
+      filename: name,
+      bytes: new Uint8Array(buf),
+      handle: filePath,
+      format,
+      uid: null,
+    });
+  } catch (err) {
+    console.warn('Failed to open external file:', filePath, err);
+  }
+}
+
 /** Per-window allow-list for the next `close` event. The window
  *  close interception forwards the close to the renderer for
  *  confirmation; once the renderer has decided the window should
@@ -774,9 +821,57 @@ function startAutoUpdate(): void {
 
 // ─── App lifecycle ─────────────────────────────────────────────────
 
+// Single-instance lock so OS double-clicks of `.cmir` / `.docx`
+// don't spawn a second copy of the app. If we don't hold the
+// lock, a previous CardMirror process is already running and
+// will receive the file path via the `second-instance` event
+// below — bail out of this process cleanly.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  // Another instance was launched (typically by the OS handing
+  // us a file via "Open with"). Argv contains the new instance's
+  // command line; mine the file path out of it and open it in a
+  // new window of the existing app.
+  app.on('second-instance', (_event, argv) => {
+    const filePath = pickFileFromArgv(argv);
+    if (filePath) void openExternalFile(filePath);
+    // Pull the user's attention back to a window so they see the
+    // newly-opened doc (or at least the existing app) on top.
+    const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
+}
+
+// macOS fires `open-file` for Finder double-clicks of registered
+// extensions. It can fire BEFORE `app.whenReady()`, so stash the
+// path and consume it inside whenReady if we're not ready yet.
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  if (app.isReady()) {
+    void openExternalFile(filePath);
+  } else {
+    pendingLaunchFile = filePath;
+  }
+});
+
 void app.whenReady().then(() => {
   Menu.setApplicationMenu(buildMenu());
-  createWindow();
+  // Decide what to mount on first launch:
+  //   - macOS `open-file` already arrived → that file
+  //   - Win / Linux: scan argv for a file path → that file
+  //   - Otherwise: empty starter window
+  const launchFile = pendingLaunchFile ?? pickFileFromArgv(process.argv);
+  pendingLaunchFile = null;
+  if (launchFile) {
+    void openExternalFile(launchFile);
+  } else {
+    createWindow();
+  }
   startAutoUpdate();
 
   app.on('activate', () => {

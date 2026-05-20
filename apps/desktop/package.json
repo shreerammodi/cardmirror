@@ -38,6 +38,20 @@
         "filter": ["**/*"]
       }
     ],
+    "fileAssociations": [
+      {
+        "ext": "docx",
+        "name": "Word Document",
+        "description": "Microsoft Word document",
+        "role": "Editor"
+      },
+      {
+        "ext": "cmir",
+        "name": "CardMirror Document",
+        "description": "CardMirror native document",
+        "role": "Editor"
+      }
+    ],
     "mac": {
       "category": "public.app-category.productivity",
       "target": [

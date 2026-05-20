@@ -31,6 +31,17 @@ internal refactors live in commit messages, not here.
   when installed; remaining groups are "Microsoft Office
   defaults", "Apple defaults", "Open-source / cross-platform",
   and "Generic". Groups whose fonts aren't available are hidden.
+- **"Open with CardMirror" actually opens the file on desktop.**
+  `.docx` and `.cmir` are now registered file associations in the
+  electron-builder config, so the installers wire up CardMirror
+  as a right-click "Open with…" target (and as the default-app
+  candidate for both extensions). The main process gained a
+  single-instance lock plus open-file / second-instance / argv
+  handling so double-clicking a registered file in Finder /
+  Explorer / a file manager opens that file in CardMirror —
+  spawning a new window when the app is already running, or
+  launching directly into the file if the app wasn't open. Web
+  edition unchanged.
 - **Built-in countdown timer.** Native replacement for Verbatim's
   bundled timer. New ⏱ button in the right side of the ribbon
   (next to ⚙) toggles a timer panel into the ribbon's left edge.
