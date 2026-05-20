@@ -561,6 +561,19 @@ html:has(body.pmd-speech-banner-visible) {
   height: 1.45rem;
   font-size: 0.85rem;
 }
+/* Timer toggle button — sits beside the settings/reference stack
+   in ribbon-right. Sized to match the stack's combined height
+   so it reads as a peer of the stack rather than a smaller
+   floating chip. */
+#ribbon #timer-toggle-btn {
+  width: 1.6rem;
+  height: 2.92rem;
+  font-size: 0.95rem;
+}
+#ribbon #timer-toggle-btn[aria-pressed="true"] {
+  background: var(--pmd-c-accent);
+  color: var(--pmd-c-text-on-accent);
+}
 
 #ribbon button:disabled {
   opacity: 0.5;
@@ -5978,15 +5991,17 @@ html.pmd-emphasis-box .pmd-pane-editor .pmd-emphasis {
 .pmd-timer-panel button {
   background: var(--pmd-c-bg);
   border: 1px solid var(--pmd-c-border);
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
   font-family: inherit;
   font-weight: 600;
+  font-size: 0.78rem;
   color: var(--pmd-c-text);
-  padding: 0;
+  padding: 0 0.3rem;
+  line-height: 1;
 }
 .pmd-timer-panel button:hover:not(:disabled) {
-  background: var(--pmd-c-surface);
+  background: var(--pmd-c-hover);
 }
 
 /* Reset — col 1, both rows. Vertical text reads bottom-to-top. */
@@ -5995,26 +6010,29 @@ html.pmd-emphasis-box .pmd-pane-editor .pmd-emphasis {
   grid-row: 1 / span 2;
   writing-mode: vertical-rl;
   transform: rotate(180deg);
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  padding: 0.4rem 0.2rem;
-  min-width: 1.6rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  padding: 0.3rem 0.1rem;
+  min-width: 1.2rem;
 }
 
-/* Big speech-timer display — col 2, both rows. */
+/* Big speech-timer display — col 2, both rows. Stays the largest
+   element in the panel since it's the round-clock readout, but
+   scaled to the ribbon's own typography so the panel doesn't
+   over-dominate. */
 .pmd-timer-display {
   grid-column: 2;
   grid-row: 1 / span 2;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 7rem;
-  padding: 0 0.6rem;
+  min-width: 4rem;
+  padding: 0 0.5rem;
   border: 1px solid var(--pmd-c-border);
-  border-radius: 4px;
+  border-radius: 3px;
   background: var(--pmd-c-bg);
   color: var(--pmd-c-text);
-  font-size: 2.1rem;
+  font-size: 1.45rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
@@ -6030,8 +6048,7 @@ html.pmd-emphasis-box .pmd-pane-editor .pmd-emphasis {
 .pmd-timer-start {
   grid-column: 3;
   grid-row: 1;
-  font-size: 0.95rem;
-  min-width: 2rem;
+  min-width: 1.6rem;
 }
 .pmd-timer-start[aria-pressed="true"] {
   background: var(--pmd-c-accent);
@@ -6040,30 +6057,25 @@ html.pmd-emphasis-box .pmd-pane-editor .pmd-emphasis {
 
 /* Presets — col 4 row 1 (9), col 3 row 2 (6), col 4 row 2 (3). */
 .pmd-timer-preset {
-  font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
-  min-width: 2rem;
+  min-width: 1.6rem;
 }
 #timer-preset-1-btn { grid-column: 4; grid-row: 1; }
 #timer-preset-2-btn { grid-column: 3; grid-row: 2; }
 #timer-preset-3-btn { grid-column: 4; grid-row: 2; }
 
-/* Prep buttons — col 5. Aff on row 1 (blue), Neg on row 2 (red). */
+/* Prep buttons — col 5. Aff on row 1 (blue), Neg on row 2 (red).
+   Single-line "A: 10:00" / "N: 10:00" — the time span just
+   carries tabular-nums so digits don't jitter as they tick. */
 .pmd-timer-prep {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 4rem;
-  padding: 0.15rem 0.4rem;
-  line-height: 1.1;
-}
-.pmd-timer-prep-label {
-  font-size: 0.65rem;
-  letter-spacing: 0.1em;
+  gap: 0.15rem;
+  min-width: 3.2rem;
+  padding: 0 0.35rem;
 }
 .pmd-timer-prep-time {
-  font-size: 0.95rem;
   font-variant-numeric: tabular-nums;
 }
 .pmd-timer-aff {

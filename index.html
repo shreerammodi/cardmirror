@@ -192,9 +192,13 @@
         <!-- Settings on top, reference (keyboard-shortcut cheat sheet)
              below — stacked like the doc-ops / view-ops panels on
              the left so the chrome reads as one consistent grid. -->
+        <!-- Timer toggle sits OUTSIDE the right-stack so it lands
+             beside the settings button instead of stacked above
+             it. Aligned to the stack's vertical center by the
+             flex on `ribbon-right`. -->
+        <button id="timer-toggle-btn" class="ribbon-right-side-btn" type="button" aria-pressed="false"
+                title="Show / hide the timer panel" aria-label="Toggle timer panel">⏱</button>
         <div class="ribbon-right-stack">
-          <button id="timer-toggle-btn" type="button" aria-pressed="false"
-                  title="Show / hide the timer panel" aria-label="Toggle timer panel">⏱</button>
           <button id="settings-btn" type="button" title="Settings" aria-label="Settings">⚙</button>
           <button id="reference-btn" type="button" title="Keyboard shortcuts" aria-label="Keyboard shortcuts">📖</button>
         </div>

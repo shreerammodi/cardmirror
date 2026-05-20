@@ -1691,7 +1691,19 @@ function initRibbonResizer(): void {
       reflowing = false;
     }
   }
-  new ResizeObserver(reflow).observe(ribbon);
+  const observer = new ResizeObserver(reflow);
+  observer.observe(ribbon);
+  // ALSO observe the elements whose visibility can change while
+  // the ribbon's own width stays constant (window-driven). When
+  // the user toggles the timer panel or the doc-name chip, the
+  // ribbon's `scrollWidth` jumps but `clientWidth` doesn't, so a
+  // ribbon-only observer never fires. Observing these specific
+  // elements catches the show / hide → 0 ↔ N transition and
+  // re-runs the cascade.
+  for (const id of ['timer-panel', 'doc-name-chip']) {
+    const el = document.getElementById(id);
+    if (el) observer.observe(el);
+  }
   reflow();
 }
 initRibbonResizer();

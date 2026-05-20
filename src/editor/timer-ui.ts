@@ -93,15 +93,9 @@ export function mountTimerUI(): void {
     <button id="timer-preset-3-btn" class="pmd-timer-preset" type="button"
             data-preset-index="2"></button>
     <button id="timer-aff-btn" class="pmd-timer-prep pmd-timer-aff" type="button"
-            aria-label="Affirmative prep">
-      <span class="pmd-timer-prep-label">AFF</span>
-      <span class="pmd-timer-prep-time" id="timer-aff-time">10:00</span>
-    </button>
+            aria-label="Affirmative prep">A: <span class="pmd-timer-prep-time" id="timer-aff-time">10:00</span></button>
     <button id="timer-neg-btn" class="pmd-timer-prep pmd-timer-neg" type="button"
-            aria-label="Negative prep">
-      <span class="pmd-timer-prep-label">NEG</span>
-      <span class="pmd-timer-prep-time" id="timer-neg-time">10:00</span>
-    </button>
+            aria-label="Negative prep">N: <span class="pmd-timer-prep-time" id="timer-neg-time">10:00</span></button>
   `;
 
   const display = document.getElementById('timer-display') as HTMLDivElement;
