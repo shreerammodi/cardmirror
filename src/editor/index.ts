@@ -1671,6 +1671,13 @@ function initRibbonResizer(): void {
     ['comments-ops-panel'],      // (h) Comments toggle + add-comment.
     ['open-btn', 'new-btn',      // (i) File ops: open, new, save,
      'export-btn', 'autosave-btn'], //     autosave-toggle.
+    ['view-ops-panel'],          // (j) Read mode + nav-pane toggle.
+    ['settings-btn',             // (k) Settings + keyboard-shortcuts
+     'reference-btn'],           //     reference. Genuinely last —
+                                 //     reaching them requires user
+                                 //     intent and they don't compete
+                                 //     for ribbon real estate during
+                                 //     normal editing.
   ];
   let hideCount = 0;
   function setVisible(idx: number, visible: boolean): void {
