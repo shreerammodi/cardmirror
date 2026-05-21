@@ -41,9 +41,16 @@ jobs:
         run: npm --prefix apps/desktop ci
 
       - name: Build desktop installer
-        # `dist` builds without publishing; `release` would push to
-        # GitHub Releases via GH_TOKEN, which we don't want here.
-        run: npm --prefix apps/desktop run dist
+        # `dist` runs `electron-builder` with no explicit publish
+        # flag. electron-builder's default in CI is to try to
+        # publish whenever the package.json has a `publish` block
+        # configured — which ours does (for the tag-triggered
+        # release.yml). On workflow_dispatch we don't want to
+        # publish anything; pass `--publish never` to short-
+        # circuit. The trailing `--` flows through the
+        # `npm run` → `dist` → `electron-builder` chain because
+        # the script ends with a bare `electron-builder` call.
+        run: npm --prefix apps/desktop run dist -- --publish never
 
       - name: Upload macOS dmg artifacts
         uses: actions/upload-artifact@v4
