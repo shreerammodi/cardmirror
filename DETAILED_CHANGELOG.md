@@ -238,6 +238,23 @@ in each release, see `CHANGELOG.md`.
   scope. Per-token Accessibility-panel overrides of `--pmd-c-bg`
   still win because the rule uses the token, not a literal hex.
 
+- **Multi-pane "Dark chrome, light document" stays white across the
+  full scroll, not just the first viewport.** Follow-up to the fix
+  above: in multi-pane mode, the per-pane editor surface
+  (`.pmd-pane-editor`) is sized `height: 100%` of its parent
+  `.pmd-pane-body` — which is the `overflow-y: auto` scroller
+  bounded to the pane's viewport. So `.pmd-pane-editor`'s painted
+  white box only covers the visible viewport portion;
+  ProseMirror content overflows past that box, and the dark
+  `.pmd-pane-body` showed through under the overflowed content as
+  the user scrolled down. Painted `.pmd-pane-body` itself white
+  in the same dark-chrome-light-doc rule scope so the scroller's
+  background covers the full scrollable extent (container
+  backgrounds in `overflow: auto` paint behind the visible viewport
+  at every scroll position). Single-doc isn't affected — `body` is
+  its scroller and the `#editor` paint plus its existing flex
+  layout already cover it.
+
 - **Nav pane reads in solid white in dark mode.** The per-level grey
   cascade (level-4 → `--pmd-c-text-muted`, level-1/2/3 → inherited
   body text) and the analytic-blue label (`--pmd-color-analytic`)

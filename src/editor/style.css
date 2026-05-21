@@ -517,6 +517,22 @@ button {
   --pmd-c-link: #0563C1;
 }
 
+/* Companion rule: paint the per-pane scroller white in multi-pane
+   dark-chrome-light-doc mode. The editor-scope rule above paints
+   `.pmd-pane-editor`'s box, but `.pmd-pane-editor` is sized
+   `height: 100%` of its parent `.pmd-pane-body` (a viewport-tall
+   overflow:auto scroller), so its painted box only covers the
+   first viewport — ProseMirror content overflows past that box
+   and the dark `.pmd-pane-body` bg shows through as the user
+   scrolls down. Painting the scroller itself covers the full
+   scrollable extent because container backgrounds in overflow:
+   auto paint behind the visible viewport at every scroll position.
+   Single-doc isn't affected — `body` is its scroller and the
+   `#editor` paint plus existing layout already cover it. */
+:root[data-theme="dark"]:not([data-theme-doc="dark"]) .pmd-pane-body {
+  background: #fff;
+}
+
 /* Scroll-padding on the root scroll container so the browser's
    built-in caret-scroll-into-view (triggered on Enter / arrow keys
    / new heading insertion / etc.) doesn't park the caret behind

@@ -67,6 +67,10 @@ see `DETAILED_CHANGELOG.md`.
     the editor element had no background of its own and was
     showing the dark chrome's color through it, defeating
     the whole point of leaving "apply to document" off.
+  - Multi-pane in the same "Dark chrome, light document"
+    mode kept the white background only for the first viewport
+    when scrolling a long doc — the rest scrolled into dark.
+    Now stays white across the full scrollable extent.
 
 ## 0.1.0-alpha.2 — 2026-05-20
 
