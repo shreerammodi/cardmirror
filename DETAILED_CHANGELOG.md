@@ -221,39 +221,43 @@ in each release, see `CHANGELOG.md`.
   dark + on → editor link computes `rgb(122, 176, 255)`.
 
 - **"Dark chrome, light document" mode actually paints the document
-  area white.** The CSS rule that scopes light-mode-token redeclarations
-  inside `:is(#editor, .pmd-pane-editor)` under
+  area white, across the full scroll, in both single-doc and
+  multi-pane.** The CSS rule that scopes light-mode-token
+  redeclarations inside `:is(#editor, .pmd-pane-editor)` under
   `:root[data-theme="dark"]:not([data-theme-doc="dark"])` redefined
   `--pmd-c-bg: #fff` at the editor scope, but nothing in that rule
-  actually applied the token to the editor's own paint — `#editor` /
+  applied the token to the editor's own paint — `#editor` /
   `.pmd-pane-editor` carry no `background` declaration of their own,
   so they inherited body's `background: var(--pmd-c-bg)` which
   resolves to `#1a1a1a` in dark mode. The editor read as black-on-
   dark even though the user explicitly opted OUT of "Apply theme to
-  the document area." Added `background: var(--pmd-c-bg)` to the
-  same rule so the scoped `--pmd-c-bg: #fff` actually paints. The
-  body / ribbon / nav / status-bar chrome around the editor stays
-  dark because their backgrounds resolve `--pmd-c-bg` from the root
-  scope (`#1a1a1a`) — the redeclare only escapes into the editor
-  scope. Per-token Accessibility-panel overrides of `--pmd-c-bg`
-  still win because the rule uses the token, not a literal hex.
+  the document area." Two coordinated paints land the fix:
 
-- **Multi-pane "Dark chrome, light document" stays white across the
-  full scroll, not just the first viewport.** Follow-up to the fix
-  above: in multi-pane mode, the per-pane editor surface
-  (`.pmd-pane-editor`) is sized `height: 100%` of its parent
-  `.pmd-pane-body` — which is the `overflow-y: auto` scroller
-  bounded to the pane's viewport. So `.pmd-pane-editor`'s painted
-  white box only covers the visible viewport portion;
-  ProseMirror content overflows past that box, and the dark
-  `.pmd-pane-body` showed through under the overflowed content as
-  the user scrolled down. Painted `.pmd-pane-body` itself white
-  in the same dark-chrome-light-doc rule scope so the scroller's
-  background covers the full scrollable extent (container
-  backgrounds in `overflow: auto` paint behind the visible viewport
-  at every scroll position). Single-doc isn't affected — `body` is
-  its scroller and the `#editor` paint plus its existing flex
-  layout already cover it.
+  1. **`background: var(--pmd-c-bg)` on `:is(#editor, .pmd-pane-editor)`**
+     within the same scoped rule, so the scoped `--pmd-c-bg: #fff`
+     actually applies to the editor's box. This covers single-doc
+     entirely — `body` is its scroller, `#editor` sits inside the
+     flex layout, and `#editor`'s painted box extends with the
+     content.
+
+  2. **`background: #fff` on `.pmd-pane-body`** in the same scoped
+     rule. Multi-pane's per-pane editor surface (`.pmd-pane-editor`)
+     is sized `height: 100%` of its parent `.pmd-pane-body` — which
+     is the `overflow-y: auto` scroller bounded to the pane's
+     viewport. So `.pmd-pane-editor`'s painted white box only
+     covered the visible viewport portion; ProseMirror content
+     overflows past that box and the dark `.pmd-pane-body` showed
+     through under the overflowed content as the user scrolled.
+     Painting `.pmd-pane-body` itself covers the full scrollable
+     extent (container backgrounds in `overflow: auto` paint behind
+     the visible viewport at every scroll position).
+
+  The body / ribbon / nav / status-bar chrome around the editor
+  stays dark because their backgrounds resolve `--pmd-c-bg` from
+  the root scope (`#1a1a1a`) — the redeclare only escapes into the
+  editor scope. Per-token Accessibility-panel overrides of
+  `--pmd-c-bg` still win for single-doc because the `#editor`
+  paint uses the token, not a literal hex.
 
 - **Nav pane reads in solid white in dark mode.** The per-level grey
   cascade (level-4 → `--pmd-c-text-muted`, level-1/2/3 → inherited

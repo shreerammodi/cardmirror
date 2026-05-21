@@ -63,14 +63,12 @@ see `DETAILED_CHANGELOG.md`.
     inconsistent against the dark chrome.
   - "Dark chrome, light document" mode (dark theme with
     "Apply theme to the document area" OFF — the default)
-    now actually paints the document area white. Previously
-    the editor element had no background of its own and was
-    showing the dark chrome's color through it, defeating
-    the whole point of leaving "apply to document" off.
-  - Multi-pane in the same "Dark chrome, light document"
-    mode kept the white background only for the first viewport
-    when scrolling a long doc — the rest scrolled into dark.
-    Now stays white across the full scrollable extent.
+    now actually paints the document area white, across the
+    full scrollable extent in both single-doc and multi-pane.
+    Previously the editor surface had no background of its
+    own and showed the dark chrome's color through it,
+    defeating the whole point of leaving "apply to document"
+    off.
 
 ## 0.1.0-alpha.2 — 2026-05-20
 
