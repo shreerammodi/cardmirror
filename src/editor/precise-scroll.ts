@@ -47,6 +47,23 @@
 
 import type { EditorView } from 'prosemirror-view';
 
+/** Find the nearest scrolling-overflow ancestor of `el`. Returns the
+ *  element if one exists, or `null` to fall back to the viewport.
+ *  Used so the convergence check below anchors `desiredTop` to the
+ *  scroller's visible region instead of assuming the window scrolls
+ *  — which stopped being true in single-doc once `#app` became a
+ *  bounded scroller (see `style.css` `body:not(.pmd-multi-doc) #app`
+ *  rule), and was already false for multi-pane's `.pmd-pane-body`. */
+function nearestScroller(el: HTMLElement): HTMLElement | null {
+  let cur: HTMLElement | null = el.parentElement;
+  while (cur) {
+    const cs = getComputedStyle(cur);
+    if (cs.overflowY === 'auto' || cs.overflowY === 'scroll') return cur;
+    cur = cur.parentElement;
+  }
+  return null;
+}
+
 /** Max iterations for the refine loop. With force-materialize gone,
  *  the initial scroll uses cv:auto placeholder heights and may land
  *  imprecisely; expect 1–3 refine passes in the warm path, more
@@ -79,9 +96,18 @@ export function preciseScrollIntoView(
   target.scrollIntoView({ behavior: 'auto', block });
 
   // Where the target should be after a precise scroll, in viewport
-  // pixels. `block: 'start'` puts it at the top; `'center'` puts it
-  // at the vertical middle.
-  const desiredTop = block === 'center' ? window.innerHeight / 2 : 0;
+  // pixels. `block: 'start'` puts it at the top of the scroller's
+  // visible region; `'center'` puts it at the vertical middle.
+  // Both `getBoundingClientRect().top` (read below) and the scroller's
+  // own rect are viewport-relative, so the convergence check
+  // `Math.abs(rect.top - desiredTop)` works in either coordinate
+  // space. Falls back to viewport bounds when there's no scrolling
+  // ancestor (e.g., tests or DOM detached states).
+  const scroller = nearestScroller(target);
+  const sb = scroller
+    ? scroller.getBoundingClientRect()
+    : { top: 0, bottom: window.innerHeight };
+  const desiredTop = block === 'center' ? (sb.top + sb.bottom) / 2 : sb.top;
 
   let iterations = 1;
   const refine = (): void => {

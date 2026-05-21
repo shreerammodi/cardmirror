@@ -107,6 +107,12 @@ import { getHost, getElectronHost, type OpenedFile, type JournalEntry } from './
 document.body.classList.add('pmd-host-' + getHost().kind);
 
 const editorEl = document.getElementById('editor')!;
+/** Single-doc scroll container. `#app` is `position: fixed` +
+ *  `overflow-y: auto` in single-doc layout (see `style.css`) so it
+ *  owns the editor's scroll. Multi-pane has its own per-pane
+ *  scrollers (`.pmd-pane-body`); this reference is only meaningful
+ *  for single-doc paths (initial-mount reset, etc.). */
+const appEl = document.getElementById('app')!;
 
 /** Mousedown handler: when the user clicks below the rendered
  *  content of `view.dom` but still inside the editor wrapper, drop
@@ -2694,14 +2700,15 @@ function mountView(doc: PMNode, threads: Thread[] = []): void {
   // decoration set in their correct on/off state for the
   // persisted setting.
   applyReadMode(settings.get('readMode'));
-  // Reset scroll on both the nav pane and the page so a
-  // freshly-mounted doc starts at the top — single-doc's editor
-  // scrolls the page itself (not its own container), so window
-  // scroll is the right knob. Without this, opening one doc and
-  // then another lands you at whatever scroll position the
-  // previous doc was last in.
+  // Reset scroll on both the nav pane and the editor so a
+  // freshly-mounted doc starts at the top. Single-doc's scroll
+  // container is `#app` (`position: fixed` + `overflow-y: auto`);
+  // multi-pane has per-pane `.pmd-pane-body` scrollers that the
+  // shell already resets on its own. Without this, opening one
+  // doc and then another lands you at whatever scroll position
+  // the previous doc was last in.
   navPanel.scrollToTop();
-  window.scrollTo(0, 0);
+  appEl.scrollTop = 0;
 }
 
 /** Publish `#editor`'s current width as `--pmd-card-intrinsic-width`

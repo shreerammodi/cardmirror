@@ -7,6 +7,58 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Single-doc scroll container migrated from `body` to `#app`.**
+  Diagnosis: a multi-trace investigation (Mac Electron, Mac Chrome,
+  Linux Chrome, with and without `--enable-skia-graphite`) plus a
+  layer-tree audit on macOS pinned single-doc's continuous heavy
+  `UpdateLayer` cost during scrolling to the document being the
+  rootScroller. The DevTools Layers panel showed `#document` at
+  2206 × 558272 px, ~4.9 GB nominal memory, compositing reason
+  *"Is the document.rootScroller. Is a scrollable overflow element
+  using accelerated scrolling."* Every scroll position change
+  triggered a recomposition of that giant layer. Trace-data
+  signature: 10 big (>100 ms) `UpdateLayer` events spread across
+  a 13 s scroll session in single-doc vs. zero in multi-pane
+  (which already used the bounded `.pmd-pane-body` scroller).
+
+  Fix: scope a new `body:not(.pmd-multi-doc) #app` rule that pins
+  `#app` to the chrome-clipped viewport rectangle via
+  `position: fixed` (top/left/right/bottom set from the existing
+  `--ribbon-height` / `--nav-width` / `--status-bar-height`
+  tokens) and gives it `overflow-y: auto` + `overscroll-behavior:
+  contain`. The editor + comments column scroll *inside* `#app`;
+  `body` stops being the rootScroller; the composited scrollable
+  layer is bounded by `#app`'s viewport-sized box instead of the
+  doc-content height. Multi-doc layout is untouched — it has its
+  own `body.pmd-multi-doc #app` rule that already pins height and
+  manages overflow via per-pane `.pmd-pane-body` scrollers.
+
+  Companion changes:
+  - `body.pmd-speech-banner-visible:not(.pmd-multi-doc) #app` now
+    adjusts `top:` instead of `margin-top:` (multi-doc never
+    surfaces the banner, so this is single-doc-only).
+  - The dark-chrome-light-document background paint extends to
+    `#app` (was `.pmd-pane-editor` + `.pmd-pane-body` previously) —
+    container backgrounds in `overflow: auto` cover the full
+    scrollable extent at every scroll position, so any gap below
+    the editor's content extent now reads as light rather than
+    dark.
+  - `index.ts` reset path: `appEl.scrollTop = 0` replaces
+    `window.scrollTo(0, 0)` in the doc-open scroll-to-top sequence.
+  - `precise-scroll.ts` `desiredTop` now reads from the nearest
+    scrolling-overflow ancestor's `getBoundingClientRect()` instead
+    of `window.innerHeight`. Falls back to viewport bounds when
+    no scroller is found (tests, detached nodes). This keeps the
+    convergence math working across single-doc (`#app`), multi-pane
+    (`.pmd-pane-body`), and any future container.
+
+  Verified end-to-end: typecheck + 683 tests pass. Most scroll-
+  path call sites needed no changes — `tr.scrollIntoView()` (the
+  PM Transaction method) walks up from the selection's DOM to
+  find the nearest scrolling ancestor; element-level `scrollIntoView`
+  does the same; `drag-editor-surface.ts`'s host-relative math
+  was already 0 in single-doc and stays so.
+
 - **Keyboard Shortcuts cheat sheet caught up with the keybindings
   registry.** The `GROUPS` array in `src/editor/reference-ui.ts`
   was hand-maintained and had drifted behind the registry — alpha.2

@@ -517,18 +517,15 @@ button {
   --pmd-c-link: #0563C1;
 }
 
-/* Companion rule: paint the per-pane scroller white in multi-pane
-   dark-chrome-light-doc mode. The editor-scope rule above paints
-   `.pmd-pane-editor`'s box, but `.pmd-pane-editor` is sized
-   `height: 100%` of its parent `.pmd-pane-body` (a viewport-tall
-   overflow:auto scroller), so its painted box only covers the
-   first viewport — ProseMirror content overflows past that box
-   and the dark `.pmd-pane-body` bg shows through as the user
-   scrolls down. Painting the scroller itself covers the full
-   scrollable extent because container backgrounds in overflow:
-   auto paint behind the visible viewport at every scroll position.
-   Single-doc isn't affected — `body` is its scroller and the
-   `#editor` paint plus existing layout already cover it. */
+/* Companion rule: paint the scroller white in dark-chrome-light-doc
+   mode. With `#app` now the single-doc scroller (and `.pmd-pane-body`
+   the per-pane scroller in multi-pane), paint behind the visible
+   viewport at every scroll position so any gap below the editor's
+   content extent reads as light rather than showing the dark body
+   underneath. Container backgrounds in `overflow: auto` cover the
+   full scrollable extent regardless of where inner content's box
+   ends. */
+:root[data-theme="dark"]:not([data-theme-doc="dark"]) body:not(.pmd-multi-doc) #app,
 :root[data-theme="dark"]:not([data-theme-doc="dark"]) .pmd-pane-body {
   background: #fff;
 }
@@ -785,12 +782,12 @@ body.pmd-multi-doc #doc-name-chip { display: none; }
 }
 #speech-doc-banner[hidden] { display: none; }
 .pmd-speech-doc-banner-icon { font-size: 1rem; line-height: 1; }
-body.pmd-speech-banner-visible #app {
-  margin-top: calc(var(--ribbon-height) + var(--speech-banner-height));
-  min-height: calc(
-    100vh - var(--ribbon-height) - var(--speech-banner-height)
-      - var(--status-bar-height)
-  );
+/* Single-doc only — multi-doc never shows the speech banner (see
+   `body.pmd-multi-doc #speech-doc-banner { display: none }` below).
+   With `#app` now `position: fixed` in single-doc, we adjust its
+   top edge to sit below the banner rather than via `margin-top`. */
+body.pmd-speech-banner-visible:not(.pmd-multi-doc) #app {
+  top: calc(var(--ribbon-height) + var(--speech-banner-height));
 }
 /* Multi-pane uses per-pane chips for the same purpose — suppress
    the banner there to avoid a redundant indicator. */
@@ -1282,12 +1279,32 @@ body.pmd-host-browser #autosave-btn { display: none; }
 }
 
 #app {
-  margin-top: var(--ribbon-height);
-  margin-left: var(--nav-width);
-  margin-bottom: var(--status-bar-height);
-  min-height: calc(100vh - var(--ribbon-height) - var(--status-bar-height));
   display: flex;
   flex-direction: column;
+}
+
+/* Single-doc layout: `#app` is a bounded scroller pinned to the
+   chrome-clipped viewport rectangle, with the editor scrolling
+   *inside* it. Migrating off `body`-is-the-rootScroller eliminates
+   the doc-height composited layer (measured at 4.9 GB nominal on
+   a big doc, vs viewport-bounded `#app` now) that drove the
+   continuous `UpdateLayer` cost during scroll. Multi-doc keeps
+   its own positioning via `body.pmd-multi-doc #app` further down
+   in this file — gated via `:not(.pmd-multi-doc)` so this only
+   applies to single-doc. The fixed chrome (ribbon, nav-panel,
+   status-bar) overlays the scrollable region with its own
+   backgrounds; `#app` is constrained to the visible band between
+   them. `overscroll-behavior: contain` mirrors the
+   `.pmd-pane-body` / `.pmd-nav-list` rules so scroll deltas don't
+   chain past the editor. */
+body:not(.pmd-multi-doc) #app {
+  position: fixed;
+  top: var(--ribbon-height);
+  left: var(--nav-width);
+  right: 0;
+  bottom: var(--status-bar-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* ---------------------------------------------- Status bar */
