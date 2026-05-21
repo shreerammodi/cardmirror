@@ -71,6 +71,13 @@ interface ElectronAPI {
     status: 'latest' | 'updating' | 'error' | 'dev';
     message?: string;
   }>;
+  /** Trigger a silent at-launch update check. Same network call as
+   *  `checkForUpdates`, but the main process suppresses the
+   *  "you're on the latest" / "couldn't check" dialogs that the
+   *  manual path shows — only the "Update available" dialog
+   *  fires. No-op in dev (non-packaged) builds. Called from the
+   *  renderer at boot iff `checkForUpdatesOnLaunch` is enabled. */
+  triggerAutoUpdateCheck(): Promise<void>;
   /** Open the OS file manager at the crash-dumps folder (mirrors
    *  Help → Open Crash Dumps Folder). */
   openCrashDumpsFolder(): Promise<void>;
@@ -261,6 +268,10 @@ export class ElectronHost implements Host {
     message?: string;
   }> {
     return api().checkForUpdates();
+  }
+
+  async triggerAutoUpdateCheck(): Promise<void> {
+    await api().triggerAutoUpdateCheck();
   }
 
   async openCrashDumpsFolder(): Promise<void> {

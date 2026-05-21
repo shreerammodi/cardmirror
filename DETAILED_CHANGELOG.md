@@ -7,6 +7,48 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Auto-update check on launch (opt-in).** New setting
+  `checkForUpdatesOnLaunch`, off by default in this release.
+  When on, the first window of an app session triggers a silent
+  update check during boot (gated on `host.isFirstWindow()`,
+  same pattern as the doc-recovery UI — subsequent windows in
+  the same session skip the check). If `update-available` fires,
+  the same modal the manual Help → Check for Updates path uses
+  pops up with "Open release page" + "Close" buttons; the
+  "Open release page" button calls `shell.openExternal` to deep-
+  link to `https://github.com/ant981228/cardmirror/releases/tag/v$VERSION`
+  in the user's default browser. Errors and "you're current"
+  outcomes stay silent on this path — the wishlist explicitly
+  flagged that surfacing them every launch would be obnoxious
+  for users who happen to be offline at boot.
+
+  Implementation:
+  - Renderer-driven trigger: a new
+    `host:trigger-auto-update-check` IPC handler in `main.ts`
+    calls a shared `runUpdateCheck(opts)` function with
+    `{ alertOnLatest: false, alertOnError: false }`. The same
+    function backs the manual Help-menu path with
+    `{ alertOnLatest: true, alertOnError: true }`.
+  - Shared `showUpdateAvailableDialog(info)` helper holds the
+    modal definition, so the available-update dialog is
+    byte-identical between manual and auto-launch paths.
+  - Single `updateCheckInFlight` guard prevents the manual and
+    auto paths from racing if they happen to overlap (e.g.,
+    user clicks Help menu before the boot check completes).
+  - `startAutoUpdate` no longer calls `checkForUpdates()`
+    itself — the renderer owns the at-launch trigger now,
+    gated on the setting + `isFirstWindow()`. The persistent
+    `update-downloaded` handler stays in `startAutoUpdate` so
+    the "Update ready, restart now?" dialog still fires when
+    the background download completes (regardless of whether
+    the trigger came from manual, auto-launch, or the Settings-
+    panel button).
+  - Setting toggle lives in `buildInstallInfoSection` (Settings
+    → General → "About this install") via a plain checkbox
+    above the existing Check-for-updates / Open-crash-dumps
+    action buttons. Electron-only (web edition has no update
+    mechanism).
+
 - **Manual update check: three-dialog feedback.** The Help →
   Check for Updates click handler in `apps/desktop/src/main.ts`
   used to register only an `update-not-available` handler;

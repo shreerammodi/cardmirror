@@ -43,6 +43,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     message?: string;
   }>,
 
+  /** Trigger a silent at-launch update check. Same network call
+   *  as `checkForUpdates`, but the main process suppresses the
+   *  "you're on the latest" and "couldn't check" dialogs — only
+   *  the "Update available" modal fires. No-op in dev builds. */
+  triggerAutoUpdateCheck: () => ipcRenderer.invoke('host:trigger-auto-update-check'),
+
   /** Open the OS file manager at the crash-dumps folder. */
   openCrashDumpsFolder: () => ipcRenderer.invoke('host:open-crash-dumps'),
 

@@ -17,6 +17,18 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Check for updates on launch** (Settings → General → "About
+  this install"). Off by default — opt in if you want the app to
+  check for a new release at boot. When enabled, the first window
+  of each app session does a silent check; if an update is
+  available, a modal pops with a link to the GitHub release page
+  in your default browser. Subsequent windows in the same session
+  skip the check (mirrors the first-window-only gating used by
+  the doc recovery UI). Errors and "you're current" outcomes are
+  silent on the auto-launch path — no notification noise when
+  you're offline or already up to date. The manual Help → Check
+  for Updates… and the Settings panel button still give full
+  feedback for every outcome.
 - **Help → Check for Updates now reports a result.** Every click
   now resolves to one of three dialogs: "You're on the latest
   version" (with the version number), "Update available" (with a

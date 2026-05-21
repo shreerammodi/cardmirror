@@ -3072,6 +3072,16 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
   font-size: 0.75rem;
   color: var(--pmd-c-text-secondary);
 }
+.pmd-install-info-launch-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--pmd-c-text);
+  cursor: pointer;
+  margin-bottom: 0.6rem;
+  user-select: none;
+}
 .pmd-install-info-actions {
   display: flex;
   gap: 0.5rem;

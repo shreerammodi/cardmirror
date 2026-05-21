@@ -763,6 +763,28 @@ function buildInstallInfoSection(): HTMLElement {
   // shell.openPath). The web edition has neither capability.
   const electronHost = getElectronHost();
   if (electronHost) {
+    // "Check for updates on launch" toggle. Lives in this section
+    // alongside the manual Check-for-updates button because it's
+    // the same conceptual surface — "how the app handles
+    // updates." Off by default in alpha.3; users opt in if they
+    // want at-launch checking. When enabled, only the first
+    // window of an app session triggers the check; subsequent
+    // spawned windows skip it. The actual at-launch trigger
+    // lives in `index.ts`'s boot path.
+    const launchRow = document.createElement('label');
+    launchRow.className = 'pmd-install-info-launch-toggle';
+    const launchInput = document.createElement('input');
+    launchInput.type = 'checkbox';
+    launchInput.checked = settings.get('checkForUpdatesOnLaunch');
+    launchInput.addEventListener('change', () => {
+      settings.set('checkForUpdatesOnLaunch', launchInput.checked);
+    });
+    const launchText = document.createElement('span');
+    launchText.textContent = 'Check for updates on launch';
+    launchRow.appendChild(launchInput);
+    launchRow.appendChild(launchText);
+    wrap.appendChild(launchRow);
+
     const actions = document.createElement('div');
     actions.className = 'pmd-install-info-actions';
 

@@ -316,6 +316,18 @@ ipcMain.handle('host:check-for-updates', async () => {
   });
 });
 
+/** At-launch silent update check. Called by the renderer at boot
+ *  iff `settings.checkForUpdatesOnLaunch` is enabled AND this is
+ *  the first window of the app session (mirrors the recovery-UI
+ *  gating — only the first window of a session offers the
+ *  prompt). No-op in dev. Routes through the same `runUpdateCheck`
+ *  as the manual path but with the "latest" and "error" dialogs
+ *  suppressed; only "Update available" fires a dialog, which is
+ *  the same modal the manual flow shows. */
+ipcMain.handle('host:trigger-auto-update-check', async () => {
+  runUpdateCheck({ alertOnLatest: false, alertOnError: false });
+});
+
 /** Open the OS file manager at the crash-dumps folder. Mirrors
  *  the Help → Open Crash Dumps Folder menu item. */
 ipcMain.handle('host:open-crash-dumps', async () => {
@@ -892,44 +904,75 @@ function dialogParentWindow(): BrowserWindow | null {
   return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
 }
 
-/** Re-entrancy guard so rapid double-clicks of "Check for Updates"
- *  don't register multiple sets of `.once` handlers that all fire
- *  on the same response. */
-let manualCheckInFlight = false;
+/** Re-entrancy guard. A single in-flight check guards the manual
+ *  (Help menu) path AND the auto-launch IPC path so the two can't
+ *  race and double-dialog if they happen to overlap. */
+let updateCheckInFlight = false;
 
-/** Help → Check for Updates click handler. Runs the manual update
- *  flow and resolves to exactly one of three dialogs:
- *   - "You're on the latest version." (update-not-available)
- *   - "Update available." (update-available, with link to the
- *     Releases page so the user can read what's in the new
- *     version — the actual download proceeds in the background
- *     via the persistent `startAutoUpdate` handlers).
- *   - "Couldn't check for updates: <reason>." (error event OR
- *     promise rejection — both can happen and the cleanup()
- *     guard ensures we only fire one dialog).
- *  In dev (`!app.isPackaged`) shows an info dialog explaining
- *  that updates only run in packaged builds. */
-function runManualUpdateCheck(): void {
+/** Show the "Update available" modal. Same content whether the
+ *  check was manual or auto-launched — modal, parented to the
+ *  current window, with an "Open release page" button that deep-
+ *  links to the tag's GitHub Release in the user's browser via
+ *  `shell.openExternal`. */
+function showUpdateAvailableDialog(info: { version: string }): void {
+  const win = dialogParentWindow();
+  if (!win) return;
+  void dialog
+    .showMessageBox(win, {
+      type: 'info',
+      buttons: ['Open release page', 'Close'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Update available',
+      message: `CardMirror ${info.version} is available.`,
+      detail:
+        'Downloading in the background. When the download finishes you can restart to install, or quit normally and it will install on next launch.',
+    })
+    .then((result) => {
+      if (result.response === 0) {
+        void shell.openExternal(`${RELEASES_URL}/tag/v${info.version}`);
+      }
+    });
+}
+
+/** Options gating which outcomes produce a user-facing dialog. The
+ *  manual (Help menu) check shows all three; the auto-launch check
+ *  shows only "available" — silent on "latest" (we don't want a
+ *  dialog every launch when the user is current) and on "error"
+ *  (offline-on-boot is too common to dialog about). */
+interface UpdateCheckOpts {
+  alertOnLatest: boolean;
+  alertOnError: boolean;
+}
+
+/** Core update-check routine. Both the Help menu manual path and
+ *  the renderer-driven auto-launch path call this. In-flight guard
+ *  prevents the two from racing. `update-available` always fires
+ *  `showUpdateAvailableDialog`; the latest / error dialogs are
+ *  gated by `opts`. In dev (`!app.isPackaged`) shows an info
+ *  dialog only for the manual path (`opts.alertOnLatest`); the
+ *  auto-launch path is a complete no-op in dev. */
+function runUpdateCheck(opts: UpdateCheckOpts): void {
   if (!app.isPackaged) {
-    const win = dialogParentWindow();
-    if (win) {
-      void dialog.showMessageBox(win, {
-        type: 'info',
-        message: 'Update checks are only active in packaged builds.',
-      });
+    if (opts.alertOnLatest) {
+      const win = dialogParentWindow();
+      if (win) {
+        void dialog.showMessageBox(win, {
+          type: 'info',
+          message: 'Update checks are only active in packaged builds.',
+        });
+      }
     }
     return;
   }
-  if (manualCheckInFlight) return;
-  manualCheckInFlight = true;
+  if (updateCheckInFlight) return;
+  updateCheckInFlight = true;
 
-  // Mutual cleanup: whichever event fires first wins the dialog;
-  // the others get unregistered so a single check produces one
-  // response. The .once() registrations also self-clean, but we
-  // unsubscribe explicitly to avoid the surviving handlers firing
-  // on a *later* check (e.g., the next time the user clicks).
+  // Mutual cleanup: whichever event fires first wins; the others
+  // get unregistered so a single check produces one response and
+  // doesn't fire stale handlers on a *later* check.
   const cleanup = (): void => {
-    manualCheckInFlight = false;
+    updateCheckInFlight = false;
     autoUpdater.off('update-not-available', onNotAvailable);
     autoUpdater.off('update-available', onAvailable);
     autoUpdater.off('error', onError);
@@ -937,6 +980,7 @@ function runManualUpdateCheck(): void {
 
   const onNotAvailable = (): void => {
     cleanup();
+    if (!opts.alertOnLatest) return;
     const win = dialogParentWindow();
     if (!win) return;
     void dialog.showMessageBox(win, {
@@ -949,28 +993,12 @@ function runManualUpdateCheck(): void {
 
   const onAvailable = (info: { version: string }): void => {
     cleanup();
-    const win = dialogParentWindow();
-    if (!win) return;
-    void dialog
-      .showMessageBox(win, {
-        type: 'info',
-        buttons: ['Open release page', 'Close'],
-        defaultId: 0,
-        cancelId: 1,
-        title: 'Update available',
-        message: `CardMirror ${info.version} is available.`,
-        detail:
-          'Downloading in the background. When the download finishes you can restart to install, or quit normally and it will install on next launch.',
-      })
-      .then((result) => {
-        if (result.response === 0) {
-          void shell.openExternal(`${RELEASES_URL}/tag/v${info.version}`);
-        }
-      });
+    showUpdateAvailableDialog(info);
   };
 
   const onError = (err: Error): void => {
     cleanup();
+    if (!opts.alertOnError) return;
     const win = dialogParentWindow();
     if (!win) return;
     void dialog.showMessageBox(win, {
@@ -986,11 +1014,14 @@ function runManualUpdateCheck(): void {
   autoUpdater.once('error', onError);
 
   autoUpdater.checkForUpdates().catch((err: unknown) => {
-    // `checkForUpdates()` rejecting and the `error` event both
-    // signal failure; whichever fires first wins the dialog
-    // (cleanup() unregisters the other before it can fire).
     onError(err instanceof Error ? err : new Error(String(err)));
   });
+}
+
+/** Manual Help → Check for Updates click handler. Shows feedback
+ *  for every possible outcome. */
+function runManualUpdateCheck(): void {
+  runUpdateCheck({ alertOnLatest: true, alertOnError: true });
 }
 
 function startAutoUpdate(): void {
@@ -1005,7 +1036,7 @@ function startAutoUpdate(): void {
   });
   autoUpdater.on('update-downloaded', (info) => {
     console.log(`Auto-update: ${info.version} downloaded; will install on next quit.`);
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const win = dialogParentWindow();
     if (!win) return;
     void dialog.showMessageBox(win, {
       type: 'info',
@@ -1019,9 +1050,13 @@ function startAutoUpdate(): void {
       if (result.response === 0) autoUpdater.quitAndInstall();
     });
   });
-  autoUpdater.checkForUpdates().catch((err) => {
-    console.warn('Auto-update check failed:', err);
-  });
+  // The actual at-launch check now fires from the renderer's
+  // boot path (gated on the `checkForUpdatesOnLaunch` setting +
+  // `host.isFirstWindow()`) via the `host:trigger-auto-update-check`
+  // IPC handler. Subsequent windows in the same session skip the
+  // check entirely. The persistent event handlers above stay
+  // wired so the "Update ready" dialog still fires when the
+  // download completes.
 }
 
 // ─── App lifecycle ─────────────────────────────────────────────────

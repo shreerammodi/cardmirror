@@ -222,6 +222,17 @@ export interface Settings {
    *  embedded web edition). Single-doc only; multi-pane shows
    *  per-pane chips regardless of this setting. */
   showDocNameChip: boolean;
+  /** Whether to check for updates on app launch (desktop only).
+   *  Off by default in this initial release to keep boot
+   *  conservative — opt in via Settings → General → "About this
+   *  install." When enabled, the first window of an app session
+   *  triggers a silent update check at boot; if a new version is
+   *  available, a modal pops with a link to the release page.
+   *  Subsequent windows in the same session skip the check.
+   *  Manual checks via Help → Check for Updates… or the button
+   *  in the About this install panel always work regardless. No
+   *  effect on the web edition (no update mechanism). */
+  checkForUpdatesOnLaunch: boolean;
   /** UI motion preference. `'auto'` (default) follows the OS
    *  `prefers-reduced-motion` media query and gives the user the
    *  motion-reduction state their system advertises. `'on'` always
@@ -697,6 +708,7 @@ const DEFAULTS: Settings = {
   theme: 'system',
   themeAppliesToDocument: false,
   showDocNameChip: false,
+  checkForUpdatesOnLaunch: false,
   reduceMotion: 'auto',
   overrideHighlightColor: false,
   overrideHighlightSlots: ['#ffff00'],
@@ -1446,6 +1458,7 @@ function sanitize(s: Settings): Settings {
       s.theme === 'light' || s.theme === 'dark' ? s.theme : 'system',
     themeAppliesToDocument: !!s.themeAppliesToDocument,
     showDocNameChip: !!s.showDocNameChip,
+    checkForUpdatesOnLaunch: !!s.checkForUpdatesOnLaunch,
     reduceMotion:
       s.reduceMotion === 'on' || s.reduceMotion === 'off' ? s.reduceMotion : 'auto',
     overrideHighlightColor: !!s.overrideHighlightColor,
