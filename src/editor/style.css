@@ -4302,10 +4302,13 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
 
 /* `#app` is the editor's main flex container. The editor takes the
    remaining space; the comments column docks to the right when
-   visible and collapses out of layout when `hidden`. The earlier
-   `#app` rule sets `min-height: calc(100vh - ribbon - status)` —
-   inherited here so the comments column reaches the full viewport
-   height even when the document is short. */
+   visible and collapses out of layout when `hidden`. Single-doc
+   `#app` is `position: fixed` with `top: var(--ribbon-height);
+   bottom: var(--status-bar-height)`, so its bounding box is
+   already viewport-tall-minus-chrome — the comments column
+   reaches that full height even when the document is short.
+   Multi-doc's #app has `height: calc(100vh - chrome)` for the
+   same reason. */
 #app {
   display: flex;
   flex-direction: row;
