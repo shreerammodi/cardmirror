@@ -7,6 +7,139 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Nav pane: highlight follows the editor caret.** Previously
+  the `.pmd-nav-item-selected` blue highlight was driven purely
+  by click events on the nav-pane (`selectSingle` / shift-click
+  range / ctrl-click toggle); editor caret movements didn't
+  update it. New `NavigationPanel.setCaretHeading(pos)` finds
+  the heading whose section contains the caret (= largest
+  `entry.pos <= pos` from the rendered `liEntries`) and calls
+  `selectSingle` on it. Wired from `index.ts`'s
+  `dispatchTransaction`, gated on `prevState.selection.from !==
+  next.selection.from` so doc-only transactions away from the
+  cursor don't pay the find-heading walk.
+
+  Caret-tracking always produces a single selection — explicit
+  multi-select via Ctrl/Shift-click still works for drag-and-
+  drop and similar workflows, but collapses on the next caret
+  movement. Matches the user mental model that the nav-pane
+  reflects "where the cursor is."
+
+  Doesn't auto-scroll the nav pane to bring the highlight into
+  view — explicit decision; auto-scrolling on every cursor move
+  would dominate the user's scroll behavior on long docs. Worth
+  revisiting if it turns out users want it for outline-following
+  workflows.
+
+  Edge cases:
+  - Caret before the first heading → `clearSelection()`, no
+    highlight.
+  - Caret inside a heading whose nav entry is hidden under a
+    collapsed parent → the closest ancestor in `liEntries` gets
+    highlighted (we iterate only rendered items).
+  - Position drift between a doc edit and the next debounced
+    `update()` (~200ms): the highlight may briefly point at a
+    stale neighbor. Acceptable for a visual indicator.
+
+- **Comments column: user-draggable width with resize handle.**
+  Mirror of the nav-pane resize-handle pattern. New
+  `commentsColumnWidth` setting (default 320, range 240–560)
+  persists the width across sessions. CSS custom property
+  `--pmd-comments-width` drives `.pmd-comments-column { width }`;
+  the resize handle on the column's LEFT edge (the
+  `right`-anchored opposite of the nav-pane's right-edge
+  handle) updates the custom property during drag. Mouseup
+  writes the final value to `settings`.
+
+  Range chosen by squint: 240 px is the threshold below which
+  thread cards start feeling cramped; 560 px is where the
+  column starts eating too much of the editor width on a
+  laptop. Same clamp in the settings sanitizer + the JS drag
+  handler so persisted out-of-range values get pulled back in.
+
+  The handle's bg is transparent at rest; tints on hover
+  (`--pmd-c-accent-soft`) and during drag. Mirrors the
+  nav-pane handle exactly — col-resize cursor on hover is the
+  discovery cue, no permanent visible affordance. (An earlier
+  iteration added a grip-dot indicator; removed when the user
+  preferred the cleaner pattern of the nav-pane.)
+
+- **Comments column: resize handle survives render() wipes.**
+  Initial implementation appended the handle as a direct child
+  of `#comments-column`. The column's `render()` method (fired
+  from `dispatchTransaction` on every keystroke that affects
+  comments state) does `this.root.innerHTML = ''` to rebuild
+  threads from scratch, which wiped the handle along with
+  everything else. User reported "can't see the resize handle"
+  after typing — exactly the post-wipe state.
+
+  Fix: introduce an inner `.pmd-comments-content` wrapper
+  inside the column. `render()` now wipes that inner wrapper
+  rather than the column root. The resize handle stays as a
+  sibling of the wrapper (installed in the constructor BEFORE
+  the wrapper, so DOM order is handle-then-content). Sticky
+  positioning context for any column children remains the
+  column itself (via `position: relative`); the inner wrapper
+  is `height: 100%; width: 100%` so containment doesn't shift.
+
+- **Comments column: full-scroll-extent layout via inner grid
+  wrapper.** Same family of post-path-A regression as the
+  multi-doc top-shift and recovery-sidebar offset that landed
+  in alpha.3. With `#app` migrated to `position: fixed` +
+  `overflow-y: auto` (the bounded scroller), the inner flex
+  layout's cross-axis was viewport-bounded — items stretched
+  to viewport, not to content height. The comments column's
+  background only rendered at the top of the page and didn't
+  cover the full scroll strip.
+
+  Two-stage fix:
+  1. `<div class="pmd-editor-row">` wrapper added inside `#app`
+     in `index.html`, holding `#editor` + `#comments-column`.
+     The flex / grid layout lives on this inner wrapper rather
+     than `#app` itself.
+  2. The wrapper uses `display: grid; grid-template-columns:
+     1fr auto`. Initial attempt was flex with `min-height:
+     100%`, but flex's cross-size determination floors at
+     `min-height` and doesn't grow with overflowing items
+     (measured: wrapper box 807px while `#editor.scrollHeight`
+     was 5971px). Grid track sizing is content-based and
+     handles this case cleanly — items end up content-tall
+     (≈ 5982px on a long doc), the column's background covers
+     the full scroll strip.
+
+  Short / empty document case (separate issue surfaced in
+  testing): with `grid-auto-rows: max-content`, an empty doc
+  produced a short track and the column rendered as a small
+  strip at the top of the visible area with empty space below.
+  Fixed by NOT setting an explicit `grid-template-rows`
+  initially, then trying `minmax(100%, max-content)` (collapsed
+  to 100% per CSS Grid spec's "treat percentages as auto when
+  the container's size depends on its tracks" rule, regressing
+  the long-doc fix). Final shape: no explicit `grid-template-
+  rows`; track auto-sizes. Combined with `min-height: 100%` on
+  the wrapper, this gives items max(viewport, content) cross-
+  size in both cases.
+
+  Hidden in multi-doc layout via
+  `body.pmd-multi-doc .pmd-editor-row { display: none }` —
+  multi-pane's per-pane shell sits as a sibling of the wrapper
+  and uses its own internal layout.
+
+- **Comments column: bottom-left collapse/expand toggle removed.**
+  The `.pmd-comments-toggle-active` button (▾/▴ circle pinned
+  with `position: sticky; bottom: 0.5rem`) is gone. Removed:
+  the `renderToggle` method, its call site in `render()`, the
+  "skip click on toggle" branch in the sticky-dismiss handler,
+  the `lastActiveThreadId` field + assignments (only the
+  toggle button used it for "re-expand most recent thread"),
+  and the three CSS rules for the button.
+
+  Active-comment collapse still works — the sticky-dismiss
+  global mousedown handler still dismisses when the user
+  clicks outside the active card. The lost affordance is the
+  "explicitly re-expand the most recently active thread"
+  button-click; users now click the card they want to re-open.
+
 ## 0.1.0-alpha.3 — 2026-05-21
 
 - **Auto-update check on launch (opt-in).** New setting

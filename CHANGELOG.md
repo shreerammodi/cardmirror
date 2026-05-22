@@ -7,6 +7,43 @@ see `DETAILED_CHANGELOG.md`.
 
 ## Unreleased
 
+### Added
+
+- **Resizable comments column.** Drag the column's left edge to
+  resize it (240 – 560 px). The col-resize cursor appears when
+  you hover near the edge. Persists across sessions via the new
+  `commentsColumnWidth` setting.
+- **Nav-pane highlight follows the editor cursor.** Previously
+  the blue highlight only updated when you clicked a nav-pane
+  entry. Now it tracks whichever heading's section contains the
+  cursor — moving the caret, typing into a new heading, clicking
+  in the editor, and find-next all update the highlight.
+  Ctrl/Shift-click multi-selection still works but collapses on
+  the next caret move (matches "the highlight shows where the
+  cursor is").
+
+### Fixed
+
+- **Comments column now extends through the full scroll
+  height.** Was rendering only at the top of the document and
+  cutting off below. Same family of post-path-A regression as
+  the multi-doc top-shift and recovery-sidebar offset fixed
+  during alpha.3 — `#app` becoming the bounded scroller meant
+  the inner flex layout's cross-axis was viewport-bounded,
+  leaving the column's box (and background strip) stranded at
+  the top.
+- **Comments column on short / empty documents no longer looks
+  truncated.** Inner layout now sizes to max(viewport, content),
+  so the column's background fills the visible area even when
+  the doc has nothing in it.
+
+### Removed
+
+- **Bottom-left collapse/expand toggle in the comments column**
+  (the small ▾/▴ circle). Active-comment collapse still works
+  by clicking outside the sticky card; the "re-expand most
+  recent thread" affordance the button provided is gone.
+
 ## 0.1.0-alpha.3 — 2026-05-21
 
 ### Added
