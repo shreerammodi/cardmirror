@@ -771,7 +771,21 @@ function buildMenu(): Menu {
         click: () => dispatchMenuCommand('saveAs'),
       },
       { type: 'separator' },
-      isMac ? { role: 'close' } : { role: 'quit' },
+      {
+        // Smart close: in multi-pane mode, closes the visible doc in
+        // the focused slot rather than the entire window. Falls
+        // through to closing the window when there's no visible
+        // doc to close (last doc in the focused slot already
+        // closed, or single-pane mode). Renderer side decides
+        // which path to take; we just dispatch the menu command.
+        // Cmd+W on macOS, Ctrl+W on Windows/Linux — captured as
+        // an explicit menu accelerator so it overrides Chromium's
+        // default close-window behavior.
+        label: 'Close',
+        accelerator: 'CmdOrCtrl+W',
+        click: () => dispatchMenuCommand('closeDocOrWindow'),
+      },
+      ...(!isMac ? [{ role: 'quit' as const }] : []),
     ],
   };
 

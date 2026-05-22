@@ -3446,6 +3446,19 @@ if (autosaveBtn) {
         case 'saveAs':
           ribbonContext.saveAs();
           break;
+        case 'closeDocOrWindow':
+          // Multi-pane: close the focused slot's visible doc. Falls
+          // through to handleUserCloseRequest (which closes the
+          // window) when there's no doc to close — last doc in the
+          // multi-pane window already closed, or single-pane mode.
+          void (async () => {
+            const { tryCloseVisibleInFocusedSlot } = await import(
+              './multi-pane-shell.js'
+            );
+            const consumed = await tryCloseVisibleInFocusedSlot();
+            if (!consumed) await handleUserCloseRequest();
+          })();
+          break;
       }
     });
     // Mode-switch coordination: another window is about to reload

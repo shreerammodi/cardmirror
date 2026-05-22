@@ -276,15 +276,30 @@ class DocSwitcherOverlay {
    *  by `direction` from the slot's current visible doc. Mirrors
    *  the OS Alt+Tab pattern where the first chord press already
    *  shows a candidate (typically the next doc, not the current
-   *  one). */
+   *  one). The overlay positions itself centered over the slot's
+   *  pane (not the whole viewport) so users can tell at a glance
+   *  which slot they're cycling through. */
   open(slot: Slot, direction: 1 | -1): void {
     this.slot = slot;
     this.candidates = [...slot.stack];
     const start = slot.visibleIndex < 0 ? 0 : slot.visibleIndex;
     const len = this.candidates.length;
     this.index = (start + direction + len) % len;
+    this.positionOverSlot(slot);
     this.render();
     this.overlayEl.hidden = false;
+  }
+
+  /** Place the overlay so its center matches the slot's pane
+   *  center. Read live each open() so layout changes (window
+   *  resize, expand-mode toggle, etc.) since the last cycle
+   *  don't strand the overlay over the wrong region. */
+  private positionOverSlot(slot: Slot): void {
+    const rect = slot.paneEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    this.overlayEl.style.left = `${Math.round(cx)}px`;
+    this.overlayEl.style.top = `${Math.round(cy)}px`;
   }
 
   /** Step the highlight by `delta` (+1 or -1) with wrap-around. */
@@ -1244,6 +1259,20 @@ class MultiPaneShell {
     }
   };
 
+  /** Smart-close gesture: if the focused slot has a visible doc,
+   *  close it (prompting for unsaved-changes confirmation via
+   *  the same `closeVisible` flow the chip-X button uses). Returns
+   *  true to signal the caller that the gesture was consumed.
+   *  Returns false when the focused slot is empty (or none is
+   *  focused) — the caller should fall through to its
+   *  window-close default. */
+  async tryCloseFocusedVisible(): Promise<boolean> {
+    const slot = this.focusedSlot;
+    if (!slot || slot.visible === null) return false;
+    await slot.closeVisible();
+    return true;
+  }
+
   /** Mark `slot` as focused. The shared ribbon / chrome will route
    *  through its visible doc's EditorView. In wide-scroll layout
    *  with three active panes, also scroll the focused pane into
@@ -1766,6 +1795,23 @@ function makeSpeechBlankDoc(title: string): PMNode {
 /** Single shell instance — multi-pane is a binary mode, so one is
  *  enough. */
 let shell: MultiPaneShell | null = null;
+
+/** Whether multi-pane mode is currently active. Single-doc mode
+ *  returns false. */
+export function isMultiPaneActive(): boolean {
+  return shell !== null;
+}
+
+/** If the multi-pane shell is active AND the focused slot has a
+ *  visible doc, close that doc (prompting for unsaved changes if
+ *  needed). Returns true if it consumed the gesture, false if it
+ *  did nothing (caller should fall through to its window-close
+ *  default — used by the desktop Ctrl+W handler so a blank
+ *  multi-pane window still closes on the second Ctrl+W press). */
+export async function tryCloseVisibleInFocusedSlot(): Promise<boolean> {
+  if (!shell) return false;
+  return shell.tryCloseFocusedVisible();
+}
 
 /** Build a fresh DocRecord — wraps the per-doc PM state, nav panel,
  *  editor drag surface, and DOM containers needed for slot mounting. */
