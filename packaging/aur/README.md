@@ -5,11 +5,26 @@ submission lives in a separate Git repo on `aur.archlinux.org`;
 this folder is the canonical source we keep in version control so
 edits go through normal PR review.
 
-The PKGBUILD fetches the official x86_64 AppImage from
-`https://github.com/ant981228/cardmirror/releases/download/v${_origver}/CardMirror-${_origver}.AppImage`,
-extracts it, and installs the contents into `/opt/cardmirror` with
-a `/usr/bin/cardmirror` symlink + a `.desktop` entry. Standard
-AUR-bin pattern for Electron apps.
+The PKGBUILD fetches the official upstream `.pacman` artifact —
+`https://github.com/ant981228/cardmirror/releases/download/v${_origver}/cardmirror-${_origver}.pacman`
+— and unpacks its payload into `$pkgdir`. The `.pacman` is itself
+an Arch package (XZ-tar with /opt + /usr layout + .PKGINFO) that
+electron-builder produces via `fpm`, so the AUR build is
+effectively a thin redistribution.
+
+### Why not the AppImage?
+
+Earlier versions of this PKGBUILD bootstrapped from the AppImage
+— extracted its squashfs into `/opt/cardmirror` and symlinked
+`/usr/bin/cardmirror` → `/opt/cardmirror/AppRun`. That broke at
+launch because AppRun is the AppImage runtime's own launcher
+script; its path-resolution math
+(`HERE="$(dirname "$(readlink -f "$0")")"`) only works from
+inside the squashfs mount where `$APPDIR` is set. Extracted to a
+regular directory, the resolution produces an empty `${HERE}`
+and exec fails with `/cardmirror: No such file or directory`.
+The upstream `.pacman` ships the real Electron binary at
+`/opt/CardMirror/cardmirror` directly — no AppRun involved.
 
 ## First submission
 
@@ -73,12 +88,14 @@ CardMirror:
 - **`yay -Syu` / `pamac upgrade`** — pulls a new PKGBUILD when
   `_origver` is bumped on AUR. Standard Arch flow.
 - **In-app auto-updater** — CardMirror's main process checks
-  GitHub Releases on launch and offers a restart-to-install
-  prompt when a new version is available. Drops the new AppImage
-  into a per-user cache and re-execs.
+  GitHub Releases on launch (opt-in, off by default since
+  alpha.3 — flip in Settings → General → "About this install"
+  → "Check for updates on launch"). Found-update notification
+  links to the GitHub release page so users can grab the new
+  `.pacman` manually.
 
-Both work. The in-app path is faster (no waiting for the AUR
-maintainer to bump `_origver`); the AUR path is more in-keeping
-with system-level package management. Power users typically
-prefer the AUR flow and may want to disable the in-app updater —
-that's a planned setting; until then both are active.
+Both work. The in-app path notifies sooner (no waiting for the
+AUR maintainer to bump `_origver`); the AUR path is more in
+keeping with system-level package management. The in-app check
+is off by default, so AUR-installed users won't see it unless
+they explicitly enable it.
