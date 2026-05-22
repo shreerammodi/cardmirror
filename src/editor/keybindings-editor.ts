@@ -32,6 +32,7 @@ import {
   formatKeyForDisplay,
   type RibbonCommandId,
 } from './ribbon-commands.js';
+import { RIBBON_GROUPS } from './ribbon-groups.js';
 import { settings } from './settings.js';
 
 function getOverrides(): Partial<Record<RibbonCommandId, string | string[]>> {
@@ -140,13 +141,11 @@ export function buildKeybindingsEditor(): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'pmd-keybindings-editor';
 
-  // Sort rows by command label for easy scanning. Within the same
-  // label (shouldn't happen but be defensive), fall back to ID.
-  const ordered = [...RIBBON_COMMAND_IDS].sort((a, b) => {
-    const la = RIBBON_COMMAND_LABELS[a];
-    const lb = RIBBON_COMMAND_LABELS[b];
-    return la.localeCompare(lb) || a.localeCompare(b);
-  });
+  // Group order + within-group order both come from RIBBON_GROUPS
+  // — same taxonomy + ordering the Keyboard Shortcuts reference
+  // modal uses, so the rebinding editor and the cheat sheet stay
+  // visually aligned. The drift guard in `ribbon-groups.ts`
+  // guarantees every `RibbonCommandId` is in exactly one group.
 
   let activeCapture: { row: HTMLElement; cleanup: () => void } | null = null;
 
@@ -305,7 +304,16 @@ export function buildKeybindingsEditor(): HTMLElement {
 
     const list = document.createElement('div');
     list.className = 'pmd-keybindings-list';
-    for (const id of ordered) list.appendChild(renderRow(id));
+    for (const group of RIBBON_GROUPS) {
+      const section = document.createElement('section');
+      section.className = 'pmd-keybindings-group';
+      const heading = document.createElement('h3');
+      heading.className = 'pmd-keybindings-group-title';
+      heading.textContent = group.title;
+      section.appendChild(heading);
+      for (const id of group.commands) section.appendChild(renderRow(id));
+      list.appendChild(section);
+    }
     wrap.appendChild(list);
 
     const footer = document.createElement('div');

@@ -3883,13 +3883,36 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
 .pmd-keybindings-list {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.6rem;
   max-height: 360px;
   overflow-y: auto;
-  padding-right: 0.25rem;
+  padding: 0.25rem 0.25rem 0.25rem 0;
   border: 1px solid var(--pmd-c-divider);
   border-radius: 4px;
   background: var(--pmd-c-surface-soft);
+}
+
+/* Group sections — visually separate clusters of related commands,
+   matching the cheat-sheet's grouping. Same visual treatment as
+   `.pmd-reference-group-title` (uppercase muted heading) so users
+   see the same taxonomy in both surfaces. */
+.pmd-keybindings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.pmd-keybindings-group-title {
+  margin: 0;
+  padding: 0.35rem 0.6rem 0.2rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pmd-c-text-muted);
+  position: sticky;
+  top: 0;
+  background: var(--pmd-c-surface-soft);
+  z-index: 1;
 }
 
 .pmd-keybinding-row {
