@@ -92,6 +92,20 @@ function paste(state: EditorState, text: string): EditorState {
   return state.apply(tr);
 }
 
+/** Run a command and return the post-dispatch state, throwing if
+ *  the command didn't dispatch. The explicit cast on return works
+ *  around TS narrowing `after` to `never` after the if-throw — it
+ *  doesn't track the closure mutation across the dispatch. */
+function runCmd(
+  state: EditorState,
+  cmd: import('prosemirror-state').Command,
+): EditorState {
+  let after: EditorState | null = null;
+  const ran = cmd(state, (tr) => { after = state.apply(tr); });
+  if (!ran || !after) throw new Error('command did not dispatch');
+  return after as EditorState;
+}
+
 /** Describe where the cursor ended up: doc-end (within last
  *  textblock), or "elsewhere" with the absolute pos for
  *  comparison. */
@@ -296,18 +310,12 @@ describe('paste viewport-bug probe', () => {
     state = paste(state, 'X\nY');
 
     // Move cursor to the "above para" paragraph.
-    const aboveCursor = posInside(state.doc, (n) => n.isText && n.text.startsWith('above para'), 5);
+    const aboveCursor = posInside(state.doc, (n) => n.isText && n.text != null && n.text.startsWith('above para'), 5);
     state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, aboveCursor)));
     const beforeF7 = cursorReport(state);
 
     // Apply F7 (setTag).
-    let after: EditorState | null = null;
-    const ran = setTag()(state, (tr) => {
-      after = state.apply(tr);
-    });
-    if (!ran || !after) {
-      throw new Error('setTag returned false / did not dispatch');
-    }
+    const after = runCmd(state, setTag());
     const afterReport = cursorReport(after);
 
     expect({
@@ -410,9 +418,7 @@ describe('paste viewport-bug probe', () => {
     );
     const cursorBefore = cursorReport(state);
 
-    let after: EditorState | null = null;
-    setTag()(state, (tr) => { after = state.apply(tr); });
-    if (!after) throw new Error('setTag did not dispatch');
+    const after = runCmd(state, setTag());
 
     expect({
       structureBefore: docTypeShape(state.doc),
@@ -478,9 +484,7 @@ describe('paste viewport-bug probe', () => {
     state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, aboveCursor)));
 
     // Press F7.
-    let after: EditorState | null = null;
-    setTag()(state, (tr) => { after = state.apply(tr); });
-    if (!after) throw new Error('setTag did not dispatch');
+    const after = runCmd(state, setTag());
 
     expect({
       afterPaste,
@@ -532,9 +536,7 @@ describe('paste viewport-bug probe', () => {
     );
     const cursorBefore = cursorReport(state);
 
-    let after: EditorState | null = null;
-    setTag()(state, (tr) => { after = state.apply(tr); });
-    if (!after) throw new Error('setTag did not dispatch');
+    const after = runCmd(state, setTag());
 
     expect({
       structureBefore: docTypeShape(state.doc),
@@ -588,9 +590,7 @@ describe('paste viewport-bug probe', () => {
     );
     const cursorBefore = cursorReport(state);
 
-    let after: EditorState | null = null;
-    setTag()(state, (tr) => { after = state.apply(tr); });
-    if (!after) throw new Error('setTag did not dispatch');
+    const after = runCmd(state, setTag());
 
     expect({
       structureBefore: docTypeShape(state.doc),
@@ -769,9 +769,7 @@ describe('paste viewport-bug probe', () => {
       makeState(doc).tr.setSelection(TextSelection.create(doc, cursor)),
     );
 
-    let after: EditorState | null = null;
-    setTag()(state, (tr) => { after = state.apply(tr); });
-    if (!after) throw new Error('setTag did not dispatch');
+    const after = runCmd(state, setTag());
 
     expect({
       structureBefore: docTypeShape(state.doc),

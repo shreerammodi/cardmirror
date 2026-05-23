@@ -95,11 +95,13 @@ function buildDocAndSelect(cursorSpec: {
   return state.apply(state.tr.setSelection(TextSelection.create(state.doc, pos)));
 }
 
-function runCmd(state: EditorState) {
+function runCmd(state: EditorState): EditorState {
   let after: EditorState | null = null;
   copyPreviousCite()(state, (tr) => { after = state.apply(tr); });
   if (!after) throw new Error('copyPreviousCite did not dispatch');
-  return after;
+  // Cast: TS's flow analysis narrows `after` to `never` after the
+  // throw because it doesn't track the closure mutation above.
+  return after as EditorState;
 }
 
 describe('Copy Last Cite — placement when cursor is in the destination tag', () => {
