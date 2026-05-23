@@ -11,6 +11,72 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Selection model now follows Word's actual rules instead of
+  the browser's regex-style word boundaries.** Affects every
+  spot where the editor decides "what counts as a word":
+  whole-word Find / Replace, the F7 / F8 / F10 cursor-expansion
+  commands, and the keyboard + mouse selection gestures
+  described separately below. The rules in brief: letters,
+  digits, `'` (U+0027), and `'` (U+2019) are word characters;
+  `_`, `.`, `,`, `:`, `;`, `-`, em / en dashes, ellipses, and
+  `'` (U+2018) are NOT (they break words). So `user_name` is
+  two words, `1,234` is three, `U.S.A.` is three (each letter
+  alone), `H2O` is one, `don't` / `we're` are one each.
+  Whole-word Find of "don" no longer matches "don" inside
+  "don't", and "user" now matches "user" inside "user_name".
+  F10 Emphasize Acronym on "U.S.C.P." now emphasizes U, S, C,
+  P (instead of just U).
+- **Mouse selection now uses Word's selection state machine.**
+  Double-click selects a unit (word + trailing space, with the
+  spec's class rules — `don't` selects as one word, `U.S.A.` as
+  three) and dragging extends word-by-word with the original
+  word staying fully selected when the drag reverses. Single-
+  click + drag starts character-granularity; pulling past the
+  clicked word's boundary upgrades to word granularity (and
+  pulls the rest of that word in); pulling back inside
+  downgrades to character. Triple-click selects a paragraph;
+  dragging extends paragraph-by-paragraph, and shift+click
+  after a triple-click extends paragraph-by-paragraph the same
+  way (matching triple-click + drag). Shift+click after a
+  single or double click extends with whatever granularity was
+  set (drag and shift+click are the same operation). Shift+
+  double-click and shift+triple-click are no-ops.
+- **Keyboard navigation now uses Word's per-unit nav.**
+  - `Ctrl+Left` / `Ctrl+Right` (`Alt+Left/Right` on Mac): jump
+    to the start of the previous / next unit using the
+    spec-compatible word iterator (so `don't` is one unit,
+    `U.S.A.` is three, `user_name` is two). Trailing space
+    absorbs into the unit it follows, so one `Ctrl+Right` from
+    the start of `help to` lands just before `to`, and the
+    symmetric `Ctrl+Left` rewinds. With an existing selection
+    and no Shift, `Ctrl+Left/Right` collapses to the
+    appropriate edge (same as plain Left/Right) instead of
+    jumping by a unit — matches Word. Shift-variants extend.
+  - `Ctrl+Up` (`Alt+Up`): go to the start of the current
+    paragraph; if already there, the previous paragraph (Word's
+    asymmetric "stop on current first" behavior).
+  - `Ctrl+Down` (`Alt+Down`): go to the start of the next
+    paragraph.
+  - `PageUp`: same shape as `Ctrl+Up` but at the heading level —
+    go to the start of the current heading marker (the most
+    recently passed pocket / hat / block / tag / analytic);
+    if already there, the previous heading marker. Useful for
+    skipping over body content to land on the next structural
+    anchor.
+  - `PageDown`: go to the start of the next heading marker.
+  - All paired with `Shift+` variants that extend the selection
+    instead of collapsing.
+  - `Home / End` (visual line start / end) and `Ctrl+Home /
+    Ctrl+End` (doc start / end) are left on the browser default,
+    which already matches the spec.
+- **Formatting commands skip the selection's trailing space.**
+  When you double-click "word" Word selects "word + space" and
+  bolding bolds the word only — that behavior now applies in
+  CardMirror across every formatting command (bold, italic,
+  underline, cite, emphasis, highlight, shading, font size,
+  font color, clear-formatting, and friends). A multi-word
+  selection like "the quick fox " loses the trailing space
+  from the formatting only — internal spaces stay formatted.
 - **Opening a file that's already loaded surfaces the existing
   copy instead of opening a duplicate.** Picking the same file
   from the Open dialog (ribbon or per-slot "+ Open file" button)
@@ -30,45 +96,39 @@ see `DETAILED_CHANGELOG.md`.
   AI, and the comments toggle all work the same as in
   single-pane. Cards re-layout against the focused pane's scroll
   so each card stays aligned with the heading it annotates.
-- **Multi-pane workspace shortcuts are now user-rebindable** via
-  Settings → Keybindings. Eight new entries in the keybindings
-  editor (in their own "Multi-pane workspace" group): Focus
-  Slot 1/2/3 (`Ctrl+1/2/3`), Send Doc to Slot 1/2/3
-  (`Ctrl+Shift+1/2/3`), Toggle Slot Expand / Restore
-  (`Ctrl+Shift+F`), Close Doc or Window (`Ctrl+W`). Customize
-  any of them like any other ribbon command. Same chord
-  conflict-resolution as the rest of the registry: binding a
-  key to one of these auto-strips it from whatever else was
-  using it. (Ctrl+Tab doc cycling is the lone exception — its
-  hold-and-press semantics don't fit the discrete-press
-  ribbon-command model, so it stays on a fixed binding.)
-- **Doc-switcher overlay (Alt+Tab-style) for Ctrl+Tab cycling.**
-  Holding Ctrl after pressing Ctrl+Tab in the focused multi-
-  pane slot shows a list of docs in the stack; each Tab while
-  Ctrl is held advances the highlight; releasing Ctrl commits
-  the highlighted doc as visible. Escape cancels. Centers
-  over the focused slot's pane (not the viewport) so users
-  can tell which slot is being cycled. List items show the
-  filename plus a small blue dot when the doc has unsaved
-  changes.
+- **Ctrl+1 / 2 / 3 — focus the named multi-pane slot.** No-op
+  when the slot is empty. Rebindable in Settings → Keybindings.
+- **Ctrl+Shift+1 / 2 / 3 — send the focused slot's visible doc
+  to slot 1 / 2 / 3.** Mirrors the Ctrl+1 / 2 / 3 focus chord.
+  Source slot collapses to its next-visible doc or empties; the
+  moved doc keeps its cursor, selection, undo history, and
+  unsaved-edits state. No-op when the focused slot is empty or
+  when the target is the source slot itself. Rebindable in
+  Settings → Keybindings.
+- **Ctrl+Tab / Ctrl+Shift+Tab — cycle docs within the focused
+  multi-pane slot** (when the slot holds 2+ docs). Holding
+  Ctrl after pressing Ctrl+Tab shows an Alt+Tab-style overlay
+  centered over the focused slot's pane, with each doc in the
+  stack listed top-to-bottom; each Tab while Ctrl is held
+  advances the highlight, releasing Ctrl commits the
+  highlighted doc as visible, Escape cancels. List items show
+  the filename plus a small blue dot when the doc has unsaved
+  changes. Wraps around at both ends. Web users without the
+  chord (browsers reserve it for tab cycling): use
+  Ctrl+Alt+Tab — same handler accepts both shapes, so it also
+  works on desktop. The chord itself is fixed — hold-and-press
+  semantics don't fit the discrete-press rebindable-command
+  model.
+- **Ctrl+Shift+F — toggle expand-mode** on the focused
+  multi-pane slot (same behavior as clicking the chip's ⛶
+  expand button). Rebindable in Settings → Keybindings.
+- **Ctrl+W — close the focused multi-pane doc** (or the entire
+  window if no slot is focused / the focused slot is empty).
+  Rebindable in Settings → Keybindings.
 - **Slot number badge on each multi-pane chip** — a small `1` /
   `2` / `3` glyph immediately left of the expand button.
   Disambiguates which slot a chip belongs to when only some
   slots are occupied.
-- **Ctrl+Shift+F toggle expand-mode** on the focused multi-pane
-  slot (same behavior as clicking the chip's ⛶ expand button).
-  Rebindable via Settings → Keybindings.
-- **Ctrl+Tab / Ctrl+Shift+Tab — cycle docs within the focused
-  multi-pane slot** (when the slot holds 2+ docs). Wraps around
-  at both ends. Web users without the chord (browsers reserve
-  it for tab cycling): use Ctrl+Alt+Tab — same handler accepts
-  both shapes, so it also works on desktop.
-- **Ctrl+Shift+1 / 2 / 3 — send the focused slot's visible doc
-  to slot 1 / 2 / 3.** Mirrors the existing Ctrl+1 / 2 / 3
-  focus chord. Source slot collapses to its next-visible doc
-  or empties; the moved doc keeps its cursor, selection, undo
-  history, and unsaved-edits state. No-op when the focused
-  slot is empty or when the target is the source slot itself.
 - **Exported .docx files now open as Verbatim-ready.** When a
   Verbatim user opens a CardMirror-saved .docx in Word, the
   Debate ribbon activates immediately — no need to click the
@@ -142,71 +202,6 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Changed
 
-- **Keyboard navigation now uses Word's per-unit nav.**
-  - `Ctrl+Left` / `Ctrl+Right` (`Alt+Left/Right` on Mac): jump
-    to the start of the previous / next unit using the
-    spec-compatible word iterator (so `don't` is one unit,
-    `U.S.A.` is three, `user_name` is two). Trailing space
-    absorbs into the unit it follows, so one `Ctrl+Right` from
-    the start of `help to` lands just before `to`, and the
-    symmetric `Ctrl+Left` rewinds. With an existing selection
-    and no Shift, `Ctrl+Left/Right` collapses to the
-    appropriate edge (same as plain Left/Right) instead of
-    jumping by a unit — matches Word. Shift-variants extend.
-  - `Ctrl+Up` (`Alt+Up`): go to the start of the current
-    paragraph; if already there, the previous paragraph (Word's
-    asymmetric "stop on current first" behavior).
-  - `Ctrl+Down` (`Alt+Down`): go to the start of the next
-    paragraph.
-  - `PageUp`: same shape as `Ctrl+Up` but at the heading level —
-    go to the start of the current heading marker (the most
-    recently passed pocket / hat / block / tag / analytic);
-    if already there, the previous heading marker. Useful for
-    skipping over body content to land on the next structural
-    anchor.
-  - `PageDown`: go to the start of the next heading marker.
-  - All paired with `Shift+` variants that extend the selection
-    instead of collapsing.
-  - `Home / End` (visual line start / end) and `Ctrl+Home /
-    Ctrl+End` (doc start / end) are left on the browser default,
-    which already matches the spec.
-- **Mouse selection now uses Word's selection state machine.**
-  Double-click selects a unit (word + trailing space, with the
-  spec's class rules — `don't` selects as one word, `U.S.A.` as
-  three) and dragging extends word-by-word with the original
-  word staying fully selected when the drag reverses. Single-
-  click + drag starts character-granularity; pulling past the
-  clicked word's boundary upgrades to word granularity (and
-  pulls the rest of that word in); pulling back inside
-  downgrades to character. Triple-click selects a paragraph;
-  dragging extends paragraph-by-paragraph, and shift+click
-  after a triple-click extends paragraph-by-paragraph the same
-  way (matching triple-click + drag). Shift+click after a
-  single or double click extends with whatever granularity was
-  set (drag and shift+click are the same operation). Shift+
-  double-click and shift+triple-click are no-ops.
-- **Word-selection behavior now follows Word's actual rules instead
-  of the browser's regex-style word boundaries.** Affects double-
-  click-to-select-word (browser default still drives the gesture,
-  but the formatting and find rules align with it), whole-word
-  Find / Replace, the F7 / F8 / F10 cursor-expansion commands,
-  and more. The rules in brief: letters, digits, `'` (U+0027),
-  and `'` (U+2019) are word characters; `_`, `.`, `,`, `:`, `;`,
-  `-`, em / en dashes, ellipses, and `'` (U+2018) are NOT (they
-  break words). So `user_name` is two words, `1,234` is three,
-  `U.S.A.` is three (each letter alone), `H2O` is one,
-  `don't` / `we're` are one each. Whole-word Find of "don" no
-  longer matches "don" inside "don't", and "user" now matches
-  "user" inside "user_name". F10 Emphasize Acronym on
-  "U.S.C.P." now emphasizes U, S, C, P (instead of just U).
-- **Formatting commands skip the selection's trailing space.**
-  When you double-click "word" Word selects "word + space" and
-  bolding bolds the word only — that behavior now applies in
-  CardMirror across every formatting command (bold, italic,
-  underline, cite, emphasis, highlight, shading, font size,
-  font color, clear-formatting, and friends). A multi-word
-  selection like "the quick fox " loses the trailing space
-  from the formatting only — internal spaces stay formatted.
 - **AI comments are now identified by name and initials, not by
   an invisible flag** — the initials badge always reads `AI`, and
   the author name has `(AI)` appended (e.g. `Clod (AI)` when a
