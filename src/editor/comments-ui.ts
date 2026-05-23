@@ -137,6 +137,16 @@ export class CommentsColumn {
    *  sticky-active. Dismisses sticky when the user clicks somewhere
    *  not inside the active card. */
   private stickyDismissHandler: ((e: MouseEvent) => void) | null = null;
+  /** ResizeObserver watching the editor's PM root so cards relayout
+   *  when the editor reflows (window resize, font load, content
+   *  edits). Attaches lazily on first render() once a view is
+   *  available; re-attaches if the view's DOM root changes. */
+  private editorResizeObserver: ResizeObserver | null = null;
+  private observedEditorDom: HTMLElement | null = null;
+  /** rAF coalescing handle for the resize-driven relayout — fast
+   *  drag-resizes fire many ResizeObserver entries per frame, so
+   *  we collapse them to one relayout per frame. */
+  private resizeRelayoutRaf: number | null = null;
 
   constructor(root: HTMLElement, getView: () => EditorView | null) {
     this.root = root;
@@ -378,9 +388,108 @@ export class CommentsColumn {
       this.content.appendChild(this.renderThread(thread, ranges.get(id) ?? null));
     }
 
+    // Realize content-visibility:auto wrappers that hold a comment
+    // range before we read positions. Without this, multiple
+    // comments inside the same skipped wrapper all return the
+    // wrapper's outer top from `coordsAtPos` and stack at the
+    // same y. Synchronous offsetHeight read after the style
+    // writes forces a layout pass so the upcoming rAF reads
+    // realized positions.
+    this.realizeCommentWrappers(view, ranges);
+    // Make sure a resize observer is watching the editor's root so
+    // cards reposition on window resize, font load, content
+    // reflow, etc.
+    this.syncEditorResizeObserver(view);
     // Defer measurement to the next frame so the browser has
     // committed the new card DOM and computed their natural heights.
     requestAnimationFrame(() => this.layoutCards(view, ranges));
+  }
+
+  /** Reposition existing cards without rebuilding their DOM. Used
+   *  by the editor ResizeObserver to track reflows. Cheap
+   *  (no DOM rebuild, no thread iteration). No-op when the column
+   *  is hidden or no view is available. */
+  relayoutCards(): void {
+    const view = this.getView();
+    if (!view) return;
+    if (this.root.hidden) return;
+    const ranges = collectRanges(view.state.doc);
+    this.realizeCommentWrappers(view, ranges);
+    this.layoutCards(view, ranges);
+  }
+
+  /** Set `content-visibility: visible` on every `.pmd-card` /
+   *  `.pmd-analytic-unit` / `.pmd-pocket` / `.pmd-hat` /
+   *  `.pmd-block` wrapper ancestor of a comment range. Those
+   *  wrappers carry `content-visibility: auto` so the browser
+   *  skips their internal layout when off-viewport;
+   *  `view.coordsAtPos(rangeFrom)` then returns the wrapper's
+   *  outer top instead of the position-specific y, and multiple
+   *  comments inside the same skipped wrapper collapse to the
+   *  same column y. Per-range walk (not blanket `querySelectorAll`)
+   *  preserves the optimization for cards without comments. We
+   *  don't revert — re-skipping on a later relayout would make
+   *  `coordsAtPos` regress, and the placeholder size from
+   *  `contain-intrinsic-size: auto` is essentially identical to
+   *  the realized size, so leaving these specific wrappers
+   *  realized is essentially free. */
+  private realizeCommentWrappers(
+    view: EditorView,
+    ranges: Map<string, { from: number; to: number }>,
+  ): void {
+    if (ranges.size === 0) return;
+    const realized = new Set<HTMLElement>();
+    for (const [, range] of ranges) {
+      let node: Node | null;
+      try {
+        node = view.domAtPos(range.from).node;
+      } catch {
+        continue;
+      }
+      while (node && node !== view.dom) {
+        if (
+          node instanceof HTMLElement &&
+          !realized.has(node) &&
+          (node.classList.contains('pmd-card') ||
+            node.classList.contains('pmd-analytic-unit') ||
+            node.classList.contains('pmd-pocket') ||
+            node.classList.contains('pmd-hat') ||
+            node.classList.contains('pmd-block'))
+        ) {
+          if (node.style.contentVisibility !== 'visible') {
+            node.style.contentVisibility = 'visible';
+          }
+          realized.add(node);
+        }
+        node = node.parentNode;
+      }
+    }
+    // One sync layout pass forces realized wrappers' internal
+    // layout NOW so the rAF that follows can read fresh coords.
+    // Reading on `view.dom` (the editor root) rather than each
+    // individual wrapper keeps this to a single layout flush.
+    void (view.dom as HTMLElement).offsetHeight;
+  }
+
+  /** Hook a ResizeObserver to the editor's root so cards relayout
+   *  whenever the editor's content box changes — window resize,
+   *  font load, content edits that reflow headings, etc. Idempotent
+   *  when the editor root hasn't changed since the last call. */
+  private syncEditorResizeObserver(view: EditorView): void {
+    const target = view.dom as HTMLElement;
+    if (this.observedEditorDom === target) return;
+    if (this.editorResizeObserver) {
+      this.editorResizeObserver.disconnect();
+    }
+    this.observedEditorDom = target;
+    this.editorResizeObserver = new ResizeObserver(() => {
+      if (this.resizeRelayoutRaf !== null) return;
+      this.resizeRelayoutRaf = requestAnimationFrame(() => {
+        this.resizeRelayoutRaf = null;
+        this.relayoutCards();
+      });
+    });
+    this.editorResizeObserver.observe(target);
   }
 
   /** Position each thread card next to its anchored range using
