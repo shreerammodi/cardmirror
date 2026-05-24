@@ -68,12 +68,19 @@ see `DETAILED_CHANGELOG.md`.
   BEFORE the paragraph in that boundary case. Cursor
   mid-paragraph or at the end of a paragraph still inserts
   after, as before.
+- **Ctrl+Left / Ctrl+Right with an active selection now snap
+  to the WORD edge of the selection's relevant corner**, instead
+  of just collapsing to the corner. If the corner sits INSIDE a
+  word (e.g., you've selected "The" inside "Therefore"), the
+  cursor jumps to the end of that word (Ctrl+Right) or the start
+  of that word (Ctrl+Left). If the corner is already at a word
+  boundary, the keystroke just collapses there with no further
+  motion — same as before. Shift-extend variants are unchanged.
 - **Ctrl+Up / Ctrl+Down with an active selection no longer
-  skips into the adjacent paragraph.** They now snap to the
-  start (Up) or end (Down) of the last paragraph that's
-  visually part of the selection, matching the behavior of
-  plain Ctrl+Left / Ctrl+Right with a selection (collapse to
-  the edge, no further nav). Ctrl+Down in particular knows
+  skips into the adjacent paragraph.** Same idea as the
+  Ctrl+Left/Right change above, one notch coarser: snap to the
+  start (Up) or end (Down) of the paragraph that's actually
+  visually part of the selection. Ctrl+Down in particular knows
   that after Ctrl+Shift+Down the selection's bottom edge sits
   at the very start of the paragraph *below* the visual
   selection (because the extend goes to the next paragraph's

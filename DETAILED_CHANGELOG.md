@@ -190,6 +190,35 @@ in each release, see `CHANGELOG.md`.
   content-start, not past it), so `selection.$from` is always
   inside the visual selection.
 
+- **Ctrl+Left / Ctrl+Right with a selection now snap to the
+  word edge of the corner, not just collapse.** Refines the
+  earlier "collapse to selection.from / .to" behavior of
+  `horizontalCommandPair` so it matches `verticalCommandPair`'s
+  paragraph-edge snap, one notch finer. With a non-empty
+  selection and Shift NOT held: take the corner (`$from` for
+  Ctrl+Left, `$to` for Ctrl+Right); if the corner is INSIDE a
+  word/punct run (left and right flanking chars are the same
+  word/punct class), snap to that run's edge via the same
+  `prevUnitStart` / `nextUnitStart` iterator the no-selection
+  variants use (including the spec's trailing-space absorption
+  on the right side); otherwise collapse to the corner. The
+  "otherwise" branch is the analog of `verticalCommandPair`'s
+  `$to.parentOffset === 0` fallback — when the corner already
+  sits at a unit boundary (textblock edge, adjacent to
+  space/tab, or at a word↔punct transition), end-of-prev-unit
+  and start-of-next-unit are the same position, so the snap is
+  a no-op and we just collapse.
+
+  Concrete: select "The" inside "Therefore" → Ctrl+Right lands
+  the cursor at the end of "Therefore" (with trailing-space
+  absorption if the word has one). After a Ctrl+Shift+Right
+  that absorbed past a word's trailing space (head at start of
+  the next word), plain Ctrl+Right just collapses there — does
+  NOT push further into the next word, matching the analogous
+  Ctrl+Shift+Down → Ctrl+Down behavior. Helper
+  `isInsideWordOrPunctUnit(map, offset)` does the boundary
+  check.
+
 ## 0.1.0-alpha.4 — 2026-05-22
 
 - **Layer 2 (keyboard navigation keymap) from the Word-selection

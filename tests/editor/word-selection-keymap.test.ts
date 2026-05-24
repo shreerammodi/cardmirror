@@ -229,3 +229,104 @@ describe('Ctrl+Up / Ctrl+Down with a non-empty selection', () => {
     expect(sel.head).toBe(b2);
   });
 });
+
+describe('Ctrl+Left / Ctrl+Right with a non-empty selection', () => {
+  // Doc: one card_body holding a single text node so positions are
+  // 1:1 with character offsets inside the text.
+  function buildDoc(text: string) {
+    return makeDoc([cardWith(tag('TAG'), cardBody(text))]);
+  }
+
+  it('Ctrl+Right with selection inside a word → end of that word', () => {
+    // "Therefore" — select "The" (offsets 0..3 within the word).
+    // Ctrl+Right should jump to the end of the word ("Therefore"
+    // has no trailing space, so the unit ends right after the 'e').
+    const doc = buildDoc('Therefore');
+    const start = findTextStart(doc, 'Therefore');
+    const state = stateWith(doc, start, start + 3);
+    const next = press(state, 'ArrowRight', { ctrl: true });
+    expect(next).not.toBeNull();
+    const sel = next!.selection;
+    expect(sel.empty).toBe(true);
+    expect(sel.from).toBe(start + 'Therefore'.length);
+  });
+
+  it('Ctrl+Right with selection inside a word that has a trailing space → past the trailing space', () => {
+    // "Therefore foo" — select "The". Ctrl+Right absorbs the
+    // trailing space and lands at the start of "foo".
+    const doc = buildDoc('Therefore foo');
+    const start = findTextStart(doc, 'Therefore foo');
+    const state = stateWith(doc, start, start + 3);
+    const next = press(state, 'ArrowRight', { ctrl: true });
+    expect(next).not.toBeNull();
+    const sel = next!.selection;
+    expect(sel.empty).toBe(true);
+    expect(sel.from).toBe(start + 'Therefore '.length);
+  });
+
+  it('Ctrl+Right with selection inside a word followed by punct → just past the word (NOT into the punct)', () => {
+    // "Therefore. foo" — select "The". The word ends at offset 9
+    // (the "." is its own punct unit). Ctrl+Right should stop at
+    // offset 9, between "Therefore" and ".".
+    const doc = buildDoc('Therefore. foo');
+    const start = findTextStart(doc, 'Therefore. foo');
+    const state = stateWith(doc, start, start + 3);
+    const next = press(state, 'ArrowRight', { ctrl: true });
+    expect(next).not.toBeNull();
+    expect(next!.selection.from).toBe(start + 'Therefore'.length);
+  });
+
+  it('Ctrl+Left with selection inside a word → start of that word', () => {
+    // "Therefore" — selection from offset 5 to offset 9 ("fore").
+    // Ctrl+Left should jump to the start of "Therefore" (offset 0).
+    const doc = buildDoc('Therefore');
+    const start = findTextStart(doc, 'Therefore');
+    const state = stateWith(doc, start + 5, start + 9);
+    const next = press(state, 'ArrowLeft', { ctrl: true });
+    expect(next).not.toBeNull();
+    expect(next!.selection.from).toBe(start);
+  });
+
+  it('Ctrl+Right with selection ending AT a unit boundary → just collapses, no advance', () => {
+    // After Ctrl+Shift+Right past "Therefore " (with trailing
+    // space absorption), $to lands at offset 10 = start of "foo".
+    // That's a unit boundary. Plain Ctrl+Right should NOT advance
+    // further into "foo"; it should collapse at the boundary.
+    const doc = buildDoc('Therefore foo bar');
+    const start = findTextStart(doc, 'Therefore foo bar');
+    const fromPos = start;
+    const toPos = start + 'Therefore '.length;
+    const state = stateWith(doc, fromPos, toPos);
+    const next = press(state, 'ArrowRight', { ctrl: true });
+    expect(next).not.toBeNull();
+    expect(next!.selection.from).toBe(toPos);
+  });
+
+  it('Ctrl+Left with selection starting AT a unit boundary → just collapses, no rewind', () => {
+    // Selection from start of "foo" backward to start of doc would
+    // be unusual, but: selection covers "Therefore " ending at the
+    // boundary. $from is at offset 0 (start of textblock — a unit
+    // boundary by definition). Plain Ctrl+Left should NOT rewind
+    // into a previous textblock; it should collapse at 0.
+    const doc = buildDoc('Therefore foo');
+    const start = findTextStart(doc, 'Therefore foo');
+    const state = stateWith(doc, start, start + 'Therefore '.length);
+    const next = press(state, 'ArrowLeft', { ctrl: true });
+    expect(next).not.toBeNull();
+    expect(next!.selection.from).toBe(start);
+  });
+
+  it('Ctrl+Shift+Right still extends as before (not snapped-and-collapsed)', () => {
+    const doc = buildDoc('Therefore foo');
+    const start = findTextStart(doc, 'Therefore foo');
+    // Cursor at offset 3 inside "Therefore," extend right.
+    const state = stateWith(doc, start + 3);
+    const next = press(state, 'ArrowRight', { ctrl: true, shift: true });
+    expect(next).not.toBeNull();
+    const sel = next!.selection;
+    expect(sel.empty).toBe(false);
+    expect(sel.anchor).toBe(start + 3);
+    // Extended head goes to start of "foo" (trailing-space absorbed).
+    expect(sel.head).toBe(start + 'Therefore '.length);
+  });
+});

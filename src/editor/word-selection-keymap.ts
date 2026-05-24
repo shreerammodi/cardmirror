@@ -343,13 +343,26 @@ function commandPair(
 }
 
 /** Variant of `commandPair` for the horizontal Ctrl+Left /
- *  Ctrl+Right pair: when a non-empty selection is present and
- *  Shift is NOT held, the move command collapses to the
- *  selection's appropriate edge instead of computing a fresh
- *  unit boundary from the head. Matches Word's behavior — plain
- *  Ctrl+Left/Right with an existing selection acts identically
- *  to plain Left/Right (collapse, no further nav). Shift-extend
- *  variants are unaffected. */
+ *  Ctrl+Right pair. Symmetric to `verticalCommandPair` (paragraph
+ *  edge), one notch finer: when a non-empty selection is present
+ *  and Shift is NOT held, snap to the START (Left) or END (Right)
+ *  of the WORD/PUNCT unit that contains the corresponding
+ *  selection edge.
+ *
+ *  Two cases for the edge corner:
+ *
+ *   - INSIDE a word or punct run (both flanking chars are the
+ *     same word/punct class) → snap to that unit's edge via
+ *     `prevUnitStart` / `nextUnitStart`. The same iterator the
+ *     no-selection commands use, so the destination matches
+ *     pressing Ctrl+Right from a caret at the corner.
+ *   - AT a unit boundary (corner at textblock edge, or flanked
+ *     by space/tab on the motion-side, or by a different class)
+ *     → just collapse to the corner. The position is already at
+ *     a unit edge; mirrors `verticalCommandPair`'s "stay put
+ *     when `$to.parentOffset === 0`" fallback.
+ *
+ *  Shift-extend variants are unaffected. */
 function horizontalCommandPair(
   computeDest: (state: EditorState) => number | null,
   collapseEdge: 'from' | 'to',
@@ -357,9 +370,25 @@ function horizontalCommandPair(
   const base = commandPair(computeDest);
   const move: Command = (state, dispatch) => {
     if (!state.selection.empty) {
+      const $corner =
+        collapseEdge === 'from' ? state.selection.$from : state.selection.$to;
+      let dest: number;
+      if ($corner.parent.isTextblock) {
+        const map = classMapFor($corner.parent);
+        const offset = $corner.parentOffset;
+        if (isInsideWordOrPunctUnit(map, offset)) {
+          const local =
+            collapseEdge === 'from'
+              ? prevUnitStart(map, offset)
+              : nextUnitStart(map, offset);
+          dest = $corner.start() + local;
+        } else {
+          dest = collapseEdge === 'from' ? state.selection.from : state.selection.to;
+        }
+      } else {
+        dest = collapseEdge === 'from' ? state.selection.from : state.selection.to;
+      }
       if (!dispatch) return true;
-      const dest =
-        collapseEdge === 'from' ? state.selection.from : state.selection.to;
       dispatch(
         state.tr
           .setSelection(TextSelection.create(state.doc, dest))
@@ -370,6 +399,19 @@ function horizontalCommandPair(
     return base.move(state, dispatch);
   };
   return { move, extend: base.extend };
+}
+
+/** True when `offset` lies strictly inside a contiguous run of
+ *  word OR punct characters — both the char to the left and the
+ *  char at `offset` are the same word/punct class. Boundaries
+ *  (textblock edges, adjacent to space/tab, or class transitions
+ *  like word/punct) are NOT inside a unit. */
+function isInsideWordOrPunctUnit(map: ClassMap, offset: number): boolean {
+  if (offset <= 0 || offset >= map.size) return false;
+  const left = map.classAt(offset - 1);
+  const right = map.classAt(offset);
+  if (left !== right) return false;
+  return left === 'word' || left === 'punct';
 }
 
 /** Variant of `commandPair` for the vertical Ctrl+Up / Ctrl+Down
