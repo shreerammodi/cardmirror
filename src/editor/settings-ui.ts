@@ -132,6 +132,22 @@ function onDetached(el: Element, callback: () => void): () => void {
   return () => obs.disconnect();
 }
 
+/** Nudge a tab into the visible band of its scrolling container.
+ *  If the tab's bounding rect is fully inside the container's
+ *  rect, no-op. Otherwise scroll just enough to reveal it on the
+ *  nearer side. Avoids `el.scrollIntoView` because that scrolls
+ *  the WHOLE page (including the editor surface behind the modal)
+ *  when the container itself is fully on-screen. */
+function scrollTabIntoView(tab: HTMLElement, container: HTMLElement): void {
+  const tr = tab.getBoundingClientRect();
+  const cr = container.getBoundingClientRect();
+  if (tr.left < cr.left) {
+    container.scrollBy({ left: tr.left - cr.left, behavior: 'smooth' });
+  } else if (tr.right > cr.right) {
+    container.scrollBy({ left: tr.right - cr.right, behavior: 'smooth' });
+  }
+}
+
 /** Tab labels shown in the settings dialog, in display order. */
 const CATEGORY_TABS: { id: SettingsCategory; label: string }[] = [
   { id: 'general', label: 'General' },
@@ -350,6 +366,11 @@ class SettingsModal {
         }
         if (panel) panel.hidden = !isActive;
       }
+      // If the newly-active tab is clipped by the scroll viewport
+      // (clicked at the edge of view, or activated programmatically
+      // while not in view), nudge it into the visible band.
+      const activeBtn = tabButtons[this.activeCategory];
+      if (activeBtn) scrollTabIntoView(activeBtn, tabStrip);
     };
     this.setActiveCategory = (id: SettingsCategory) => {
       this.activeCategory = id;

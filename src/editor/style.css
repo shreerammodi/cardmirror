@@ -2995,8 +2995,13 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
   min-width: 0;
   gap: 0.25rem;
   /* Horizontal scroll under JS-arrow control. No native
-     scrollbar — the arrow buttons are the only scroll affordance. */
+     scrollbar — the arrow buttons are the only scroll affordance.
+     `overflow-y: hidden` is explicit because setting just
+     `overflow-x: hidden` would auto-promote `overflow-y: visible`
+     to `auto`, surfacing a vertical scrollbar if any tab button
+     is even 1px taller than the strip's content area. */
   overflow-x: hidden;
+  overflow-y: hidden;
   scroll-behavior: smooth;
 }
 
