@@ -2940,7 +2940,11 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
   border-radius: 8px;
   box-shadow: 0 8px 32px var(--pmd-c-shadow-deep);
   width: 90%;
-  max-width: 640px;
+  /* Max-width sized to fit the full tab strip at the dialog's
+     largest rendering — otherwise the scroll-arrow buttons would
+     show even at max width, which defeats the point of having a
+     "natural" max-width. Update this if the tab labels grow. */
+  max-width: 720px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
