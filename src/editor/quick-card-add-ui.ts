@@ -154,6 +154,11 @@ class QuickCardAddModal {
     this.tagInput.addEventListener('input', () => this.renderSuggestions());
     tagsField.appendChild(this.tagInput);
 
+    const hint = document.createElement('div');
+    hint.className = 'pmd-qc-add-hint';
+    hint.textContent = 'Press Enter or comma to add each tag.';
+    tagsField.appendChild(hint);
+
     this.suggestionsEl = document.createElement('div');
     this.suggestionsEl.className = 'pmd-qc-add-suggestions';
     tagsField.appendChild(this.suggestionsEl);

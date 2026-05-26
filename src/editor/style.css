@@ -6103,6 +6103,10 @@ body.pmd-recovery-active.pmd-multi-doc #app {
 .pmd-qc-add-chip-x:hover {
   color: var(--pmd-c-text);
 }
+.pmd-qc-add-hint {
+  font-size: 0.72rem;
+  color: var(--pmd-c-text-muted);
+}
 .pmd-qc-add-suggestions {
   display: flex;
   flex-wrap: wrap;
