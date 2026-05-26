@@ -221,7 +221,10 @@ class HomeScreen {
 
     const name = document.createElement('span');
     name.className = 'pmd-home-recent-name';
-    name.textContent = recent.filename;
+    // The format chip already shows .cmir / .docx, so drop the
+    // extension from the displayed name to reduce redundancy.
+    name.textContent = stripKnownExt(recent.filename);
+    name.title = recent.filename;
     row.appendChild(name);
 
     const path = document.createElement('span');
@@ -234,6 +237,11 @@ class HomeScreen {
     }
     return row;
   }
+}
+
+/** Drop a trailing `.cmir` / `.docx` extension for display. */
+function stripKnownExt(name: string): string {
+  return name.replace(/\.(cmir|docx)$/i, '');
 }
 
 export const homeScreen = new HomeScreen();

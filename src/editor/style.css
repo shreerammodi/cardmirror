@@ -2510,8 +2510,7 @@ html.pmd-home-active #speech-doc-banner {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  direction: rtl;
-  text-align: left;
+  text-align: right;
 }
 
 /* Hide the dropzone pill from the chrome when the user has
