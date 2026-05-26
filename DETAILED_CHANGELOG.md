@@ -8,7 +8,7 @@ in each release, see `CHANGELOG.md`.
 ## Unreleased
 
 - **Save As dialog reorganized around presets.** The dialog body
-  now reads top-to-bottom: a **File Name** section
+  now reads top-to-bottom: a **Name** section
   (`buildFileNameSection`) → a **Format** section
   (`buildFormatSection`) → a **Save** heading → preset buttons → a
   divider → the **Custom Save** section → a divider → Cancel

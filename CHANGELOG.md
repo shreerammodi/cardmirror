@@ -120,7 +120,7 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Changed
 
-- **Save As dialog reorganized around presets.** **File Name** and
+- **Save As dialog reorganized around presets.** **Name** and
   **Format** sections sit at the top; a **Save** section below
   offers three one-click save buttons — **As-Is** (everything),
   **Send Doc** (excludes analytics, undertags, and comments), and

@@ -9,7 +9,7 @@
  *     teammates still on Verbatim, or for any tournament-day round
  *     where the receiving party needs Word.
  *
- * Layout: a File Name section, a Format section, then a Save section
+ * Layout: a Name section, a Format section, then a Save section
  * with one-click presets — As-Is (everything), Send Doc (no
  * analytics / undertags / comments), Read Doc (read-mode export),
  * each with its description as a caption below the button — followed
@@ -259,7 +259,7 @@ class SaveAsModal {
     wrap.className = 'pmd-save-as-field';
     const heading = document.createElement('div');
     heading.className = 'pmd-save-as-options-heading';
-    heading.textContent = 'File Name';
+    heading.textContent = 'Name';
     wrap.appendChild(heading);
     this.filenameInput = document.createElement('input');
     this.filenameInput.type = 'text';
