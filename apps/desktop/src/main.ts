@@ -781,6 +781,7 @@ ipcMain.handle('host:list-docs', async (event) => {
 interface DropzoneItem {
   id: string;
   label: string;
+  type: string;
   sliceJson: unknown;
   createdAt: number;
 }

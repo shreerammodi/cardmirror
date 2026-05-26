@@ -1,33 +1,28 @@
 /**
- * Dropzone bubble — a cross-window scratch shelf for dragged
- * content. UI element pinned to the bottom of the nav pane.
+ * Dropzone bubble — cross-window scratch shelf for dragged content.
+ * Pinned to the bottom of the nav pane.
  *
- * Lifecycle:
- *   - Resting state: small grey bubble showing an item count.
- *   - Drag-over (something being dragged onto the bubble): expands
- *     to a wider drop target with the blue `--pmd-c-drop` accent
- *     used elsewhere for drag highlights.
- *   - Click: opens a popover above the bubble listing every item
- *     across every window. Each row has a delete button and is
- *     draggable — drag a row out and it lands at the cursor's
- *     drop target (same machinery PM uses for normal drags).
+ * UI:
+ *   - Closed: small grey pill with item count.
+ *   - Drag-over: blue accept-state, slightly widened, matches the
+ *     nav-pane + editor drop indicator color tokens.
+ *   - Open: the whole root expands UPWARD inside the nav pane,
+ *     revealing a header + scrollable list above the pill. The
+ *     list wraps long item labels rather than ellipsing them.
  *
- * Drag-in:
- *   Registers a DragSurface with `dragController`. Its hitTest
- *   returns the bubble's bounding rect; on commit the controller
- *   calls the surface's `absorb` callback, which extracts each
- *   item's slice from the source view (or uses the prebuilt slice
- *   for virtual sessions) and pushes it into the dropzone store.
+ * Drag-in: registers a DragSurface with `dragController`. The
+ *   surface's `absorb` extracts each session item's slice and
+ *   pushes it into `dropzoneStore`. The drop-target highlight
+ *   class is cleared on 'end' so the bubble shrinks back after
+ *   commit (otherwise the controller's last hit-test win sticks).
  *
- * Drag-out:
- *   Each popover row listens for pointerdown + threshold-crossing
- *   pointermove, at which point it starts a `virtual` drag session
- *   via `dragController.begin(...)`. From there everything is
- *   standard — the controller routes the drop through the same
- *   surfaces as a normal drag.
+ * Drag-out: each row starts a `virtual` drag session via
+ *   `dragController.begin(...)` on pointerdown + threshold move.
+ *   The controller routes the drop through normal surfaces.
  *
  * Store: `dropzoneStore` (electron-aware) holds the cross-window
- *   state. The bubble subscribes and re-renders on every change.
+ *   state. One DropzoneController per nav-pane; they all share
+ *   content through the store.
  */
 
 import { Slice } from 'prosemirror-model';
@@ -37,29 +32,23 @@ import { dropzoneStore, type DropzoneItem } from './dropzone-store.js';
 import { schema } from '../schema/index.js';
 
 interface DropzoneMountOptions {
-  /** The nav-pane root the bubble is anchored to. The bubble
-   *  positions itself relative to this element. */
   parent: HTMLElement;
-  /** Returns the currently-focused PM view (used as the source
-   *  view for virtual drag sessions). Some downstream code in the
-   *  controller derefs the session view — even though it doesn't
-   *  read its doc for virtual sessions, the session shape still
-   *  requires one. */
   getFocusedView: () => EditorView | null;
 }
 
 export class DropzoneController {
   private root!: HTMLDivElement;
+  private panel!: HTMLDivElement;
+  private listEl!: HTMLUListElement;
   private bubble!: HTMLButtonElement;
   private countBadge!: HTMLSpanElement;
-  private popover: HTMLDivElement | null = null;
   private items: DropzoneItem[] = [];
+  private open = false;
   private surface: DragSurface | null = null;
   private unregisterSurface: (() => void) | null = null;
   private unsubscribeStore: (() => void) | null = null;
   private unsubscribeController: (() => void) | null = null;
   private getFocusedView: () => EditorView | null = () => null;
-  // Drag-out pointer-tracking state.
   private dragOutSource: {
     startX: number;
     startY: number;
@@ -72,18 +61,49 @@ export class DropzoneController {
 
     this.root = document.createElement('div');
     this.root.className = 'pmd-dropzone-root';
+    this.root.dataset['open'] = 'false';
 
+    // Inline panel — sits above the bubble inside the root, shown
+    // when open. Grows upward as the root is anchored to the nav
+    // pane's bottom edge.
+    this.panel = document.createElement('div');
+    this.panel.className = 'pmd-dropzone-panel';
+
+    const header = document.createElement('div');
+    header.className = 'pmd-dropzone-panel-header';
+    const title = document.createElement('span');
+    title.className = 'pmd-dropzone-panel-title';
+    title.textContent = 'Shelf';
+    header.appendChild(title);
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'pmd-dropzone-panel-clear';
+    clear.textContent = 'Clear';
+    clear.title = 'Remove every shelf item';
+    clear.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void dropzoneStore.clear();
+    });
+    header.appendChild(clear);
+    this.panel.appendChild(header);
+
+    this.listEl = document.createElement('ul');
+    this.listEl.className = 'pmd-dropzone-list';
+    this.panel.appendChild(this.listEl);
+
+    this.root.appendChild(this.panel);
+
+    // Bubble — the always-visible toggle. Clicking it expands the
+    // root upward into the nav pane.
     this.bubble = document.createElement('button');
     this.bubble.type = 'button';
     this.bubble.className = 'pmd-dropzone-bubble';
     this.bubble.setAttribute('aria-label', 'Dropzone shelf');
-    this.bubble.title = 'Dropzone — drag content here, then drop elsewhere to reuse';
+    this.bubble.title = 'Dropzone — drag content here, click to expand';
 
     const icon = document.createElement('span');
     icon.className = 'pmd-dropzone-icon';
     icon.setAttribute('aria-hidden', 'true');
-    // Inline SVG (avoids a font-glyph dependency on the user-chosen
-    // UI font). A simple tray-with-arrow glyph.
     icon.innerHTML =
       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><path d="M12 14V4"/><path d="M8 8l4-4 4 4"/></svg>';
     this.bubble.appendChild(icon);
@@ -95,30 +115,24 @@ export class DropzoneController {
 
     this.bubble.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.togglePopover();
+      this.setOpen(!this.open);
     });
 
     this.root.appendChild(this.bubble);
     opts.parent.appendChild(this.root);
 
-    // Drag surface — bubble accepts drops, popover content area
-    // also accepts drops (drop-on-popover same as drop-on-bubble).
+    // Drag surface — bubble + panel both act as the drop target so
+    // the user can drop onto either when the shelf is open.
     this.surface = {
       hitTest: (clientX, clientY) => {
-        const rect = this.bubble.getBoundingClientRect();
-        const popRect = this.popover?.getBoundingClientRect();
-        const inBubble =
+        const inside = (rect: DOMRect): boolean =>
           clientX >= rect.left &&
           clientX <= rect.right &&
           clientY >= rect.top &&
           clientY <= rect.bottom;
-        const inPop =
-          popRect != null &&
-          clientX >= popRect.left &&
-          clientX <= popRect.right &&
-          clientY >= popRect.top &&
-          clientY <= popRect.bottom;
-        if (!inBubble && !inPop) return null;
+        const bubbleRect = this.bubble.getBoundingClientRect();
+        const panelRect = this.open ? this.panel.getBoundingClientRect() : null;
+        if (!inside(bubbleRect) && !(panelRect && inside(panelRect))) return null;
         return {
           el: this.bubble,
           insertPos: 0,
@@ -127,30 +141,35 @@ export class DropzoneController {
         };
       },
       highlight: (el) => {
-        this.bubble.classList.toggle('pmd-dropzone-bubble-drop-target', el !== null);
+        const active = el !== null;
+        this.bubble.classList.toggle('pmd-dropzone-bubble-drop-target', active);
+        this.root.classList.toggle('pmd-dropzone-root-drop-target', active);
       },
     };
     this.unregisterSurface = dragController.registerSurface(this.surface);
 
-    // Store subscription — re-render on every change.
     void dropzoneStore.init().then(() => {
       this.items = dropzoneStore.list();
-      this.render();
+      this.renderList();
+      this.renderBubble();
     });
     this.unsubscribeStore = dropzoneStore.subscribe((items) => {
       this.items = items;
-      this.render();
+      this.renderList();
+      this.renderBubble();
     });
 
-    // Controller subscription — clean up drag-out state when a
-    // session ends (regardless of how it ended).
+    // End-of-drag cleanup — controller doesn't proactively clear
+    // surface highlights when a session ends, so we do it here so
+    // the bubble shrinks back after a successful commit (or
+    // cancel).
     this.unsubscribeController = dragController.subscribe((event) => {
       if (event === 'end') {
+        this.surface?.highlight(null);
         this.endDragOut();
       }
     });
 
-    // Click-outside closes the popover.
     document.addEventListener('pointerdown', this.onDocumentPointerDown);
   }
 
@@ -159,99 +178,50 @@ export class DropzoneController {
     this.unsubscribeStore?.();
     this.unsubscribeController?.();
     this.unregisterSurface?.();
-    this.closePopover();
     this.root.remove();
   }
 
   // ---- Rendering ----------------------------------------------------
 
-  private render(): void {
+  private renderBubble(): void {
     const n = this.items.length;
     this.countBadge.hidden = n === 0;
     this.countBadge.textContent = String(n);
     this.bubble.classList.toggle('pmd-dropzone-bubble-empty', n === 0);
-    if (this.popover) this.renderPopover();
   }
 
-  private togglePopover(): void {
-    if (this.popover) this.closePopover();
-    else this.openPopover();
+  private setOpen(open: boolean): void {
+    if (this.open === open) return;
+    this.open = open;
+    this.root.dataset['open'] = open ? 'true' : 'false';
+    this.bubble.classList.toggle('pmd-dropzone-bubble-open', open);
   }
 
-  private openPopover(): void {
-    this.popover = document.createElement('div');
-    this.popover.className = 'pmd-dropzone-popover';
-    // Anchor above the bubble. The popover is `position: fixed`
-    // so it's not clipped by the nav-pane's overflow.
-    document.body.appendChild(this.popover);
-    this.renderPopover();
-    this.bubble.classList.add('pmd-dropzone-bubble-open');
-    this.repositionPopover();
-    window.addEventListener('resize', this.repositionPopover);
-  }
-
-  private closePopover(): void {
-    if (!this.popover) return;
-    this.popover.remove();
-    this.popover = null;
-    this.bubble.classList.remove('pmd-dropzone-bubble-open');
-    window.removeEventListener('resize', this.repositionPopover);
-  }
-
-  private renderPopover(): void {
-    if (!this.popover) return;
-    this.popover.innerHTML = '';
-
-    const header = document.createElement('div');
-    header.className = 'pmd-dropzone-popover-header';
-    const title = document.createElement('span');
-    title.className = 'pmd-dropzone-popover-title';
-    title.textContent = this.items.length === 0
-      ? 'Dropzone shelf'
-      : `Dropzone shelf — ${this.items.length} item${this.items.length === 1 ? '' : 's'}`;
-    header.appendChild(title);
-    if (this.items.length > 0) {
-      const clear = document.createElement('button');
-      clear.type = 'button';
-      clear.className = 'pmd-dropzone-popover-clear';
-      clear.textContent = 'Clear all';
-      clear.title = 'Remove every shelf item';
-      clear.addEventListener('click', () => {
-        void dropzoneStore.clear();
-      });
-      header.appendChild(clear);
-    }
-    this.popover.appendChild(header);
-
+  private renderList(): void {
+    this.listEl.innerHTML = '';
     if (this.items.length === 0) {
-      const empty = document.createElement('p');
-      empty.className = 'pmd-dropzone-popover-empty';
+      const empty = document.createElement('li');
+      empty.className = 'pmd-dropzone-empty';
       empty.textContent =
-        'Drag a card, heading, or selection onto the bubble below. Items here are shared across windows in this session.';
-      this.popover.appendChild(empty);
-      this.repositionPopover();
+        'Drag a card, heading, or selection onto the pill below. Shelf items are shared across windows for this session.';
+      this.listEl.appendChild(empty);
       return;
     }
-
-    const list = document.createElement('ul');
-    list.className = 'pmd-dropzone-list';
     // Newest first.
     for (const item of [...this.items].reverse()) {
-      list.appendChild(this.renderRow(item));
+      this.listEl.appendChild(this.renderRow(item));
     }
-    this.popover.appendChild(list);
-    this.repositionPopover();
   }
 
   private renderRow(item: DropzoneItem): HTMLLIElement {
     const row = document.createElement('li');
     row.className = 'pmd-dropzone-row';
 
-    const handle = document.createElement('span');
-    handle.className = 'pmd-dropzone-row-handle';
-    handle.setAttribute('aria-hidden', 'true');
-    handle.textContent = '⋮⋮';
-    row.appendChild(handle);
+    const badge = document.createElement('span');
+    const { kind, label: typeLabel } = typeBadge(item.type);
+    badge.className = `pmd-dropzone-row-type pmd-dropzone-row-type-${kind}`;
+    badge.textContent = typeLabel;
+    row.appendChild(badge);
 
     const label = document.createElement('span');
     label.className = 'pmd-dropzone-row-label';
@@ -271,11 +241,8 @@ export class DropzoneController {
     });
     row.appendChild(del);
 
-    // Drag-out: pointerdown starts tracking, pointermove past the
-    // threshold begins a virtual drag session via the controller.
     row.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
-      // Ignore clicks on the delete button.
       if ((e.target as HTMLElement).closest('.pmd-dropzone-row-delete')) return;
       this.dragOutSource = {
         startX: e.clientX,
@@ -285,8 +252,6 @@ export class DropzoneController {
       };
       window.addEventListener('pointermove', this.onDragOutPointerMove);
       window.addEventListener('pointerup', this.onDragOutPointerUp);
-      // Prevent text-selection from the row's label intercepting
-      // the drag gesture.
       e.preventDefault();
     });
 
@@ -307,13 +272,14 @@ export class DropzoneController {
       await dropzoneStore.add({
         id,
         label,
+        type: item.type || inferTypeFromSlice(slice),
         sliceJson,
         createdAt: Date.now(),
       });
     }
   }
 
-  // ---- Drag-out (start a virtual session) ---------------------------
+  // ---- Drag-out -----------------------------------------------------
 
   private onDragOutPointerMove = (e: PointerEvent): void => {
     const src = this.dragOutSource;
@@ -321,10 +287,9 @@ export class DropzoneController {
     if (!src.started) {
       const dx = e.clientX - src.startX;
       const dy = e.clientY - src.startY;
-      if (dx * dx + dy * dy < 16) return; // < 4 px threshold
+      if (dx * dx + dy * dy < 16) return;
       src.started = this.beginDragOut(src.item);
       if (!src.started) {
-        // No focused view → can't start a virtual session; bail.
         this.endDragOut();
         return;
       }
@@ -354,7 +319,7 @@ export class DropzoneController {
       from: 0,
       to: 0,
       id: null,
-      type: 'dropzone',
+      type: item.type || 'dropzone',
       level: 0,
       label: item.label,
       prebuilt: slice,
@@ -370,32 +335,14 @@ export class DropzoneController {
     this.dragOutSource = null;
   }
 
-  // ---- Misc utilities -----------------------------------------------
+  // ---- Click-outside ------------------------------------------------
 
   private onDocumentPointerDown = (e: PointerEvent): void => {
-    if (!this.popover) return;
+    if (!this.open) return;
     const t = e.target as Node | null;
     if (!t) return;
-    if (this.bubble.contains(t) || this.popover.contains(t)) return;
-    this.closePopover();
-  };
-
-  private repositionPopover = (): void => {
-    if (!this.popover) return;
-    const r = this.bubble.getBoundingClientRect();
-    // Pop above and aligned with the bubble's left edge. Clamped to
-    // viewport so it doesn't slip off the right or top edges.
-    const popRect = this.popover.getBoundingClientRect();
-    const margin = 8;
-    let left = r.left;
-    if (left + popRect.width > window.innerWidth - margin) {
-      left = window.innerWidth - margin - popRect.width;
-    }
-    if (left < margin) left = margin;
-    let top = r.top - popRect.height - 8;
-    if (top < margin) top = r.bottom + 8;
-    this.popover.style.left = `${left}px`;
-    this.popover.style.top = `${top}px`;
+    if (this.root.contains(t)) return;
+    this.setOpen(false);
   };
 }
 
@@ -404,16 +351,41 @@ function newId(): string {
 }
 
 function deriveLabel(slice: Slice, item: DragItem): string {
-  // Prefer the source item's label when present (heading drag from
-  // the nav pane → already a human label). Otherwise derive from
-  // the slice's textContent.
   if (item.label && item.label.trim()) {
     const l = item.label.trim();
-    return l.length > 80 ? l.slice(0, 78) + '…' : l;
+    return l.length > 120 ? l.slice(0, 118) + '…' : l;
   }
   const text = slice.content.textBetween(0, slice.content.size, ' ', ' ').trim();
-  if (text) return text.length > 80 ? text.slice(0, 78) + '…' : text;
-  // Empty slice (e.g., a structural-only drag) — fall back to type.
+  if (text) return text.length > 120 ? text.slice(0, 118) + '…' : text;
   return item.type ? `(${item.type})` : '(item)';
 }
 
+/** Map a schema-node type to a badge kind + visible label. The
+ *  kind feeds the CSS variant class for the badge color; the
+ *  label is the short uppercase chip text. */
+function typeBadge(type: string): { kind: string; label: string } {
+  switch (type) {
+    case 'pocket': return { kind: 'pocket', label: 'POCKET' };
+    case 'hat': return { kind: 'hat', label: 'HAT' };
+    case 'block': return { kind: 'block', label: 'BLOCK' };
+    case 'tag': return { kind: 'tag', label: 'TAG' };
+    case 'analytic': return { kind: 'analytic', label: 'ANALYTIC' };
+    case 'card': return { kind: 'card', label: 'CARD' };
+    case 'card_body': return { kind: 'card', label: 'BODY' };
+    case 'cite_paragraph': return { kind: 'cite', label: 'CITE' };
+    case 'analytic_unit': return { kind: 'analytic', label: 'ANALYTIC' };
+    case 'undertag': return { kind: 'tag', label: 'UNDERTAG' };
+    case 'paragraph': return { kind: 'text', label: 'TEXT' };
+    case 'text': return { kind: 'text', label: 'TEXT' };
+    default: return { kind: 'generic', label: 'ITEM' };
+  }
+}
+
+/** Best-effort type inference from a slice's top-level node when
+ *  the source DragItem didn't carry one (e.g., a raw text-selection
+ *  drag from the editor). */
+function inferTypeFromSlice(slice: Slice): string {
+  if (slice.content.childCount === 0) return 'text';
+  const first = slice.content.firstChild;
+  return first ? first.type.name : 'text';
+}

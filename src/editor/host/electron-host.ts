@@ -58,7 +58,7 @@ interface ElectronAPI {
   /** Cross-window dropzone shelf. List returns current items;
    *  add/remove/clear mutate and broadcast via onDropzoneChanged. */
   dropzoneList(): Promise<
-    Array<{ id: string; label: string; sliceJson: unknown; createdAt: number }>
+    Array<{ id: string; label: string; type: string; sliceJson: unknown; createdAt: number }>
   >;
   dropzoneAdd(item: {
     id: string;
@@ -70,7 +70,7 @@ interface ElectronAPI {
   dropzoneClear(): Promise<void>;
   onDropzoneChanged(
     handler: (
-      items: Array<{ id: string; label: string; sliceJson: unknown; createdAt: number }>,
+      items: Array<{ id: string; label: string; type: string; sliceJson: unknown; createdAt: number }>,
     ) => void,
   ): () => void;
 
@@ -271,7 +271,7 @@ export class ElectronHost implements Host {
   }
 
   async dropzoneList(): Promise<
-    Array<{ id: string; label: string; sliceJson: unknown; createdAt: number }>
+    Array<{ id: string; label: string; type: string; sliceJson: unknown; createdAt: number }>
   > {
     return api().dropzoneList();
   }
@@ -295,7 +295,7 @@ export class ElectronHost implements Host {
 
   onDropzoneChanged(
     handler: (
-      items: Array<{ id: string; label: string; sliceJson: unknown; createdAt: number }>,
+      items: Array<{ id: string; label: string; type: string; sliceJson: unknown; createdAt: number }>,
     ) => void,
   ): () => void {
     return api().onDropzoneChanged(handler);

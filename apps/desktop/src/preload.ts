@@ -186,19 +186,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
         createdAt: number;
       }>
     >,
-  dropzoneAdd: (item: { id: string; label: string; sliceJson: unknown; createdAt: number }) =>
+  dropzoneAdd: (item: { id: string; label: string; type: string; sliceJson: unknown; createdAt: number }) =>
     ipcRenderer.invoke('host:dropzone-add', item),
   dropzoneRemove: (id: string) =>
     ipcRenderer.invoke('host:dropzone-remove', id),
   dropzoneClear: () => ipcRenderer.invoke('host:dropzone-clear'),
   onDropzoneChanged(
     handler: (
-      items: Array<{ id: string; label: string; sliceJson: unknown; createdAt: number }>,
+      items: Array<{ id: string; label: string; type: string; sliceJson: unknown; createdAt: number }>,
     ) => void,
   ): () => void {
     const listener = (
       _evt: unknown,
-      items: Array<{ id: string; label: string; sliceJson: unknown; createdAt: number }>,
+      items: Array<{ id: string; label: string; type: string; sliceJson: unknown; createdAt: number }>,
     ): void => handler(items);
     ipcRenderer.on('dropzone:changed', listener);
     return () => ipcRenderer.removeListener('dropzone:changed', listener);

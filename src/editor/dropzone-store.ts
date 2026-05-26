@@ -21,6 +21,11 @@ import { getElectronHost } from './host/index.js';
 export interface DropzoneItem {
   id: string;
   label: string;
+  /** Source schema-node type for the badge color. One of the
+   *  values DragItem.type uses: pocket / hat / block / tag /
+   *  analytic / card / analytic_unit, or `'text'` for an inline
+   *  selection slice, or `''` when unknown. */
+  type: string;
   /** Serialized PM Slice (via `Slice.toJSON()`). Stored opaquely
    *  here — only the UI / drag code parses it. */
   sliceJson: unknown;
@@ -140,7 +145,7 @@ function readSessionItems(): DropzoneItem[] {
         typeof e.id === 'string' &&
         typeof e.label === 'string' &&
         typeof e.createdAt === 'number',
-    );
+    ).map((e: DropzoneItem) => ({ ...e, type: typeof e.type === 'string' ? e.type : '' }));
   } catch {
     return [];
   }
