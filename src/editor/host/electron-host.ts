@@ -34,6 +34,12 @@ interface ElectronAPI {
     bytes: Uint8Array;
     handle: string;
   } | null>;
+  readFileAtPath(filePath: string): Promise<{
+    name: string;
+    bytes: Uint8Array;
+    handle: string;
+    format: 'cmir' | 'docx';
+  } | null>;
   saveAs(
     suggestedName: string,
     bytes: Uint8Array,
@@ -168,6 +174,26 @@ export class ElectronHost implements Host {
       name: result.name,
       bytes: result.bytes instanceof Uint8Array ? result.bytes : new Uint8Array(result.bytes),
       handle: result.handle,
+    };
+  }
+
+  /** Read a file at a known path without a picker. Returns null
+   *  when the path is missing / unreadable (caller prunes the
+   *  stale recent). ElectronHost-only — the home screen guards
+   *  on host kind before calling. */
+  async readFileAtPath(filePath: string): Promise<{
+    name: string;
+    bytes: Uint8Array;
+    handle: string;
+    format: 'cmir' | 'docx';
+  } | null> {
+    const result = await api().readFileAtPath(filePath);
+    if (!result) return null;
+    return {
+      name: result.name,
+      bytes: result.bytes instanceof Uint8Array ? result.bytes : new Uint8Array(result.bytes),
+      handle: result.handle,
+      format: result.format,
     };
   }
 

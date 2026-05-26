@@ -41,6 +41,8 @@ import { createReference } from './create-reference.js';
 import { showToast } from './toast.js';
 import { openSelectSpeechDocModal } from './select-speech-doc-ui.js';
 import { dropzoneStore, deriveDropzoneLabel } from './dropzone-store.js';
+import { homeScreen, type HomeScreenCallbacks } from './home-screen.js';
+import { recordRecent, removeRecent, type RecentFile } from './recents-store.js';
 import {
   settings,
   condenseWarningCloseFor,
@@ -156,6 +158,7 @@ export function attachClickBelowToEnd(
 // own per-record surface in `buildDocRecord`.
 attachClickBelowToEnd(editorEl, () => view);
 const navEl = document.getElementById('nav-panel')!;
+const homeBtn = document.getElementById('home-btn') as HTMLButtonElement | null;
 const openBtn = document.getElementById('open-btn') as HTMLButtonElement;
 const newBtn = document.getElementById('new-btn') as HTMLButtonElement | null;
 const exportBtn = document.getElementById('export-btn') as HTMLButtonElement;
@@ -821,6 +824,14 @@ openBtn.addEventListener('click', () => {
 if (newBtn) {
   newBtn.addEventListener('click', () => {
     void onNewDocClicked();
+  });
+}
+if (homeBtn) {
+  homeBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  homeBtn.addEventListener('click', () => {
+    // Open home OVER the current doc — the doc stays mounted so
+    // the user can dismiss back to it (Back button / Esc).
+    homeScreen.show({ canReturnToDoc: true });
   });
 }
 
@@ -1958,6 +1969,10 @@ if (timerToggleBtn) {
   };
   button('open-btn', 'openFile');
   button('new-btn', 'newDocument');
+  // Home button — not a ribbon command (no rebindable shortcut),
+  // label-only so it still honors the none/tooltip modes.
+  const homeEl = byId('home-btn');
+  if (homeEl) registerRibbonTooltip({ el: homeEl, label: 'Home' });
   button('export-btn', 'save');
   button('settings-btn', 'openSettings');
   button('reference-btn', 'openShortcutsReference');
@@ -3336,11 +3351,232 @@ async function runOpenFlow(): Promise<void> {
     syncSingleDocSpeechRegistration();
     markNonPristineStarter();
     updateWindowTitle();
+    recordRecent({
+      handle: typeof opened.handle === 'string' ? opened.handle : null,
+      filename: opened.name,
+      format,
+    });
+    homeScreen.hide();
     console.log(`Loaded ${opened.name}: ${countSummary(docNode)}`);
   } catch (err) {
     console.error('Failed to load doc:', err);
     alert(`Failed to load: ${err instanceof Error ? err.message : err}`);
   }
+}
+
+// ─── Home screen wiring ────────────────────────────────────────────
+// The home screen is an overlay shown on launch (no file), when the
+// last doc is closed, or via the Home button. Its actions load
+// in-place (this window) rather than spawning a new window.
+
+/** Parse + mount an opened file's bytes into THIS window, set the
+ *  doc-state vars, record it in recents, and hide the home screen.
+ *  Shared by the home screen's Open / Open-recent paths. */
+async function loadFileInPlace(file: {
+  filename: string;
+  bytes: Uint8Array;
+  handle: string | null;
+  format: 'cmir' | 'docx';
+}): Promise<void> {
+  let docNode: PMNode;
+  let docThreads: Thread[] | undefined;
+  if (file.format === 'cmir') {
+    const parsed = parseNative(file.bytes);
+    docNode = parsed.doc;
+    docThreads = parsed.threads.length > 0 ? parsed.threads : undefined;
+  } else {
+    const result = await fromDocxFull(file.bytes);
+    docNode = result.doc;
+    docThreads = result.threads;
+  }
+  void clearCurrentJournal();
+  mountView(docNode, docThreads);
+  currentDocFilename = file.filename;
+  setCurrentDocHandle(file.handle);
+  currentDocFormat = file.format;
+  currentDocUid = newSessionDocUid();
+  markCurrentDocClean();
+  syncSingleDocSpeechRegistration();
+  markNonPristineStarter();
+  updateWindowTitle();
+  if (typeof file.handle === 'string' && file.handle) {
+    const electron = getElectronHost();
+    if (electron) void electron.openPathRegister(file.handle);
+  }
+  recordRecent({ handle: file.handle, filename: file.filename, format: file.format });
+  homeScreen.hide();
+}
+
+const homeCallbacks: HomeScreenCallbacks = {
+  // New doc in-place: mount a fresh blank starter here, clear the
+  // home overlay. (The ribbon's New still spawns a window; the home
+  // screen's intent is "start working in THIS window".)
+  newDoc: () => {
+    mountFreshBlankDoc();
+    homeScreen.hide();
+  },
+  newSpeechDoc: () => {
+    void (async () => {
+      const created = await createSpeechDocInPlace();
+      if (created) homeScreen.hide();
+    })();
+  },
+  open: () => {
+    void (async () => {
+      const opened = await pickAndLoadInPlace();
+      if (opened) homeScreen.hide();
+    })();
+  },
+  openRecent: (recent: RecentFile) => {
+    void openRecentInPlace(recent);
+  },
+};
+
+/** Mount a fresh blank starter doc in this window, resetting the
+ *  single-doc state vars. Shared by the home screen's New action
+ *  and the close-doc-to-home path. Does NOT mark non-pristine —
+ *  this is a clean blank, eligible to be replaced silently. */
+function mountFreshBlankDoc(): void {
+  void clearCurrentJournal();
+  mountView(makeNewDocBody());
+  currentDocFilename = null;
+  setCurrentDocHandle(null);
+  currentDocFormat = null;
+  currentDocUid = newSessionDocUid();
+  markCurrentDocClean();
+  syncSingleDocSpeechRegistration();
+  updateWindowTitle();
+}
+
+/** Close the current doc back to the home screen rather than
+ *  closing the window. Confirms unsaved changes first (same
+ *  prompt as the window-close flow). From home itself (no doc
+ *  open) this is a no-op — the OS close button / quit path owns
+ *  actually closing the window. */
+async function handleCloseDocToHome(): Promise<void> {
+  if (homeScreen.isVisible()) return;
+  const finish = (): void => {
+    mountFreshBlankDoc();
+    homeScreen.show();
+  };
+  if (!currentDocDirty) {
+    finish();
+    return;
+  }
+  const choice = await confirmCloseUnsaved();
+  switch (choice) {
+    case 'save': {
+      if (await runSaveFlow()) finish();
+      return;
+    }
+    case 'saveAs': {
+      if (await runSaveAsFlow()) finish();
+      return;
+    }
+    case 'discard': {
+      await clearCurrentJournal().catch(() => {});
+      finish();
+      return;
+    }
+    case 'cancel':
+      return;
+  }
+}
+
+/** File-picker open that always loads in-place (never spawns a
+ *  window) — used by the home screen. Returns true on success. */
+async function pickAndLoadInPlace(): Promise<boolean> {
+  let opened: OpenedFile | null;
+  try {
+    opened = await getHost().openFile({ filters: OPEN_FILE_FILTERS });
+  } catch (err) {
+    alert(`Failed to open: ${err instanceof Error ? err.message : err}`);
+    return false;
+  }
+  if (!opened) return false;
+  if (typeof opened.handle === 'string' && opened.handle) {
+    const electron = getElectronHost();
+    if (electron) {
+      const { takenByOther } = await electron.openPathCheck(opened.handle);
+      if (takenByOther) {
+        showToast(`"${opened.name}" is already open in another window.`);
+        return false;
+      }
+    }
+  }
+  const format = formatFromFilename(opened.name) ?? 'docx';
+  try {
+    await loadFileInPlace({
+      filename: opened.name,
+      bytes: opened.bytes,
+      handle: typeof opened.handle === 'string' ? opened.handle : null,
+      format,
+    });
+    return true;
+  } catch (err) {
+    alert(`Failed to load: ${err instanceof Error ? err.message : err}`);
+    return false;
+  }
+}
+
+/** Reopen a recent file in-place via its stored path handle.
+ *  Prunes the entry if the file is gone / unreadable. */
+async function openRecentInPlace(recent: RecentFile): Promise<void> {
+  const electron = getElectronHost();
+  if (!electron || recent.handle == null) return;
+  const file = await electron.readFileAtPath(recent.handle);
+  if (!file) {
+    showToast(`Couldn't open "${recent.filename}" — file moved or deleted.`);
+    removeRecent(recent.handle);
+    return;
+  }
+  const { takenByOther } = await electron.openPathCheck(file.handle);
+  if (takenByOther) {
+    showToast(`"${file.name}" is already open in another window.`);
+    homeScreen.hide();
+    return;
+  }
+  try {
+    await loadFileInPlace({
+      filename: file.name,
+      bytes: file.bytes,
+      handle: file.handle,
+      format: file.format,
+    });
+  } catch (err) {
+    alert(`Failed to load: ${err instanceof Error ? err.message : err}`);
+  }
+}
+
+/** Build + mount a new speech doc in THIS window (home-screen
+ *  flow). Prompts for the round name like the ribbon's New Speech,
+ *  but mounts in-place rather than spawning a window. Returns true
+ *  when a doc was created (false on cancel). */
+async function createSpeechDocInPlace(): Promise<boolean> {
+  const roundName = await promptForText({
+    message: 'Which speech? (e.g. 1NC, 2AC Round 3 vs Hogwarts)',
+    placeholder: '1NC',
+    okLabel: 'Create',
+  });
+  if (!roundName) return false;
+  const format = settings.get('defaultSpeechDocFormat');
+  const filename = formatSpeechFilename(roundName, format);
+  const docNode = settings.get('includeSpeechDocPocket')
+    ? makeSpeechBlankDoc(filename.replace(/\.(cmir|docx)$/i, ''))
+    : makeNewDocBody();
+  void clearCurrentJournal();
+  mountView(docNode);
+  currentDocFilename = null;
+  setCurrentDocHandle(null);
+  currentDocFormat = null;
+  currentDocUid = newSessionDocUid();
+  markCurrentDocClean();
+  syncSingleDocSpeechRegistration();
+  markNonPristineStarter();
+  updateWindowTitle();
+  // Mark this new doc as the speech doc for the session.
+  getSpeechDocResolver().setSpeechByUid(currentDocUid);
+  return true;
 }
 
 /** Strip the known extensions off a filename so the Save-As dialog
@@ -3378,6 +3614,13 @@ function commitSaveResult(filename: string, handle: unknown | null, format: 'cmi
   // .cmir-with-handle), which flips the autosave button between
   // inert and effective states.
   refreshAutosaveBtn();
+  // A save (especially Save-As, which mints a path for a
+  // previously-unsaved doc) makes the file recents-worthy.
+  recordRecent({
+    handle: typeof handle === 'string' ? handle : null,
+    filename,
+    format,
+  });
 }
 
 /** Sync the active filename into both the OS-level title bar (via
@@ -3838,16 +4081,24 @@ function pushNativeMenuBindings(): void {
           ribbonContext.saveAs();
           break;
         case 'closeDocOrWindow':
-          // Multi-pane: close the focused slot's visible doc. Falls
-          // through to handleUserCloseRequest (which closes the
-          // window) when there's no doc to close — last doc in the
-          // multi-pane window already closed, or single-pane mode.
+          // Multi-pane: close the focused slot's visible doc. In
+          // single-doc, "close the doc" returns to the home screen
+          // (the window stays open); the OS close button / quit
+          // path is what actually closes the window. When already
+          // on home, handleCloseDocToHome is a no-op — fall through
+          // to the real window close so Ctrl+W from home still
+          // quits.
           void (async () => {
             const { tryCloseVisibleInFocusedSlot } = await import(
               './multi-pane-shell.js'
             );
             const consumed = await tryCloseVisibleInFocusedSlot();
-            if (!consumed) await handleUserCloseRequest();
+            if (consumed) return;
+            if (!multiDocActive && !homeScreen.isVisible()) {
+              await handleCloseDocToHome();
+            } else {
+              await handleUserCloseRequest();
+            }
           })();
           break;
         default:
@@ -4066,6 +4317,10 @@ if (BOOT_MULTI_DOC_WORKSPACE) {
     await runStartupRecovery();
   });
 } else {
+  // Home screen is a single-doc-mode feature (multi-pane has its
+  // own workspace layout). Mount it before boot so the overlay is
+  // ready when initSingleDocBoot decides whether to show it.
+  homeScreen.mount(document.body, homeCallbacks);
   void initSingleDocBoot();
 }
 
@@ -4108,6 +4363,12 @@ async function initSingleDocBoot(): Promise<void> {
     console.warn('isFirstWindow failed; defaulting to true:', err);
   }
   if (isFirst) {
+    // Launched with no file → show the home screen over the
+    // (blank) starter doc. Recovery still runs underneath; if the
+    // user recovers a draft it mounts + hides home via
+    // runStartupRecovery's mount path. We show home first so a
+    // no-recovery launch lands on the hub rather than a blank doc.
+    homeScreen.show();
     await runStartupRecovery();
     // At-launch update check, gated on the same first-window rule
     // as the recovery UI — we don't want every spawned window in
@@ -4488,4 +4749,6 @@ async function applyRecovery(entry: JournalEntry): Promise<void> {
   syncSingleDocSpeechRegistration();
   markNonPristineStarter();
   updateWindowTitle();
+  // Recovering a draft into the editor dismisses the home overlay.
+  homeScreen.hide();
 }

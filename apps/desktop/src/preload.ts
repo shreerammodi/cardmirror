@@ -65,6 +65,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openFile: (opts: { filters: FileFilter[] }) =>
     ipcRenderer.invoke('host:open-file', opts),
 
+  /** Read a file at a known path (no picker) for the home screen's
+   *  "open recent" flow. Resolves null when the path is gone /
+   *  unreadable so the caller can prune the stale recent. */
+  readFileAtPath: (filePath: string) =>
+    ipcRenderer.invoke('host:read-file-at-path', filePath) as Promise<{
+      name: string;
+      bytes: Uint8Array;
+      handle: string;
+      format: 'cmir' | 'docx';
+    } | null>,
+
   saveAs: (
     suggestedName: string,
     bytes: Uint8Array,

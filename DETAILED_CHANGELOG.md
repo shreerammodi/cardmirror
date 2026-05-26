@@ -7,6 +7,51 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Home / start screen (single-doc mode).** A full-window hub
+  shown on launch-with-no-file, on closing the current doc
+  (Ctrl+W), and via a new Home button (🏠) at the left of the
+  ribbon. Offers New document / New speech document / Open and a
+  recently-opened-files list.
+
+  Architecture:
+  - `home-screen.ts` — the overlay view. Toggled via the
+    `pmd-home-active` class on documentElement, which CSS uses to
+    hide the ribbon / nav / editor / status bar and reveal
+    `.pmd-home-screen`. The editor stays mounted underneath
+    (home is an overlay, not a separate route), so showing /
+    hiding is a pure visibility flip. When opened over a live
+    doc (Home button) a "Back to document" affordance + Esc
+    dismiss it; on launch / close-doc there's a fresh blank
+    behind it and no back affordance.
+  - `recents-store.ts` — localStorage-backed recent-files list
+    (newest first, capped at 12, de-duped by path). Persists
+    across restarts; shared across same-session Electron windows.
+    Each entry stores the path handle (a string on Electron),
+    filename, format, timestamp. Recorded on every in-place
+    open and on save (so Save-As of a new doc registers it).
+  - New `host:read-file-at-path` IPC (+ preload + electron-host
+    wrappers) reads a file at a known path without a picker, for
+    the "open recent" flow. Returns null on missing / unreadable
+    so the home screen prunes the stale entry.
+  - `index.ts` wiring: home actions load IN-PLACE (this window),
+    distinct from the ribbon's New/Open which spawn windows.
+    `loadFileInPlace`, `pickAndLoadInPlace`, `openRecentInPlace`,
+    `createSpeechDocInPlace`, and `mountFreshBlankDoc` share the
+    mount + state-reset + recents-record + home-hide steps.
+    `initSingleDocBoot` shows home (over the blank starter) when
+    it's the first window with no file; recovery + open + the
+    spawn-payload path all hide home when they mount real content.
+  - Close behavior: the `closeDocOrWindow` command (Ctrl+W) in
+    single-doc now routes to `handleCloseDocToHome` — confirm
+    unsaved, then mount a fresh blank + show home — instead of
+    closing the window. The OS close button (`onCloseRequest`)
+    still calls `handleUserCloseRequest` and actually closes, so
+    quitting is unaffected; Ctrl+W from home (no doc) also falls
+    through to the real close.
+  - Web: recents render but `handle` is null (FileSystemFileHandle
+    isn't JSON-serializable), so those rows are disabled with a
+    tooltip. A future pass could persist handles via IndexedDB.
+
 - **Formatting panel grid columns now share equal width.**
   `.ribbon-formatting-panel` had `grid-template-columns:
   repeat(3, auto)`, which sized each column to its widest

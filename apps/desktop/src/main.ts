@@ -379,6 +379,30 @@ ipcMain.handle('host:open-file', async (event, opts: { filters?: FileFilter[] })
   };
 });
 
+// Read a file at a known absolute path — used by the home
+// screen's "open recent" path, which already has the path from
+// the recents list and shouldn't pop a file picker. Returns null
+// (rather than throwing) when the file is missing / unreadable so
+// the caller can prune a stale recent entry gracefully.
+ipcMain.handle('host:read-file-at-path', async (_event, filePath: string) => {
+  if (typeof filePath !== 'string' || !filePath) return null;
+  try {
+    const bytes = await fs.readFile(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const format: 'cmir' | 'docx' | null =
+      ext === '.cmir' ? 'cmir' : ext === '.docx' ? 'docx' : null;
+    if (!format) return null;
+    return {
+      name: path.basename(filePath),
+      bytes: new Uint8Array(bytes),
+      handle: filePath,
+      format,
+    };
+  } catch {
+    return null;
+  }
+});
+
 ipcMain.handle(
   'host:save-as',
   async (

@@ -599,6 +599,16 @@ html:has(body.pmd-speech-banner-visible) {
   gap: 0.35rem;
 }
 
+/* Home button — leftmost in the ribbon. Single-doc only (home is
+   not a multi-pane concept); hidden in the multi-doc workspace. */
+#ribbon .ribbon-home-btn {
+  flex: 0 0 auto;
+  margin-right: 0.35rem;
+}
+body.pmd-multi-doc #ribbon .ribbon-home-btn {
+  display: none;
+}
+
 .ribbon-left { flex: 0 0 auto; }
 .ribbon-center { flex: 1 1 auto; justify-content: center; }
 /* Tighten ribbon-right's internal flex gap so the timer-toggle
@@ -2311,6 +2321,211 @@ body.pmd-nav-hidden #nav-pane-pull-tab {
 #nav-pane-pull-tab:hover {
   background: var(--pmd-c-hover);
   color: var(--pmd-c-text);
+}
+
+/* ---- Home / start screen ----
+   Full-window hub shown on launch (no file), on closing the last
+   doc, or via the Home button. While `pmd-home-active` is set on
+   the root, the editor chrome is hidden and the home view covers
+   the viewport. */
+html.pmd-home-active #ribbon,
+html.pmd-home-active #nav-panel,
+html.pmd-home-active #app,
+html.pmd-home-active #status-bar,
+html.pmd-home-active #speech-doc-banner {
+  display: none !important;
+}
+.pmd-home-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+  font-family: var(--pmd-ui-font);
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.pmd-home-screen[hidden] { display: none; }
+.pmd-home-inner {
+  width: 100%;
+  max-width: 720px;
+  padding: clamp(2rem, 8vh, 6rem) 1.5rem 3rem;
+  box-sizing: border-box;
+}
+.pmd-home-header {
+  margin-bottom: 2rem;
+}
+.pmd-home-back {
+  appearance: none;
+  font: inherit;
+  font-size: 0.85rem;
+  background: transparent;
+  border: none;
+  color: var(--pmd-c-text-muted);
+  cursor: pointer;
+  padding: 0.2rem 0;
+  margin-bottom: 0.75rem;
+  border-radius: 4px;
+}
+.pmd-home-back:hover {
+  color: var(--pmd-c-text);
+}
+.pmd-home-back[hidden] { display: none; }
+.pmd-home-title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.pmd-home-tagline {
+  margin: 0.35rem 0 0;
+  color: var(--pmd-c-text-muted);
+  font-size: 0.95rem;
+}
+.pmd-home-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 2.5rem;
+}
+.pmd-home-action {
+  appearance: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  background: var(--pmd-c-surface-soft);
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--pmd-c-text);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.pmd-home-action:hover {
+  background: var(--pmd-c-hover);
+  border-color: var(--pmd-c-border);
+}
+.pmd-home-action:focus-visible {
+  outline: 2px solid var(--pmd-c-accent);
+  outline-offset: 2px;
+}
+.pmd-home-action-title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+.pmd-home-action-sub {
+  font-size: 0.82rem;
+  color: var(--pmd-c-text-muted);
+}
+.pmd-home-recents-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.pmd-home-section-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--pmd-c-text-muted);
+}
+.pmd-home-recents-clear {
+  appearance: none;
+  font: inherit;
+  font-size: 0.78rem;
+  background: transparent;
+  border: none;
+  color: var(--pmd-c-text-muted);
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+.pmd-home-recents-clear:hover {
+  background: var(--pmd-c-hover);
+  color: var(--pmd-c-text);
+}
+.pmd-home-recents {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pmd-home-recents-empty {
+  margin: 0.25rem 0;
+  color: var(--pmd-c-text-muted);
+  font-size: 0.85rem;
+}
+.pmd-home-recent {
+  appearance: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--pmd-c-text);
+}
+.pmd-home-recent:hover {
+  background: var(--pmd-c-hover);
+}
+.pmd-home-recent:focus-visible {
+  outline: 2px solid var(--pmd-c-accent);
+  outline-offset: 1px;
+}
+.pmd-home-recent-unavailable {
+  cursor: default;
+  opacity: 0.55;
+}
+.pmd-home-recent-unavailable:hover {
+  background: transparent;
+}
+.pmd-home-recent-format {
+  flex: 0 0 auto;
+  min-width: 3.2em;
+  text-align: center;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 6px;
+  background: var(--pmd-c-bg-soft);
+  color: var(--pmd-c-text-muted);
+}
+.pmd-home-recent-format-cmir {
+  background: var(--pmd-c-cat-heading-bg);
+  color: var(--pmd-c-cat-heading-fg);
+}
+.pmd-home-recent-format-docx {
+  background: var(--pmd-c-cat-cite-bg);
+  color: var(--pmd-c-cat-cite-fg);
+}
+.pmd-home-recent-name {
+  flex: 0 0 auto;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+.pmd-home-recent-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: var(--pmd-c-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
 }
 
 /* Hide the dropzone pill from the chrome when the user has

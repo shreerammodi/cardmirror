@@ -9,6 +9,20 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Home screen.** Launching CardMirror without a file now opens
+  a start screen instead of a blank document: New document, New
+  speech document, Open, and a list of recently opened files
+  (click to reopen in place). A **Home button** (🏠, far left of
+  the ribbon) returns to it any time — with a "Back to document"
+  link and Esc to dismiss back to what you were editing.
+  **Ctrl+W** now closes the current doc back to the home screen
+  rather than closing the window (the window's close button still
+  quits); confirms unsaved changes first. Recent files persist
+  across restarts. Single-doc mode only for now (multi-pane has
+  its own workspace layout). On the web edition, recents show but
+  can't be reopened directly (browser file handles aren't
+  persistable yet).
+
 - **Grayscale text antialiasing on high-DPI displays** (DPR ≥
   1.5 — Retina, most modern phones, HiDPI Windows / Linux
   scaled past 150%). On those displays the chrome and editor
