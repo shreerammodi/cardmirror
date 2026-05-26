@@ -2314,90 +2314,87 @@ body.pmd-nav-hidden #nav-pane-pull-tab {
 }
 
 /* ---- Dropzone shelf (cross-window scratch space) ----
-   Pinned to the bottom of the nav pane. Closed state is a small
-   muted grey pill. Click expands the WHOLE root upward inside
-   the nav pane — the header + list sit ABOVE the pill, content
-   wraps rather than ellipses. Drag-over: blue accept-state
-   matching the editor + nav drop indicators. */
+   ONE element that morphs between two states. Anchored at the
+   bottom of the nav pane.
+     - Closed: small muted grey pill (.pmd-dropzone-bar visible;
+       list hidden; root shrinks to bar's natural width).
+     - Open: the SAME element expands upward into a panel. The bar
+       moves to the bottom edge of the expanded element and the
+       list area appears above it.
+   Drag-over: blue accept-state via --pmd-c-drop tokens, matching
+   the editor + nav drop indicators. */
 .pmd-dropzone-root {
   position: absolute;
-  left: 0.5rem;
-  right: 0.5rem;
   bottom: 0.5rem;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  pointer-events: none;
-  z-index: 12;
+  /* Anchor the bar's right edge to the nav-pane right edge minus a
+     small inset (resize-handle clearance), and let `width` grow
+     leftward from there when open. Closed: width: auto = bar's
+     natural width. Open: width = `--dz-open-width`. */
+  right: 0.75rem;
+  left: auto;
+  width: auto;
   max-height: calc(100% - 1rem);
-  /* Subtle outline on the whole root when a drop is in flight, so
-     the user reads the entire bubble-or-shelf area as the target. */
-  border-radius: 12px;
-  transition: box-shadow 0.15s ease, background-color 0.15s ease;
-}
-.pmd-dropzone-root-drop-target {
-  background: var(--pmd-c-drop-tint);
-  box-shadow: 0 0 0 2px var(--pmd-c-drop-outline);
-}
-
-/* Inline shelf panel — hidden when closed; when open, occupies
-   the space above the pill inside the same root. */
-.pmd-dropzone-panel {
-  display: none;
-  flex: 0 1 auto;
-  min-height: 0;
-  pointer-events: auto;
-  background: var(--pmd-c-bg);
-  border: 1px solid var(--pmd-c-border);
-  border-radius: 8px;
-  box-shadow: 0 6px 18px var(--pmd-c-shadow-fade);
-  margin-bottom: 0.35rem;
-  flex-direction: column;
-  overflow: hidden;
-}
-.pmd-dropzone-root[data-open="true"] .pmd-dropzone-panel {
-  display: flex;
-}
-.pmd-dropzone-panel-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.35rem 0.6rem;
-  border-bottom: 1px solid var(--pmd-c-divider);
   background: var(--pmd-c-surface-soft);
-}
-.pmd-dropzone-panel-title {
-  font-weight: 600;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--pmd-c-text-muted);
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 999px;
+  box-shadow: 0 2px 6px var(--pmd-c-shadow-fade);
+  pointer-events: auto;
+  z-index: 12;
+  overflow: hidden;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    border-radius 0.18s ease,
+    width 0.22s ease,
+    left 0.22s ease,
+    box-shadow 0.18s ease;
 }
-.pmd-dropzone-panel-clear {
-  appearance: none;
-  font: inherit;
-  font-size: 0.72rem;
-  background: transparent;
-  border: 1px solid var(--pmd-c-border);
-  border-radius: 4px;
-  padding: 0.1rem 0.4rem;
-  cursor: pointer;
-  color: var(--pmd-c-text-muted);
+.pmd-dropzone-root[data-open="true"] {
+  left: 0.5rem;
+  right: 0.5rem;
+  background: var(--pmd-c-bg);
+  border-color: var(--pmd-c-border);
+  color: var(--pmd-c-text);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px var(--pmd-c-shadow-fade);
 }
-.pmd-dropzone-panel-clear:hover {
+.pmd-dropzone-root:hover {
   background: var(--pmd-c-hover);
   color: var(--pmd-c-text);
 }
+.pmd-dropzone-root[data-open="true"]:hover {
+  background: var(--pmd-c-bg);
+}
+.pmd-dropzone-root-drop-target {
+  color: var(--pmd-c-drop) !important;
+  background: var(--pmd-c-drop-tint) !important;
+  border-color: var(--pmd-c-drop) !important;
+  box-shadow: 0 0 0 2px var(--pmd-c-drop-outline) !important;
+}
 
+/* List area — collapsed when closed, expanded panel when open.
+   max-height transitions to give a smooth grow/shrink animation
+   between states. */
 .pmd-dropzone-list {
   list-style: none;
   margin: 0;
-  padding: 0.25rem;
+  padding: 0;
   overflow-y: auto;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
+  max-height: 0;
+  border-bottom: 0 solid var(--pmd-c-divider);
+  transition: max-height 0.22s ease, border-bottom-width 0.22s ease;
+}
+.pmd-dropzone-root[data-open="true"] .pmd-dropzone-list {
+  max-height: 320px;
+  border-bottom-width: 1px;
+  padding: 0.25rem;
 }
 .pmd-dropzone-empty {
   padding: 0.6rem 0.5rem;
@@ -2405,6 +2402,7 @@ body.pmd-nav-hidden #nav-pane-pull-tab {
   font-size: 0.78rem;
   line-height: 1.35;
 }
+
 .pmd-dropzone-row {
   display: flex;
   align-items: flex-start;
@@ -2424,8 +2422,8 @@ body.pmd-nav-hidden #nav-pane-pull-tab {
 .pmd-dropzone-row-label {
   flex: 1 1 auto;
   min-width: 0;
-  /* Wrap rather than ellipse, per the user's request — readability
-     matters more than a tidy single-line list. */
+  /* Wrap rather than ellipse — readability matters more than a
+     tidy single-line list. */
   white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.3;
@@ -2449,9 +2447,7 @@ body.pmd-nav-hidden #nav-pane-pull-tab {
 }
 
 /* Type badge — small uppercase chip on the left of each row,
-   mirroring the find-result category badges. Colors map to the
-   source schema node type so the user can tell at a glance what
-   each shelf item is. */
+   mirroring the find-result category badges. */
 .pmd-dropzone-row-type {
   flex: 0 0 auto;
   min-width: 3.2em;
@@ -2479,10 +2475,7 @@ body.pmd-nav-hidden #nav-pane-pull-tab {
   background: var(--pmd-c-cat-tag-bg);
   color: var(--pmd-color-analytic);
 }
-.pmd-dropzone-row-type-card {
-  background: var(--pmd-c-cat-cite-bg);
-  color: var(--pmd-c-cat-cite-fg);
-}
+.pmd-dropzone-row-type-card,
 .pmd-dropzone-row-type-cite {
   background: var(--pmd-c-cat-cite-bg);
   color: var(--pmd-c-cat-cite-fg);
@@ -2493,46 +2486,21 @@ body.pmd-nav-hidden #nav-pane-pull-tab {
   color: var(--pmd-c-text-muted);
 }
 
-/* The bubble — always visible, anchored at the bottom of the
-   root. Acts as the click-to-open toggle AND the resting drop
-   target when the shelf is closed. */
-.pmd-dropzone-bubble {
-  pointer-events: auto;
-  align-self: center;
-  appearance: none;
-  font: inherit;
-  color: var(--pmd-c-text-muted);
-  background: var(--pmd-c-surface-soft);
-  border: 1px solid var(--pmd-c-border-soft);
-  border-radius: 999px;
-  height: 30px;
-  min-width: 30px;
-  padding: 0 0.55rem;
-  display: inline-flex;
+/* The bottom bar — always visible. Icon + count when closed,
+   icon + count + Clear when open. Acts as the click-to-toggle
+   region. */
+.pmd-dropzone-bar {
+  flex: 0 0 auto;
+  display: flex;
   align-items: center;
   gap: 0.35rem;
+  padding: 0 0.55rem;
+  height: 30px;
   cursor: pointer;
-  box-shadow: 0 2px 6px var(--pmd-c-shadow-fade);
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease,
-    min-width 0.15s ease,
-    padding 0.15s ease;
-}
-.pmd-dropzone-bubble:hover,
-.pmd-dropzone-bubble-open {
-  background: var(--pmd-c-hover);
-  color: var(--pmd-c-text);
-  border-color: var(--pmd-c-border);
-}
-.pmd-dropzone-bubble-drop-target {
-  color: var(--pmd-c-drop);
-  background: var(--pmd-c-drop-tint);
-  border-color: var(--pmd-c-drop);
-  box-shadow: 0 0 0 2px var(--pmd-c-drop-outline);
-  min-width: 100px;
-  padding: 0 0.9rem;
+  font: inherit;
+  font-size: 0.78rem;
+  color: inherit;
+  user-select: none;
 }
 .pmd-dropzone-icon {
   display: inline-flex;
@@ -2551,8 +2519,24 @@ body.pmd-nav-hidden #nav-pane-pull-tab {
   text-align: center;
   line-height: 1.3;
 }
-.pmd-dropzone-bubble-empty .pmd-dropzone-count {
-  display: none;
+.pmd-dropzone-bar-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pmd-dropzone-clear {
+  appearance: none;
+  font: inherit;
+  font-size: 0.72rem;
+  background: transparent;
+  border: 1px solid var(--pmd-c-border);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+}
+.pmd-dropzone-clear:hover {
+  background: var(--pmd-c-hover);
+  color: var(--pmd-c-text);
 }
 
 .pmd-nav-panel {

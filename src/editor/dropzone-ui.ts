@@ -2,23 +2,26 @@
  * Dropzone bubble — cross-window scratch shelf for dragged content.
  * Pinned to the bottom of the nav pane.
  *
- * UI:
- *   - Closed: small grey pill with item count.
- *   - Drag-over: blue accept-state, slightly widened, matches the
- *     nav-pane + editor drop indicator color tokens.
- *   - Open: the whole root expands UPWARD inside the nav pane,
- *     revealing a header + scrollable list above the pill. The
- *     list wraps long item labels rather than ellipsing them.
+ * The whole element morphs between two states:
+ *   - Closed: small grey pill anchored at the bottom of the nav
+ *     pane (icon + item count).
+ *   - Open: the same element expands UPWARD to become a panel
+ *     hosting the item list. The bottom row of the panel keeps
+ *     the icon + count + clear button as the click-to-collapse
+ *     bar — visually the pill "grew up" into the panel rather
+ *     than a separate UI appearing.
  *
- * Drag-in: registers a DragSurface with `dragController`. The
- *   surface's `absorb` extracts each session item's slice and
- *   pushes it into `dropzoneStore`. The drop-target highlight
- *   class is cleared on 'end' so the bubble shrinks back after
- *   commit (otherwise the controller's last hit-test win sticks).
+ *   - Drag-over (any state): blue accept-state matching the nav-
+ *     pane + editor drop indicators. The bubble's surface
+ *     subscribes to the drag controller's 'end' event so the
+ *     highlight clears after commit.
  *
- * Drag-out: each row starts a `virtual` drag session via
+ * Drag-in: registers a DragSurface with `dragController`. On
+ *   commit, the surface's `absorb` extracts each session item's
+ *   slice and pushes it into `dropzoneStore`.
+ *
+ * Drag-out: rows in the list start a `virtual` drag session via
  *   `dragController.begin(...)` on pointerdown + threshold move.
- *   The controller routes the drop through normal surfaces.
  *
  * Store: `dropzoneStore` (electron-aware) holds the cross-window
  *   state. One DropzoneController per nav-pane; they all share
@@ -37,11 +40,16 @@ interface DropzoneMountOptions {
 }
 
 export class DropzoneController {
+  /** The morphing element — small pill when closed, expanded panel
+   *  when open. Anchored at the bottom of the nav pane via CSS. */
   private root!: HTMLDivElement;
-  private panel!: HTMLDivElement;
+  /** List area inside the root, only visible when open. */
   private listEl!: HTMLUListElement;
-  private bubble!: HTMLButtonElement;
+  /** Bottom bar (icon + count + clear). Always visible; acts as
+   *  the click target for toggling open / closed. */
+  private bar!: HTMLDivElement;
   private countBadge!: HTMLSpanElement;
+  private clearBtn!: HTMLButtonElement;
   private items: DropzoneItem[] = [];
   private open = false;
   private surface: DragSurface | null = null;
@@ -62,88 +70,87 @@ export class DropzoneController {
     this.root = document.createElement('div');
     this.root.className = 'pmd-dropzone-root';
     this.root.dataset['open'] = 'false';
+    this.root.setAttribute('role', 'group');
+    this.root.setAttribute('aria-label', 'Dropzone shelf');
 
-    // Inline panel — sits above the bubble inside the root, shown
-    // when open. Grows upward as the root is anchored to the nav
-    // pane's bottom edge.
-    this.panel = document.createElement('div');
-    this.panel.className = 'pmd-dropzone-panel';
-
-    const header = document.createElement('div');
-    header.className = 'pmd-dropzone-panel-header';
-    const title = document.createElement('span');
-    title.className = 'pmd-dropzone-panel-title';
-    title.textContent = 'Shelf';
-    header.appendChild(title);
-    const clear = document.createElement('button');
-    clear.type = 'button';
-    clear.className = 'pmd-dropzone-panel-clear';
-    clear.textContent = 'Clear';
-    clear.title = 'Remove every shelf item';
-    clear.addEventListener('click', (e) => {
-      e.stopPropagation();
-      void dropzoneStore.clear();
-    });
-    header.appendChild(clear);
-    this.panel.appendChild(header);
-
+    // List sits ABOVE the bar (flex column). Hidden until open.
     this.listEl = document.createElement('ul');
     this.listEl.className = 'pmd-dropzone-list';
-    this.panel.appendChild(this.listEl);
+    this.root.appendChild(this.listEl);
 
-    this.root.appendChild(this.panel);
-
-    // Bubble — the always-visible toggle. Clicking it expands the
-    // root upward into the nav pane.
-    this.bubble = document.createElement('button');
-    this.bubble.type = 'button';
-    this.bubble.className = 'pmd-dropzone-bubble';
-    this.bubble.setAttribute('aria-label', 'Dropzone shelf');
-    this.bubble.title = 'Dropzone — drag content here, click to expand';
+    // Bar — always visible bottom row. Clicking it toggles open.
+    this.bar = document.createElement('div');
+    this.bar.className = 'pmd-dropzone-bar';
+    this.bar.setAttribute('role', 'button');
+    this.bar.setAttribute('tabindex', '0');
+    this.bar.title = 'Dropzone — drag content here, click to expand';
 
     const icon = document.createElement('span');
     icon.className = 'pmd-dropzone-icon';
     icon.setAttribute('aria-hidden', 'true');
     icon.innerHTML =
       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><path d="M12 14V4"/><path d="M8 8l4-4 4 4"/></svg>';
-    this.bubble.appendChild(icon);
+    this.bar.appendChild(icon);
 
     this.countBadge = document.createElement('span');
     this.countBadge.className = 'pmd-dropzone-count';
     this.countBadge.hidden = true;
-    this.bubble.appendChild(this.countBadge);
+    this.bar.appendChild(this.countBadge);
 
-    this.bubble.addEventListener('click', (e) => {
+    // Spacer pushes the clear button to the right edge in open
+    // state. Doesn't matter in closed state (clear is hidden).
+    const spacer = document.createElement('span');
+    spacer.className = 'pmd-dropzone-bar-spacer';
+    this.bar.appendChild(spacer);
+
+    this.clearBtn = document.createElement('button');
+    this.clearBtn.type = 'button';
+    this.clearBtn.className = 'pmd-dropzone-clear';
+    this.clearBtn.textContent = 'Clear';
+    this.clearBtn.title = 'Remove every shelf item';
+    this.clearBtn.hidden = true;
+    this.clearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void dropzoneStore.clear();
+    });
+    this.bar.appendChild(this.clearBtn);
+
+    const handleToggle = (e: Event): void => {
       e.stopPropagation();
       this.setOpen(!this.open);
+    };
+    this.bar.addEventListener('click', handleToggle);
+    this.bar.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleToggle(e);
+      }
     });
 
-    this.root.appendChild(this.bubble);
+    this.root.appendChild(this.bar);
     opts.parent.appendChild(this.root);
 
-    // Drag surface — bubble + panel both act as the drop target so
-    // the user can drop onto either when the shelf is open.
+    // Drag surface — the whole root acts as the target so dropping
+    // anywhere on the morphed shelf (closed pill OR open panel)
+    // counts as a shelf drop.
     this.surface = {
       hitTest: (clientX, clientY) => {
-        const inside = (rect: DOMRect): boolean =>
+        const rect = this.root.getBoundingClientRect();
+        const inside =
           clientX >= rect.left &&
           clientX <= rect.right &&
           clientY >= rect.top &&
           clientY <= rect.bottom;
-        const bubbleRect = this.bubble.getBoundingClientRect();
-        const panelRect = this.open ? this.panel.getBoundingClientRect() : null;
-        if (!inside(bubbleRect) && !(panelRect && inside(panelRect))) return null;
+        if (!inside) return null;
         return {
-          el: this.bubble,
+          el: this.root,
           insertPos: 0,
           dy: 0,
           absorb: (items) => this.absorbItems(items),
         };
       },
       highlight: (el) => {
-        const active = el !== null;
-        this.bubble.classList.toggle('pmd-dropzone-bubble-drop-target', active);
-        this.root.classList.toggle('pmd-dropzone-root-drop-target', active);
+        this.root.classList.toggle('pmd-dropzone-root-drop-target', el !== null);
       },
     };
     this.unregisterSurface = dragController.registerSurface(this.surface);
@@ -151,18 +158,16 @@ export class DropzoneController {
     void dropzoneStore.init().then(() => {
       this.items = dropzoneStore.list();
       this.renderList();
-      this.renderBubble();
+      this.renderBar();
     });
     this.unsubscribeStore = dropzoneStore.subscribe((items) => {
       this.items = items;
       this.renderList();
-      this.renderBubble();
+      this.renderBar();
     });
 
     // End-of-drag cleanup — controller doesn't proactively clear
-    // surface highlights when a session ends, so we do it here so
-    // the bubble shrinks back after a successful commit (or
-    // cancel).
+    // surface highlights, so the dropzone clears its own here.
     this.unsubscribeController = dragController.subscribe((event) => {
       if (event === 'end') {
         this.surface?.highlight(null);
@@ -183,18 +188,19 @@ export class DropzoneController {
 
   // ---- Rendering ----------------------------------------------------
 
-  private renderBubble(): void {
+  private renderBar(): void {
     const n = this.items.length;
     this.countBadge.hidden = n === 0;
     this.countBadge.textContent = String(n);
-    this.bubble.classList.toggle('pmd-dropzone-bubble-empty', n === 0);
+    this.root.classList.toggle('pmd-dropzone-root-empty', n === 0);
+    this.clearBtn.hidden = !(this.open && n > 0);
   }
 
   private setOpen(open: boolean): void {
     if (this.open === open) return;
     this.open = open;
     this.root.dataset['open'] = open ? 'true' : 'false';
-    this.bubble.classList.toggle('pmd-dropzone-bubble-open', open);
+    this.renderBar();
   }
 
   private renderList(): void {
@@ -203,11 +209,10 @@ export class DropzoneController {
       const empty = document.createElement('li');
       empty.className = 'pmd-dropzone-empty';
       empty.textContent =
-        'Drag a card, heading, or selection onto the pill below. Shelf items are shared across windows for this session.';
+        'Drag a card, heading, or selection onto the pill. Shelf items are shared across windows in this session.';
       this.listEl.appendChild(empty);
       return;
     }
-    // Newest first.
     for (const item of [...this.items].reverse()) {
       this.listEl.appendChild(this.renderRow(item));
     }
@@ -360,9 +365,6 @@ function deriveLabel(slice: Slice, item: DragItem): string {
   return item.type ? `(${item.type})` : '(item)';
 }
 
-/** Map a schema-node type to a badge kind + visible label. The
- *  kind feeds the CSS variant class for the badge color; the
- *  label is the short uppercase chip text. */
 function typeBadge(type: string): { kind: string; label: string } {
   switch (type) {
     case 'pocket': return { kind: 'pocket', label: 'POCKET' };
@@ -381,9 +383,6 @@ function typeBadge(type: string): { kind: string; label: string } {
   }
 }
 
-/** Best-effort type inference from a slice's top-level node when
- *  the source DragItem didn't carry one (e.g., a raw text-selection
- *  drag from the editor). */
 function inferTypeFromSlice(slice: Slice): string {
   if (slice.content.childCount === 0) return 'text';
   const first = slice.content.firstChild;
