@@ -1746,6 +1746,10 @@ settings.subscribe((s) => {
   applyUiFont(s.uiFont);
   reapplyAllRibbonTooltips();
   pushNativeMenuBindings();
+  document.documentElement.classList.toggle(
+    'pmd-dropzone-pill-hidden',
+    !s.showDropzonePill,
+  );
   applyLineHeight(s.lineHeight);
   applyFormattingPanel(s.formattingPanelMode, s.formattingPanelPreview, s.showCharacterStyles);
   syncParagraphIntegrityBtn();

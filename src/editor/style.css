@@ -2313,6 +2313,20 @@ body.pmd-nav-hidden #nav-pane-pull-tab {
   color: var(--pmd-c-text);
 }
 
+/* Hide the dropzone pill from the chrome when the user has
+   turned off the Appearance → Show dropzone shelf toggle. The
+   shelf STATE still works (Ctrl+\` still sends, other windows
+   still see items); just the visible pill is removed. */
+html.pmd-dropzone-pill-hidden .pmd-dropzone-root {
+  display: none !important;
+}
+/* When the pill is hidden, also drop the nav list's reserved
+   bottom padding (it exists so the floating bubble doesn't overlay
+   the last heading row). */
+html.pmd-dropzone-pill-hidden .pmd-nav-list {
+  padding-bottom: 0;
+}
+
 /* ---- Dropzone shelf (cross-window scratch space) ----
    The visible "pill" is `.pmd-dropzone-bar`. The surrounding
    root has no chrome of its own when closed — the bar IS the

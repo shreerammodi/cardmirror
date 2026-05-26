@@ -435,6 +435,11 @@ export interface Settings {
    *                   their label is already in the menu.
    */
   ribbonTooltipMode: 'none' | 'tooltip' | 'shortcut' | 'both';
+  /** Whether the cross-window dropzone pill (the floating shelf at
+   *  the bottom of the nav pane) is visible. The shelf state still
+   *  works when off (Ctrl+\` sends, content is reachable from the
+   *  next window opened); the pill is just hidden from the chrome. */
+  showDropzonePill: boolean;
   /**
    * User-interface font family. Applied as `--pmd-ui-font` on
    * documentElement; flows into every UI surface (ribbon, dialogs,
@@ -791,6 +796,7 @@ const DEFAULTS: Settings = {
   bodyFont: 'Times New Roman',
   uiFont: '',
   ribbonTooltipMode: 'both',
+  showDropzonePill: true,
   lineHeight: 1.3,
   lineHeightCite: 1.2,
   lineHeightTag: 1.2,
@@ -1220,6 +1226,14 @@ export const SETTING_METADATA: SettingMeta[] = [
     category: 'appearance',
   },
   {
+    key: 'showDropzonePill',
+    label: 'Show dropzone shelf in nav pane',
+    description:
+      'When on, the cross-window dropzone pill sits at the bottom of the navigation pane. Turning it off hides the pill from the chrome; the shelf state and the Send to Dropzone shortcut still work — items pile up in the store and can be retrieved from any window that has the pill visible.',
+    kind: 'toggle',
+    category: 'appearance',
+  },
+  {
     key: 'formattingPanelPreview',
     label: 'Preview styles in formatting panel',
     description:
@@ -1581,6 +1595,7 @@ function sanitize(s: Settings): Settings {
     bodyFont: sanitizeBodyFont(s.bodyFont),
     uiFont: sanitizeUiFont(s.uiFont),
     ribbonTooltipMode: sanitizeRibbonTooltipMode(s.ribbonTooltipMode),
+    showDropzonePill: s.showDropzonePill !== false,
     lineHeight: sanitizeLineHeight(s.lineHeight, DEFAULTS.lineHeight),
     lineHeightCite: sanitizeLineHeight(s.lineHeightCite, DEFAULTS.lineHeightCite),
     lineHeightTag: sanitizeLineHeight(s.lineHeightTag, DEFAULTS.lineHeightTag),
