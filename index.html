@@ -40,6 +40,22 @@
           <button id="speech-send-end-btn" type="button"
                   title="Send to speech doc at end (Alt-`)" aria-label="Send to speech at end">⤓</button>
         </div>
+        <!-- Quick Cards 2×2 cluster (row-major):
+               🔍 (search)        🏷️ (tag picker)
+               🗂️ (manage)        ➕ (add)
+             Visible in BOTH single- and multi-doc (quick cards work
+             everywhere). Search / Tag Picker / Manage are stubbed for
+             now; Add is live. -->
+        <div id="quickcards-stack" class="ribbon-button-stack ribbon-quickcards-stack" role="group" aria-label="Quick Cards">
+          <button id="qc-search-btn" type="button"
+                  title="Search quick cards (coming soon)" aria-label="Search quick cards">🔍</button>
+          <button id="qc-tagpicker-btn" type="button"
+                  title="Filter quick cards by tag (coming soon)" aria-label="Quick card tag picker">🏷️</button>
+          <button id="qc-manage-btn" type="button"
+                  title="Manage quick cards (coming soon)" aria-label="Manage quick cards">🗂️</button>
+          <button id="qc-add-btn" type="button"
+                  title="Add quick card from selection" aria-label="Add quick card">➕</button>
+        </div>
         <div id="formatting-panel" class="ribbon-formatting-panel" role="group" aria-label="Formatting panel">
           <!-- Column-major order so the 3×2 grid lays out as:
                  Pocket   Hat      Analytic

@@ -1367,6 +1367,22 @@ if (speechSendEndBtn) {
   speechSendEndBtn.addEventListener('click', () => runRibbon('sendToSpeechAtEnd'));
 }
 
+// Quick Cards ribbon cluster. Add is live; Search / Tag Picker /
+// Manage are stubbed (toast) until their surfaces land. `mousedown`
+// preventDefault on all four keeps the editor selection intact (Add
+// needs it; harmless for the rest).
+const qcSearchBtn = document.getElementById('qc-search-btn') as HTMLButtonElement | null;
+const qcTagPickerBtn = document.getElementById('qc-tagpicker-btn') as HTMLButtonElement | null;
+const qcManageBtn = document.getElementById('qc-manage-btn') as HTMLButtonElement | null;
+const qcAddBtn = document.getElementById('qc-add-btn') as HTMLButtonElement | null;
+for (const btn of [qcSearchBtn, qcTagPickerBtn, qcManageBtn, qcAddBtn]) {
+  btn?.addEventListener('mousedown', (e) => e.preventDefault());
+}
+qcAddBtn?.addEventListener('click', () => runRibbon('addQuickCard'));
+qcSearchBtn?.addEventListener('click', () => showToast('Quick card search — coming soon.'));
+qcTagPickerBtn?.addEventListener('click', () => showToast('Quick card tag picker — coming soon.'));
+qcManageBtn?.addEventListener('click', () => showToast('Manage quick cards — coming soon.'));
+
 // Comments column. The CommentsColumn instance owns the side-panel
 // DOM; we re-render it via `view.dispatchTransaction` overrides
 // further down so doc edits, plugin meta, and selection changes all

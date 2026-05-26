@@ -55,6 +55,14 @@ in each release, see `CHANGELOG.md`.
     its tags differ.
   - Store helpers added: `buildQuickCard`, `distinctTags`,
     `findDuplicate`. CSS: `.pmd-qc-add-*`.
+  - Ribbon: a 2×2 Quick Cards cluster (`#quickcards-stack`) between the
+    speech stack and the formatting panel, shown in both single- and
+    multi-doc (unlike the speech stack). Buttons: 🔍 Search · 🏷️ Tag
+    Picker (top), 🗂️ Manage · ➕ Add (bottom). **Add is live**
+    (`runRibbon('addQuickCard')`); Search / Tag Picker / Manage are
+    stubbed with "coming soon" toasts until their surfaces land.
+    `mousedown` preventDefault on all four preserves the editor
+    selection. CSS `.ribbon-quickcards-stack` mirrors the speech stack.
 
 - **Select Current Heading / Copy Current Heading commands.** Two new
   ribbon commands (`selectCurrentHeading`, `copyCurrentHeading`) that
