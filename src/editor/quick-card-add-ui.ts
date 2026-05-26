@@ -13,7 +13,7 @@
  * keeps the dialog open.
  */
 
-import { normalizeTag } from './quick-cards-store.js';
+import { normalizeTag, type QuickCard } from './quick-cards-store.js';
 
 export interface QuickCardAddResult {
   name: string;
@@ -26,9 +26,12 @@ export interface QuickCardAddOptions {
   initialName: string;
   /** Distinct existing tags (display casing) for suggestions. */
   existingTags: string[];
-  /** Return an error message to show inline (and keep the dialog
-   *  open), or null if the name+tags are acceptable. */
-  validate?: (name: string, tags: string[]) => string | null;
+  /** Return the conflicting card (same name + identical tag-set) that
+   *  the uniqueness rule forbids, or null if the name+tags are free. */
+  findConflict?: (name: string, tags: string[]) => QuickCard | null;
+  /** Invoked when the user clicks "Open it" on a conflict; the dialog
+   *  closes (resolving null) first. */
+  onOpenConflict?: (card: QuickCard) => void;
 }
 
 export function openQuickCardAdd(
@@ -263,9 +266,9 @@ class QuickCardAddModal {
       this.nameInput.focus();
       return;
     }
-    const err = this.opts.validate?.(name, this.tags) ?? null;
-    if (err) {
-      this.showError(err);
+    const conflict = this.opts.findConflict?.(name, this.tags) ?? null;
+    if (conflict) {
+      this.showConflict(name, conflict);
       return;
     }
     this.finish({ name, tags: this.tags });
@@ -274,6 +277,30 @@ class QuickCardAddModal {
   private showError(msg: string): void {
     this.errorEl.textContent = msg;
     this.errorEl.hidden = false;
+  }
+
+  /** A duplicate (same name + identical tags) blocks the save, but we
+   *  offer to jump straight to it in the Manage overlay. */
+  private showConflict(name: string, card: QuickCard): void {
+    this.errorEl.innerHTML = '';
+    this.errorEl.hidden = false;
+    const msg = document.createElement('span');
+    msg.textContent = this.tags.length
+      ? `A quick card named “${name}” with those tags already exists. `
+      : `A quick card named “${name}” (no tags) already exists — add a tag to keep both. `;
+    this.errorEl.appendChild(msg);
+    if (this.opts.onOpenConflict) {
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'pmd-qc-add-conflict-open';
+      open.textContent = 'Open it';
+      open.addEventListener('click', () => {
+        const cb = this.opts.onOpenConflict!;
+        this.finish(null);
+        cb(card);
+      });
+      this.errorEl.appendChild(open);
+    }
   }
 
   private cancel(): void {

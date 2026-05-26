@@ -300,12 +300,9 @@ async function runAddQuickCard(sourceView: EditorView): Promise<void> {
   const result = await openQuickCardAdd({
     initialName: smallestEnclosingHeadingText(sourceView.state),
     existingTags: distinctTags(quickCardsStore.list()),
-    validate: (name, tags) => {
-      const dup = findDuplicate(quickCardsStore.list(), name, tags);
-      if (!dup) return null;
-      return tags.length
-        ? `A quick card named “${name}” with those tags already exists.`
-        : `A quick card named “${name}” (no tags) already exists — add a tag to keep both.`;
+    findConflict: (name, tags) => findDuplicate(quickCardsStore.list(), name, tags) ?? null,
+    onOpenConflict: (card) => {
+      void quickCardsManageUI.open({ selectId: card.id });
     },
   });
   if (!result) return;

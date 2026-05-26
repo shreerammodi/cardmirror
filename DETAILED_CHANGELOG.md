@@ -85,6 +85,17 @@ in each release, see `CHANGELOG.md`.
     styling (it's not under `#editor`, so per-style size/font
     variables don't cascade) — content is fully editable, just not a
     pixel match for the main editor.
+  - Re-entrancy fix: every Electron mutation fires the store
+    subscription twice (optimistic + main broadcast echo); with the
+    detail's editor mount being async (dynamic import), two renders
+    interleaved and double-appended the footer (and left stale DOM).
+    `renderDetail` now appends all DOM (incl. footer) synchronously and
+    guards the async editor mount with a `renderSeq` token, so stale
+    mounts are discarded.
+  - The Add dialog now offers **"Open it"** on a duplicate (same name +
+    identical tags): `openQuickCardAdd` takes `findConflict` +
+    `onOpenConflict`, the latter opening the Manage overlay at that card
+    (`quickCardsManageUI.open({ selectId })`).
   - Ribbon: a 2×2 Quick Cards cluster (`#quickcards-stack`) between the
     speech stack and the formatting panel, shown in both single- and
     multi-doc (unlike the speech stack). Buttons: 🔍 Search · 🏷️ Tag

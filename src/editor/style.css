@@ -6132,6 +6132,17 @@ body.pmd-recovery-active.pmd-multi-doc #app {
   color: var(--pmd-c-danger, #c0392b);
   line-height: 1.3;
 }
+.pmd-qc-add-conflict-open {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--pmd-c-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
 .pmd-qc-add-footer {
   display: flex;
   justify-content: flex-end;

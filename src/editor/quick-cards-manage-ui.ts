@@ -45,7 +45,10 @@ class QuickCardsManageUI {
   private sortMode: SortMode = 'updated';
   private filter = '';
 
-  // Detail draft + embedded editor.
+  // Detail draft + embedded editor. `renderSeq` guards the async
+  // editor mount against re-entrant renders (Electron fires the store
+  // subscription twice per mutation — optimistic + broadcast echo).
+  private renderSeq = 0;
   private editor: EditorView | null = null;
   private draftName = '';
   private draftTags: string[] = [];
@@ -306,6 +309,7 @@ class QuickCardsManageUI {
   }
 
   private async renderDetail(): Promise<void> {
+    const seq = ++this.renderSeq;
     this.teardownEditor();
     this.detailEl.innerHTML = '';
     const card = this.cards.find((c) => c.id === this.selectedId);
@@ -412,15 +416,15 @@ class QuickCardsManageUI {
     renderChips();
     renderSuggestions();
 
-    // Content (embedded editor)
+    // Content (embedded editor) + footer — both appended SYNCHRONOUSLY
+    // (before the async editor mount) so an interleaved re-render can't
+    // double-append the footer. Only the EditorView creation is async.
     const contentField = field('Content');
     const editorHost = document.createElement('div');
     editorHost.className = 'pmd-qc-manage-editor';
     contentField.appendChild(editorHost);
     this.detailEl.appendChild(contentField);
-    await this.mountEditor(editorHost, card);
 
-    // Footer
     const footer = document.createElement('div');
     footer.className = 'pmd-qc-manage-detail-footer';
     footer.append(
@@ -428,13 +432,15 @@ class QuickCardsManageUI {
       button('Save', () => void this.saveCard(card), 'pmd-qc-manage-primary'),
     );
     this.detailEl.appendChild(footer);
+
+    await this.mountEditor(editorHost, card, seq);
   }
 
-  private async mountEditor(host: HTMLElement, card: QuickCard): Promise<void> {
+  private async mountEditor(host: HTMLElement, card: QuickCard, seq: number): Promise<void> {
     const { buildEditorPlugins } = await import('./index.js');
-    // Guard: the user may have navigated away while the dynamic import
-    // resolved.
-    if (!this.root || this.selectedId !== card.id) return;
+    // Guard: a newer render started (or the user navigated away) while
+    // the dynamic import resolved — discard this stale mount.
+    if (!this.root || seq !== this.renderSeq || this.selectedId !== card.id) return;
     const doc = docFromCard(card);
     const state = EditorState.create({ doc, schema, plugins: buildEditorPlugins() });
     const self = this;
