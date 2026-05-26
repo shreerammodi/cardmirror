@@ -140,6 +140,10 @@ class HomeScreen {
    *  On launch / close-doc there's nothing behind home, so it's
    *  left false and home is the only way forward. */
   show(opts: { canReturnToDoc?: boolean } = {}): void {
+    // No-op when never mounted (multi-pane mode doesn't mount the
+    // home screen). Lets the goHome ribbon command be a safe
+    // no-op there rather than throwing on an undefined root.
+    if (!this.root) return;
     this.canReturnToDoc = !!opts.canReturnToDoc;
     this.backBtn.hidden = !this.canReturnToDoc;
     if (this.visible) return;

@@ -809,6 +809,11 @@ const ribbonContext: RibbonContext = {
   selectSpeechDoc: () => {
     void openSelectSpeechDocModal();
   },
+  goHome: () => {
+    // Open home over the current doc (return-to-doc enabled), same
+    // as clicking the ribbon Home button.
+    homeScreen.show({ canReturnToDoc: true });
+  },
   openHighlightPicker: () => colorPanel?.openPicker('highlight'),
   openShadingPicker: () => colorPanel?.openPicker('shading'),
   openFontColorPicker: () => colorPanel?.openPicker('fontcolor'),
@@ -828,11 +833,9 @@ if (newBtn) {
 }
 if (homeBtn) {
   homeBtn.addEventListener('mousedown', (e) => e.preventDefault());
-  homeBtn.addEventListener('click', () => {
-    // Open home OVER the current doc — the doc stays mounted so
-    // the user can dismiss back to it (Back button / Esc).
-    homeScreen.show({ canReturnToDoc: true });
-  });
+  // Route through the ribbon command so the button + any
+  // user-assigned keybinding share one path.
+  homeBtn.addEventListener('click', () => runRibbon('goHome'));
 }
 
 
@@ -1969,10 +1972,7 @@ if (timerToggleBtn) {
   };
   button('open-btn', 'openFile');
   button('new-btn', 'newDocument');
-  // Home button — not a ribbon command (no rebindable shortcut),
-  // label-only so it still honors the none/tooltip modes.
-  const homeEl = byId('home-btn');
-  if (homeEl) registerRibbonTooltip({ el: homeEl, label: 'Home' });
+  button('home-btn', 'goHome', 'Home');
   button('export-btn', 'save');
   button('settings-btn', 'openSettings');
   button('reference-btn', 'openShortcutsReference');

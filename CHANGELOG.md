@@ -12,9 +12,11 @@ see `DETAILED_CHANGELOG.md`.
 - **Home screen.** Launching CardMirror without a file now opens
   a start screen instead of a blank document: New document, New
   speech document, Open, and a list of recently opened files
-  (click to reopen in place). A **Home button** (🏠, far left of
-  the ribbon) returns to it any time — with a "Back to document"
-  link and Esc to dismiss back to what you were editing.
+  (click to reopen in place). A **Home button** (🏠, in the
+  ribbon's top-right button cluster; rebindable via Settings →
+  Keybindings) returns to it any time — with a "Back to document"
+  link and Esc to dismiss back to what you were editing. On the
+  home screen, **1 / 2 / 3** trigger New / New speech / Open.
   **Ctrl+W** now closes the current doc back to the home screen
   rather than closing the window (the window's close button still
   quits); confirms unsaved changes first. Recent files persist

@@ -3325,6 +3325,7 @@ export type RibbonCommandId =
   | 'openSettings'
   | 'toggleParagraphIntegrity'
   | 'selectSpeechDoc'
+  | 'goHome'
   | 'openHighlightPicker'
   | 'openShadingPicker'
   | 'openFontColorPicker'
@@ -3440,6 +3441,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'openSettings',
   'toggleParagraphIntegrity',
   'selectSpeechDoc',
+  'goHome',
   'openHighlightPicker',
   'openShadingPicker',
   'openFontColorPicker',
@@ -3541,6 +3543,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   openSettings: 'Open Settings',
   toggleParagraphIntegrity: 'Toggle Paragraph Integrity',
   selectSpeechDoc: 'Select Speech Document',
+  goHome: 'Go to Home Screen',
   openHighlightPicker: 'Open Highlight Color Picker',
   openShadingPicker: 'Open Background Color Picker',
   openFontColorPicker: 'Open Font Color Picker',
@@ -3693,6 +3696,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   openSettings: '',
   toggleParagraphIntegrity: '',
   selectSpeechDoc: '',
+  goHome: '',
   openHighlightPicker: '',
   openShadingPicker: '',
   openFontColorPicker: '',
@@ -3836,6 +3840,7 @@ export interface RibbonContext {
   openSettings: () => void;
   toggleParagraphIntegrity: () => void;
   selectSpeechDoc: () => void;
+  goHome: () => void;
   openHighlightPicker: () => void;
   openShadingPicker: () => void;
   openFontColorPicker: () => void;
@@ -3896,6 +3901,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   openSettings: () => {},
   toggleParagraphIntegrity: () => {},
   selectSpeechDoc: () => {},
+  goHome: () => {},
   openHighlightPicker: () => {},
   openShadingPicker: () => {},
   openFontColorPicker: () => {},
@@ -4231,6 +4237,12 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return (_state, dispatch) => {
         if (!dispatch) return true;
         ctx.selectSpeechDoc();
+        return true;
+      };
+    case 'goHome':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.goHome();
         return true;
       };
     case 'openHighlightPicker':
