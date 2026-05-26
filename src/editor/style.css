@@ -5843,9 +5843,11 @@ body.pmd-recovery-active.pmd-multi-doc #app {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  padding-bottom: 0.6rem;
+  /* Divider: inner padding matches the body's 0.75rem flex gap so
+     the line gets equal space above and below (no margin — the gap
+     owns the outer side). Kept identical across all four dividers. */
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--pmd-c-divider-faint);
-  margin-bottom: 0.6rem;
 }
 
 .pmd-save-as-field-label {
@@ -5884,9 +5886,8 @@ body.pmd-recovery-active.pmd-multi-doc #app {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  padding-bottom: 0.4rem;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--pmd-c-divider-faint);
-  margin-bottom: 0.6rem;
 }
 
 .pmd-save-as-format-row {
@@ -5936,8 +5937,7 @@ body.pmd-recovery-active.pmd-multi-doc #app {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.5rem;
-  padding-bottom: 0.6rem;
-  margin-bottom: 0.6rem;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--pmd-c-divider-faint);
 }
 .pmd-save-as-preset {
@@ -5978,8 +5978,7 @@ body.pmd-recovery-active.pmd-multi-doc #app {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
-  padding-top: 0.6rem;
-  margin-top: 0.6rem;
+  padding-top: 0.75rem;
   border-top: 1px solid var(--pmd-c-divider-faint);
 }
 
