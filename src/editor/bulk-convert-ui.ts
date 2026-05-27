@@ -2,12 +2,14 @@
  * Bulk convert — a home-screen utility to batch-convert between
  * `.docx` and `.cmir`.
  *
- * Pick a single file or a folder (recursed, incl. subfolders); convert
- * in the chosen direction; output either next to each original (same
- * location, swapped extension) or bundled into a single `.zip`.
+ * Pick an input (a single file or a folder, recursed incl. subfolders)
+ * and a destination folder, choose the direction and output form
+ * (loose files or a single `.zip`), then Convert. Files are written
+ * into the destination (preserving the input's subfolder structure);
+ * a zip is written there too.
  *
- * Electron-only: it needs recursive directory listing + write-to-path,
- * so the home screen only surfaces the entry on the desktop edition.
+ * Electron-only: needs recursive directory listing + write-to-path, so
+ * the home screen only surfaces the entry on the desktop edition.
  */
 
 import JSZip from 'jszip';
@@ -15,10 +17,16 @@ import { fromDocxFull, parseNative, serializeNative, toDocx } from '../index.js'
 import { getHost, getElectronHost } from './host/index.js';
 
 type Direction = 'docx2cmir' | 'cmir2docx';
-type Output = 'inplace' | 'zip';
+type Output = 'files' | 'zip';
 
-/** Convert one file's bytes in the given direction, preserving
- *  comment threads. */
+interface InputSel {
+  kind: 'file' | 'folder';
+  path: string;
+  name: string;
+  /** Bytes (file input only). */
+  bytes?: Uint8Array;
+}
+
 async function convertBytes(bytes: Uint8Array, dir: Direction): Promise<Uint8Array> {
   if (dir === 'docx2cmir') {
     const { doc, threads } = await fromDocxFull(bytes);
@@ -34,14 +42,34 @@ function swapExt(p: string, dir: Direction): string {
     : p.replace(/\.cmir$/i, '.docx');
 }
 
+function baseName(p: string): string {
+  return p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? p;
+}
+
+function baseNoExt(name: string): string {
+  return name.replace(/\.(docx|cmir)$/i, '');
+}
+
+/** Join a destination dir + relative path with a forward slash
+ *  (Node's fs accepts it on every platform). */
+function joinPath(dir: string, rel: string): string {
+  return `${dir.replace(/[\\/]+$/, '')}/${rel.replace(/^[\\/]+/, '')}`;
+}
+
 class BulkConvertModal {
   private readonly overlay: HTMLDivElement;
   private readonly dialog: HTMLDivElement;
   private statusEl!: HTMLDivElement;
+  private inputPathEl!: HTMLDivElement;
+  private outputPathEl!: HTMLDivElement;
+  private convertBtn!: HTMLButtonElement;
   private busy = false;
   private settled = false;
   private dirRadios!: Record<Direction, HTMLInputElement>;
   private outRadios!: Record<Output, HTMLInputElement>;
+
+  private inputSel: InputSel | null = null;
+  private outputDir: string | null = null;
 
   constructor() {
     this.overlay = document.createElement('div');
@@ -75,7 +103,7 @@ class BulkConvertModal {
     return this.dirRadios.cmir2docx.checked ? 'cmir2docx' : 'docx2cmir';
   }
   private output(): Output {
-    return this.outRadios.zip.checked ? 'zip' : 'inplace';
+    return this.outRadios.zip.checked ? 'zip' : 'files';
   }
 
   private render(): void {
@@ -96,25 +124,68 @@ class BulkConvertModal {
     const body = document.createElement('div');
     body.className = 'pmd-bulk-body';
 
+    // Direction. Changing it invalidates a picked input (the source
+    // extension changes), so clear it.
     this.dirRadios = {
       docx2cmir: radio('pmd-bulk-dir', '.docx → .cmir', true),
       cmir2docx: radio('pmd-bulk-dir', '.cmir → .docx', false),
     };
-    body.appendChild(
-      fieldset('Direction', [this.dirRadios.docx2cmir, this.dirRadios.cmir2docx]),
-    );
+    for (const r of [this.dirRadios.docx2cmir, this.dirRadios.cmir2docx]) {
+      r.addEventListener('change', () => {
+        this.inputSel = null;
+        this.refresh();
+      });
+    }
+    body.appendChild(fieldset('Direction', [this.dirRadios.docx2cmir, this.dirRadios.cmir2docx]));
 
+    // Output form.
     this.outRadios = {
-      inplace: radio('pmd-bulk-out', 'Save next to each original', true),
+      files: radio('pmd-bulk-out', 'Save as files', true),
       zip: radio('pmd-bulk-out', 'Save as a single .zip', false),
     };
-    body.appendChild(fieldset('Output', [this.outRadios.inplace, this.outRadios.zip]));
+    body.appendChild(fieldset('Output', [this.outRadios.files, this.outRadios.zip]));
 
+    // Input.
+    const inField = document.createElement('div');
+    inField.className = 'pmd-bulk-field';
+    const inLabel = document.createElement('div');
+    inLabel.className = 'pmd-bulk-field-label';
+    inLabel.textContent = 'Input';
+    inField.appendChild(inLabel);
+    const inBtns = document.createElement('div');
+    inBtns.className = 'pmd-bulk-pickrow';
+    inBtns.append(
+      button('Choose file…', () => void this.pickFile()),
+      button('Choose folder…', () => void this.pickFolder()),
+    );
+    inField.appendChild(inBtns);
+    this.inputPathEl = document.createElement('div');
+    this.inputPathEl.className = 'pmd-bulk-path';
+    inField.appendChild(this.inputPathEl);
+    body.appendChild(inField);
+
+    // Destination.
+    const outField = document.createElement('div');
+    outField.className = 'pmd-bulk-field';
+    const outLabel = document.createElement('div');
+    outLabel.className = 'pmd-bulk-field-label';
+    outLabel.textContent = 'Destination';
+    outField.appendChild(outLabel);
+    const outBtns = document.createElement('div');
+    outBtns.className = 'pmd-bulk-pickrow';
+    outBtns.append(button('Choose destination…', () => void this.pickDestination()));
+    outField.appendChild(outBtns);
+    this.outputPathEl = document.createElement('div');
+    this.outputPathEl.className = 'pmd-bulk-path';
+    outField.appendChild(this.outputPathEl);
+    body.appendChild(outField);
+
+    // Convert.
     const actions = document.createElement('div');
     actions.className = 'pmd-bulk-actions';
-    const fileBtn = button('Choose file…', () => void this.runFile());
-    const folderBtn = button('Choose folder…', () => void this.runFolder());
-    actions.append(fileBtn, folderBtn);
+    this.convertBtn = button('Convert', () => void this.run());
+    this.convertBtn.classList.add('pmd-bulk-btn-primary');
+    actions.appendChild(this.convertBtn);
     body.appendChild(actions);
 
     this.statusEl = document.createElement('div');
@@ -122,119 +193,127 @@ class BulkConvertModal {
     body.appendChild(this.statusEl);
 
     this.dialog.appendChild(body);
+    this.refresh();
+  }
+
+  /** Update the path displays + the Convert button's enabled state. */
+  private refresh(): void {
+    this.inputPathEl.textContent = this.inputSel
+      ? `${this.inputSel.kind === 'folder' ? 'Folder' : 'File'}: ${this.inputSel.path}`
+      : 'None selected';
+    this.inputPathEl.classList.toggle('pmd-bulk-path-set', !!this.inputSel);
+    this.outputPathEl.textContent = this.outputDir ? this.outputDir : 'None selected';
+    this.outputPathEl.classList.toggle('pmd-bulk-path-set', !!this.outputDir);
+    this.convertBtn.disabled = this.busy || !this.inputSel || !this.outputDir;
+  }
+
+  private setBusy(on: boolean): void {
+    this.busy = on;
+    this.dialog.classList.toggle('pmd-bulk-busy', on);
+    this.refresh();
   }
 
   private setStatus(msg: string): void {
     this.statusEl.textContent = msg;
   }
 
-  private setBusy(on: boolean): void {
-    this.busy = on;
-    this.dialog.classList.toggle('pmd-bulk-busy', on);
-  }
+  // ── Pickers ───────────────────────────────────────────────────────
 
-  // ── Runs ──────────────────────────────────────────────────────────
-
-  private async runFile(): Promise<void> {
-    if (this.busy) return;
-    const dir = this.direction();
-    const out = this.output();
-    const srcExt = dir === 'docx2cmir' ? 'docx' : 'cmir';
+  private async pickFile(): Promise<void> {
+    const srcExt = this.direction() === 'docx2cmir' ? 'docx' : 'cmir';
     const opened = await getHost().openFile({
       filters: [{ name: `.${srcExt}`, extensions: [srcExt] }],
     });
-    if (!opened) return;
-    this.setBusy(true);
-    this.setStatus(`Converting ${opened.name}…`);
-    try {
-      const converted = await convertBytes(opened.bytes, dir);
-      if (out === 'zip') {
-        await this.saveZip([{ name: swapExt(opened.name, dir), bytes: converted }]);
-      } else {
-        const electron = getElectronHost();
-        if (typeof opened.handle !== 'string' || !electron) {
-          throw new Error('In-place output requires the desktop edition.');
-        }
-        await electron.writeFileAtPath(swapExt(opened.handle, dir), converted);
-      }
-      this.setStatus(`Converted “${opened.name}”.`);
-    } catch (err) {
-      this.setStatus(`Failed: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      this.setBusy(false);
-    }
+    if (!opened || typeof opened.handle !== 'string') return;
+    this.inputSel = { kind: 'file', path: opened.handle, name: opened.name, bytes: opened.bytes };
+    this.refresh();
   }
 
-  private async runFolder(): Promise<void> {
-    if (this.busy) return;
+  private async pickFolder(): Promise<void> {
+    const electron = getElectronHost();
+    if (!electron) return;
+    const folder = await electron.pickDirectory({ title: 'Choose a folder to convert' });
+    if (!folder) return;
+    this.inputSel = { kind: 'folder', path: folder, name: baseName(folder) };
+    this.refresh();
+  }
+
+  private async pickDestination(): Promise<void> {
+    const electron = getElectronHost();
+    if (!electron) return;
+    const dest = await electron.pickDirectory({ title: 'Choose a destination folder' });
+    if (!dest) return;
+    this.outputDir = dest;
+    this.refresh();
+  }
+
+  // ── Convert ───────────────────────────────────────────────────────
+
+  private async run(): Promise<void> {
+    if (this.busy || !this.inputSel || !this.outputDir) return;
     const electron = getElectronHost();
     if (!electron) {
-      this.setStatus('Folder conversion requires the desktop edition.');
+      this.setStatus('Bulk convert requires the desktop edition.');
       return;
     }
     const dir = this.direction();
     const out = this.output();
-    const srcExt = dir === 'docx2cmir' ? 'docx' : 'cmir';
-    const folder = await electron.pickDirectory({ title: 'Choose a folder to convert' });
-    if (!folder) return;
+    const dest = this.outputDir;
+    const input = this.inputSel;
     this.setBusy(true);
-    this.setStatus('Scanning…');
     try {
-      const files = await electron.listFilesRecursive(folder, srcExt);
-      if (files.length === 0) {
-        this.setStatus(`No .${srcExt} files found in that folder.`);
-        return;
-      }
-      const zip = out === 'zip' ? new JSZip() : null;
-      let ok = 0;
-      let failed = 0;
-      for (let i = 0; i < files.length; i++) {
-        const f = files[i]!;
-        this.setStatus(`Converting ${i + 1} / ${files.length}…`);
-        try {
-          const read = await electron.readFileAtPath(f.path);
-          if (!read) throw new Error('unreadable');
-          const converted = await convertBytes(read.bytes, dir);
-          if (zip) {
-            zip.file(swapExt(f.relPath, dir).replace(/\\/g, '/'), converted);
-          } else {
-            await electron.writeFileAtPath(swapExt(f.path, dir), converted);
-          }
-          ok++;
-        } catch (err) {
-          failed++;
-          console.error('Bulk convert failed for', f.path, err);
+      if (input.kind === 'file') {
+        this.setStatus(`Converting ${input.name}…`);
+        const converted = await convertBytes(input.bytes!, dir);
+        if (out === 'zip') {
+          const zip = new JSZip();
+          zip.file(swapExt(input.name, dir), converted);
+          const bytes = await zip.generateAsync({ type: 'uint8array' });
+          await electron.writeFileAtPath(joinPath(dest, `${baseNoExt(input.name)}.zip`), bytes);
+        } else {
+          await electron.writeFileAtPath(joinPath(dest, swapExt(input.name, dir)), converted);
         }
+        this.setStatus(`Converted “${input.name}”.`);
+      } else {
+        const srcExt = dir === 'docx2cmir' ? 'docx' : 'cmir';
+        this.setStatus('Scanning…');
+        const files = await electron.listFilesRecursive(input.path, srcExt);
+        if (files.length === 0) {
+          this.setStatus(`No .${srcExt} files found in that folder.`);
+          return;
+        }
+        const zip = out === 'zip' ? new JSZip() : null;
+        let ok = 0;
+        let failed = 0;
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i]!;
+          this.setStatus(`Converting ${i + 1} / ${files.length}…`);
+          try {
+            const read = await electron.readFileAtPath(f.path);
+            if (!read) throw new Error('unreadable');
+            const converted = await convertBytes(read.bytes, dir);
+            const rel = swapExt(f.relPath, dir);
+            if (zip) zip.file(rel.replace(/\\/g, '/'), converted);
+            else await electron.writeFileAtPath(joinPath(dest, rel), converted);
+            ok++;
+          } catch (err) {
+            failed++;
+            console.error('Bulk convert failed for', f.path, err);
+          }
+        }
+        if (zip && ok > 0) {
+          const bytes = await zip.generateAsync({ type: 'uint8array' });
+          await electron.writeFileAtPath(joinPath(dest, `${input.name}.zip`), bytes);
+        }
+        this.setStatus(
+          `Done — ${ok} converted${failed ? `, ${failed} failed (see console)` : ''}.`,
+        );
       }
-      if (zip && ok > 0) {
-        const blob = await zip.generateAsync({ type: 'uint8array' });
-        await this.saveZip(null, blob);
-      }
-      this.setStatus(
-        `Done — ${ok} converted${failed ? `, ${failed} failed (see console)` : ''}.`,
-      );
     } catch (err) {
       this.setStatus(`Failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       this.setBusy(false);
     }
-  }
-
-  /** Save a zip — either built here from `entries`, or a pre-built
-   *  `prebuilt` byte array. */
-  private async saveZip(
-    entries: Array<{ name: string; bytes: Uint8Array }> | null,
-    prebuilt?: Uint8Array,
-  ): Promise<void> {
-    let bytes = prebuilt;
-    if (!bytes) {
-      const zip = new JSZip();
-      for (const e of entries ?? []) zip.file(e.name, e.bytes);
-      bytes = await zip.generateAsync({ type: 'uint8array' });
-    }
-    await getHost().saveAs('converted.zip', bytes, {
-      filters: [{ name: 'Zip archive', extensions: ['zip'] }],
-    });
   }
 }
 
@@ -245,7 +324,6 @@ function radio(name: string, label: string, checked: boolean): HTMLInputElement 
   input.type = 'radio';
   input.name = name;
   input.checked = checked;
-  // Stash the label so `fieldset` can wrap it.
   (input as HTMLInputElement & { _label?: string })._label = label;
   return input;
 }

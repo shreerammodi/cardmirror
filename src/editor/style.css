@@ -6693,23 +6693,45 @@ body.pmd-recovery-active.pmd-multi-doc #app {
   font-size: 0.9rem;
   cursor: pointer;
 }
-.pmd-bulk-actions {
+.pmd-bulk-pickrow {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+.pmd-bulk-path {
+  font-size: 0.78rem;
+  color: var(--pmd-c-text-muted);
+  word-break: break-all;
+}
+.pmd-bulk-path-set {
+  color: var(--pmd-c-text);
+}
+.pmd-bulk-actions {
   padding-top: 0.25rem;
 }
 .pmd-bulk-btn {
-  flex: 1 1 0;
-  padding: 0.45rem 0.9rem;
+  padding: 0.4rem 0.85rem;
   font: inherit;
   font-size: 0.9rem;
   border-radius: 4px;
-  border: 1px solid var(--pmd-c-accent);
-  background: var(--pmd-c-accent);
-  color: var(--pmd-c-text-on-accent);
+  border: 1px solid var(--pmd-c-border);
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
   cursor: pointer;
 }
-.pmd-bulk-btn:hover { background: var(--pmd-c-accent-hover); }
+.pmd-bulk-btn:hover { background: var(--pmd-c-button-hover); }
+.pmd-bulk-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.pmd-bulk-btn-primary {
+  width: 100%;
+  background: var(--pmd-c-accent);
+  border-color: var(--pmd-c-accent);
+  color: var(--pmd-c-text-on-accent);
+}
+.pmd-bulk-btn-primary:hover { background: var(--pmd-c-accent-hover); }
+.pmd-bulk-btn-primary:disabled { background: var(--pmd-c-accent); }
 .pmd-bulk-status {
   font-size: 0.82rem;
   color: var(--pmd-c-text-muted);

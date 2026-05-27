@@ -11,18 +11,23 @@ in each release, see `CHANGELOG.md`.
   labeled "Convert" group beside the Quick Cards group (shown only when
   `getHost().kind === 'electron'`), opening `bulk-convert-ui.ts`'s
   modal. Two toggles — direction (`.docx`→`.cmir` / reverse) and output
-  (in-place vs a single `.zip`) — plus Choose file / Choose folder.
+  (loose files vs a single `.zip`) — both written into a chosen
+  destination folder. Separate input (file / folder) + destination
+  pickers, with the chosen paths shown and a Convert button enabled
+  once both are set; changing direction clears the picked input.
   - Conversion (`convertBytes`): docx→cmir = `fromDocxFull` →
     `serializeNative`; cmir→docx = `parseNative` → `toDocx`. Threads
     (comments) preserved.
-  - File: `host.openFile` (scoped to the source ext); in-place writes
-    via `writeFileAtPath(swapExt(handle))`, zip via `host.saveAs`.
-  - Folder: recursed via the new `host.listFilesRecursive(dir, ext)`
-    ({path, relPath}); each file read → convert → in-place write
-    (swapped ext) or added to a JSZip (relPath, `\`→`/`); failures
-    counted, not fatal; zip saved once at the end.
+  - Both output forms write into the destination via `writeFileAtPath`:
+    loose files keep the input's relative subfolder structure (swapped
+    extension); a zip is written as `<inputName>.zip`. File input uses
+    `host.openFile` (scoped to the source ext); folder input is recursed
+    via the new `host.listFilesRecursive(dir, ext)`, each file read,
+    converted, then written / added to a JSZip; failures counted, not
+    fatal.
   - New main IPC + host methods: `host:list-files-recursive` (recursive
-    `readdir` walk by extension) and `host:write-file-at-path`.
+    `readdir` by extension) and `host:write-file-at-path` (now mkdir-ps
+    the parent so nested + destination writes work).
 
 - **Quick Cards — store foundation (no UI yet).** First slice of the
   Quick Cards feature (see `reference-docs/SPEC-quick-cards.md`): a

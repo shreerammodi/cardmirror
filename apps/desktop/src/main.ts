@@ -434,6 +434,9 @@ ipcMain.handle(
 
 ipcMain.handle('host:write-file-at-path', async (_event, filePath: string, bytes: unknown) => {
   if (typeof filePath !== 'string' || !filePath) throw new Error('write-file-at-path: no path');
+  // Ensure the parent directory exists (bulk convert writes into a
+  // destination folder, preserving the input's subfolder structure).
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, bytesToBuffer(bytes));
 });
 
