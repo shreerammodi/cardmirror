@@ -7,9 +7,9 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
-- **Bulk convert utility (desktop).** Home-screen button (in the Quick
-  Cards action row, right of Manage; shown only when
-  `getHost().kind === 'electron'`) opening `bulk-convert-ui.ts`'s
+- **Bulk convert utility (desktop).** Home-screen button in its own
+  labeled "Convert" group beside the Quick Cards group (shown only when
+  `getHost().kind === 'electron'`), opening `bulk-convert-ui.ts`'s
   modal. Two toggles — direction (`.docx`→`.cmir` / reverse) and output
   (in-place vs a single `.zip`) — plus Choose file / Choose folder.
   - Conversion (`convertBytes`): docx→cmir = `fromDocxFull` →

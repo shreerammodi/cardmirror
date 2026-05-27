@@ -137,45 +137,37 @@ class HomeScreen {
     recentsSection.appendChild(this.recentsEl);
     inner.appendChild(recentsSection);
 
-    // Quick Cards — below Recent, above the (forthcoming) Learn section.
+    // Quick Cards + Convert — below Recent, above the (forthcoming)
+    // Learn section. Each is its own labeled group (heading + button)
+    // sitting side by side in a card-width grid.
     const qcSection = document.createElement('section');
     qcSection.className = 'pmd-home-qc-section';
-    const qcTitle = document.createElement('h2');
-    qcTitle.className = 'pmd-home-section-title';
-    qcTitle.textContent = 'Quick Cards';
-    qcSection.appendChild(qcTitle);
-    const qcManage = document.createElement('button');
-    qcManage.type = 'button';
-    qcManage.className = 'pmd-home-action pmd-home-qc-manage';
-    const qcT = document.createElement('span');
-    qcT.className = 'pmd-home-action-title';
-    qcT.textContent = 'Manage quick cards';
-    const qcS = document.createElement('span');
-    qcS.className = 'pmd-home-action-sub';
-    qcS.textContent = 'Browse, edit, import, and export your reusable snippets.';
-    qcManage.append(qcT, qcS);
-    qcManage.addEventListener('click', () => this.callbacks?.manageQuickCards());
-    // Wrap in a grid mirroring the primary actions so this single
-    // button takes one action-card's width (not the full row).
-    const qcActions = document.createElement('div');
-    qcActions.className = 'pmd-home-qc-actions';
-    qcActions.appendChild(qcManage);
-    // Bulk convert sits to the right of Manage (Electron only).
+    const qcGrid = document.createElement('div');
+    qcGrid.className = 'pmd-home-qc-actions';
+    qcGrid.appendChild(
+      labeledGroup(
+        'Quick Cards',
+        this.actionCard(
+          'Manage quick cards',
+          'Browse, edit, import, and export your reusable snippets.',
+          () => this.callbacks?.manageQuickCards(),
+        ),
+      ),
+    );
+    // Bulk convert — its own labeled group, to the right (Electron only).
     if (callbacks.bulkConvert) {
-      const conv = document.createElement('button');
-      conv.type = 'button';
-      conv.className = 'pmd-home-action pmd-home-qc-convert';
-      const convT = document.createElement('span');
-      convT.className = 'pmd-home-action-title';
-      convT.textContent = 'Bulk convert';
-      const convS = document.createElement('span');
-      convS.className = 'pmd-home-action-sub';
-      convS.textContent = 'Batch-convert a file or folder between .docx and .cmir.';
-      conv.append(convT, convS);
-      conv.addEventListener('click', () => this.callbacks?.bulkConvert?.());
-      qcActions.appendChild(conv);
+      qcGrid.appendChild(
+        labeledGroup(
+          'Convert',
+          this.actionCard(
+            'Bulk convert',
+            'Batch-convert a file or folder between .docx and .cmir.',
+            () => this.callbacks?.bulkConvert?.(),
+          ),
+        ),
+      );
     }
-    qcSection.appendChild(qcActions);
+    qcSection.appendChild(qcGrid);
     inner.appendChild(qcSection);
 
     // Learn — placeholder for the forthcoming spaced-repetition study
@@ -336,6 +328,19 @@ class HomeScreen {
     }
     return row;
   }
+}
+
+/** A heading stacked above a single action card — used for the
+ *  side-by-side Quick Cards / Convert groups so each gets its own
+ *  label (like the Quick Cards heading above its button). */
+function labeledGroup(title: string, card: HTMLElement): HTMLDivElement {
+  const group = document.createElement('div');
+  group.className = 'pmd-home-labeled';
+  const h = document.createElement('h2');
+  h.className = 'pmd-home-section-title';
+  h.textContent = title;
+  group.append(h, card);
+  return group;
 }
 
 /** Drop a trailing `.cmir` / `.docx` extension for display. */

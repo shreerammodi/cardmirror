@@ -2433,6 +2433,12 @@ html.pmd-home-active #speech-doc-banner {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 0.75rem;
+  align-items: start;
+}
+/* Each labeled group = a heading stacked above its action card. */
+.pmd-home-labeled {
+  display: flex;
+  flex-direction: column;
 }
 /* The standalone Manage / Review cards have no tall sibling to stretch
    against (the primary actions row stretches all three to the
