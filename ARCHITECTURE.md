@@ -1589,7 +1589,10 @@ mints/rekeys it, and `setActiveDocId()` writes it back (through the
 `setFocusedDocId` shell hook). The record reads its docId from the file
 on open, persists it on every save / autosave / journal write, and
 restores it on crash recovery — so Create Flashcard and review behave
-identically in either layout.
+identically in either layout. Create Flashcard also stamps the id
+straight into the on-disk file immediately (`stampActiveFileDocId`,
+reusing the lossless `stampDocId` from a disk read), so a card made in a
+file CardMirror didn't author survives a reload without a manual save.
 
 **In-context (comments column).** Anchored flashcards render in the
 comments column alongside genuine comments. The in-document highlight is

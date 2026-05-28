@@ -14,7 +14,7 @@ import { history, undo, redo } from 'prosemirror-history';
 import { baseKeymap } from 'prosemirror-commands';
 import { Node as PMNode, type Mark, DOMSerializer } from 'prosemirror-model';
 import { schema, newHeadingId } from '../schema/index.js';
-import { fromDocxFull, toDocx, serializeNative, parseNative } from '../index.js';
+import { fromDocxFull, toDocx, serializeNative, parseNative, readDocIdFromBytes, stampDocId } from '../index.js';
 import { transformForExport } from '../export/transform-for-export.js';
 import type { Thread } from './comments-plugin.js';
 import { NavigationPanel } from './nav-panel.js';
@@ -863,6 +863,10 @@ const ribbonContext: RibbonContext = {
         name: f.filename ?? 'Untitled',
         format: f.format,
       });
+      // Persist the doc id into the file now so the card re-associates on
+      // reload without waiting for a manual save (no-op if the file
+      // already has an id, or has no on-disk handle yet).
+      void stampActiveFileDocId(docId);
       showToast('Flashcard created.');
     })();
   },
@@ -3457,6 +3461,30 @@ function ensureActiveDocId(): string {
  *  never-saved doc writes no identity). */
 function activeSavedDocId(): string | undefined {
   return activeDocIdentity().docId ?? undefined;
+}
+
+/** Stamp `docId` straight into the active file on disk — minimal +
+ *  lossless (adds the `.docx` custom property / `.cmir` field without
+ *  re-rendering the body), so a flashcard created in a file CardMirror
+ *  didn't author survives a reload without a manual save. No-op on the
+ *  web edition, for never-saved docs (no handle), or when the file
+ *  already carries an id (it was adopted on open). Best-effort:
+ *  failures just leave the id in memory (a later save persists it).
+ *  Reads from disk, so unsaved in-editor edits are untouched. */
+async function stampActiveFileDocId(docId: string): Promise<void> {
+  const electron = getElectronHost();
+  if (!electron) return;
+  const f = activeFile();
+  if (typeof f.handle !== 'string' || !f.handle) return;
+  try {
+    const read = await electron.readFileAtPath(f.handle);
+    if (!read) return;
+    if (await readDocIdFromBytes(read.bytes, read.format)) return; // already has one
+    const stamped = await stampDocId(read.bytes, read.format, docId);
+    await getHost().saveExisting(f.handle, stamped);
+  } catch (err) {
+    console.warn('Failed to stamp docId into file:', err);
+  }
 }
 
 /** Adopt the docId read from an opened file (null ⇒ minted on next save)

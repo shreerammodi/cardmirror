@@ -44,9 +44,11 @@ see `DETAILED_CHANGELOG.md`.
     they are never written into the document and never travel in
     comments, so sharing a `.docx`/`.cmir` never leaks your cards.
     Documents keep a stable hidden id (it survives a round-trip through
-    Word) so your cards re-associate with the right file; **Save As**
-    forks a copy's cards alongside the new file. Works the same in
-    single-document windows and the multi-pane workspace.
+    Word) so your cards re-associate with the right file; the id is
+    written into the file as soon as you create or link a card (no
+    separate save needed). **Save As** forks a copy's cards alongside the
+    new file. Works the same in single-document windows and the
+    multi-pane workspace.
 
 - **Smoother comments column** — comment (and flashcard) cards now shift
   around each other smoothly when one expands, collapses, or changes

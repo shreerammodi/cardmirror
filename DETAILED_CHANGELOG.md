@@ -33,6 +33,11 @@ in each release, see `CHANGELOG.md`.
     store splits identity so file-copies share one logical card + one
     schedule while each file keeps its own grounding: `CardDef` +
     `ScheduleEntry` per `cardId`; `CardAnchor` per (`cardId`,`docId`).
+    Create Flashcard also stamps the id straight into the on-disk file
+    (`stampActiveFileDocId` — reads the file, `stampDocId`, writes back),
+    so a card made in a file CardMirror didn't author re-associates on
+    reload without a manual save (no-op on web / never-saved docs / files
+    that already carry an id).
     The docId is resolved mode-agnostically so single-doc and multi-pane
     behave identically: `index.ts` keeps `activeDocIdentity()` (focused
     `DocRecord`'s `{docId, uid}` or the single-doc globals),
