@@ -77,6 +77,7 @@ import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
 import { CommentsColumn, addCommentToSelection } from './comments-ui.js';
 import { runAiCreateCite } from './ai/cite-creator.js';
 import { readModePlugin, PMD_READ_MODE_TOGGLE } from './read-mode-plugin.js';
+import { learnHighlightPlugin } from './learn-highlight-plugin.js';
 import { absorbPlugin } from './absorb-plugin.js';
 import { citeClassifierPlugin } from './cite-classifier-plugin.js';
 import { namedStyleNormalizerPlugin } from './named-style-normalizer-plugin.js';
@@ -1459,7 +1460,7 @@ qcManageBtn?.addEventListener('click', () => void quickCardsManageUI.open());
 // keep the panel in sync. setVisible flips the `hidden` attr +
 // stores the setting + dispatches a `set-visible` meta to the plugin.
 export const commentsColumn = commentsColumnEl
-  ? new CommentsColumn(commentsColumnEl, () => view ?? null)
+  ? new CommentsColumn(commentsColumnEl, () => view ?? null, () => activeAnnotationDocId())
   : null;
 /** The DOM element for the comments column — exposed so the
  *  multi-pane shell can adopt it as a sibling of the multi-row.
@@ -3085,6 +3086,7 @@ export function buildEditorPlugins(): Plugin[] {
     keymap(baseKeymap),
     readModePlugin,
     commentsPlugin,
+    learnHighlightPlugin,
     absorbPlugin,
     citeClassifierPlugin,
     namedStyleNormalizerPlugin,
@@ -3258,6 +3260,11 @@ function mountView(doc: PMNode, threads: Thread[] = []): void {
   // the previous doc was last in.
   navPanel.scrollToTop();
   appEl.scrollTop = 0;
+  // Re-resolve this doc's flashcard highlights once the caller has set
+  // the doc identity (adoptDocId runs synchronously right after
+  // mountView returns, so defer a frame). No-op when the column is
+  // closed (lazy per SPEC §4.2).
+  requestAnimationFrame(() => commentsColumn?.refreshFlashcardAnchors());
 }
 
 /** Publish `#editor`'s current width as `--pmd-card-intrinsic-width`

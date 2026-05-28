@@ -5410,6 +5410,25 @@ body.pmd-comments-resize-active {
   cursor: help;
 }
 
+/* Flashcard anchor highlight (view-only decoration, never serialized).
+   Accent-tinted with a solid underline — visually distinct from the
+   gold dotted comment highlight so the two annotation layers read
+   apart at a glance. */
+:is(#editor, .pmd-pane-editor) .pmd-flashcard-range {
+  background-color: color-mix(in srgb, var(--pmd-c-accent) 13%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--pmd-c-accent) 70%, transparent);
+  border-radius: 2px;
+  cursor: pointer;
+}
+/* Brief pulse when "scroll to" / "open in context" targets a card. */
+:is(#editor, .pmd-pane-editor) .pmd-flashcard-range.pmd-flashcard-flash {
+  animation: pmd-flashcard-flash 1s ease;
+}
+@keyframes pmd-flashcard-flash {
+  0%, 100% { background-color: color-mix(in srgb, var(--pmd-c-accent) 13%, transparent); }
+  30% { background-color: color-mix(in srgb, var(--pmd-c-accent) 45%, transparent); }
+}
+
 /* Comments panel reuses the standard 2-row ops-panel rhythm now
    that the AI button has moved off-ribbon and only 💬 + + live
    here. (No bespoke selector needed — the panel uses

@@ -38,6 +38,9 @@ import { makeActivityStage, cycleActivityText } from './ai/activity-cycler.js';
 import { showToast } from './toast.js';
 import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
 import { setIcon } from './icons';
+import { learnStore } from './learn-store-host.js';
+import { resolveDescriptor } from './learn-anchor.js';
+import { setFlashcardRangesTr, type FlashcardRange } from './learn-highlight-plugin.js';
 
 /** Resolve the configured AI persona (name + pronouns) from
  *  settings. Centralized here so every consumer (invokeAi,
@@ -202,9 +205,19 @@ export class CommentsColumn {
    *  the doc is edited, but the handler is attached only once). */
   private lastRanges: Map<string, { from: number; to: number }> = new Map();
 
-  constructor(root: HTMLElement, getView: () => EditorView | null) {
+  /** Resolve the focused doc's annotation id (single-doc global or the
+   *  focused multi-pane record). Flashcards for this id are resolved +
+   *  rendered when the column is open. */
+  private getDocId: () => string;
+  /** Active subscription to the learn store while the column is open,
+   *  so a card created / edited / deleted elsewhere re-resolves +
+   *  re-renders. Null when the column is closed. */
+  private learnUnsub: (() => void) | null = null;
+
+  constructor(root: HTMLElement, getView: () => EditorView | null, getDocId: () => string = () => '') {
     this.root = root;
     this.getView = getView;
+    this.getDocId = getDocId;
     // Inner content container — render() rebuilds children INSIDE
     // this. Order matters: install the resize handle BEFORE the
     // content container so the handle stays in DOM order as a
@@ -372,6 +385,49 @@ export class CommentsColumn {
       view.dispatch(view.state.tr.setMeta(commentsKey, setCommentsVisibleMeta(visible)));
     }
     settings.set('commentsVisible', visible);
+    if (visible) {
+      // Lazy re-anchoring (SPEC §4.2): resolve this doc's flashcards
+      // only when the column is actually shown. Subscribe so cards
+      // created / edited elsewhere re-resolve + re-render while open.
+      this.refreshFlashcardAnchors();
+      if (!this.learnUnsub) {
+        this.learnUnsub = learnStore.subscribe(() => {
+          this.refreshFlashcardAnchors();
+          this.scheduleRender();
+        });
+      }
+    } else {
+      if (this.learnUnsub) {
+        this.learnUnsub();
+        this.learnUnsub = null;
+      }
+      // Drop the highlights when the column closes (resolved fresh on
+      // the next open).
+      const v = this.getView();
+      if (v) v.dispatch(setFlashcardRangesTr(v.state, []));
+    }
+  }
+
+  /** Resolve every flashcard anchored to the focused doc against the
+   *  live document and hand the resolved ranges to the highlight
+   *  plugin. Cards whose descriptor doesn't resolve (a foreign edit
+   *  broke them, or they were explicitly unanchored) simply aren't in
+   *  the resolved set — the column surfaces them in its Unanchored
+   *  list. Idempotent; safe to call on open, doc load, and store change. */
+  refreshFlashcardAnchors(): void {
+    const view = this.getView();
+    if (!view) return;
+    if (this.root.hidden) return;
+    const docId = this.getDocId();
+    const resolved: FlashcardRange[] = [];
+    if (docId) {
+      for (const a of learnStore.anchorsForDoc(docId)) {
+        if (!a.anchor) continue; // explicitly unanchored
+        const r = resolveDescriptor(view.state.doc, a.anchor);
+        if (r) resolved.push({ cardId: a.cardId, from: r.from, to: r.to });
+      }
+    }
+    view.dispatch(setFlashcardRangesTr(view.state, resolved));
   }
 
   /** Re-render the column from the current plugin state + doc.
