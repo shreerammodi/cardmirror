@@ -8256,16 +8256,6 @@ textarea.pmd-text-prompt-input {
   border-bottom: 1px solid var(--pmd-c-border-soft);
 }
 .pmd-learn-manage-group:first-child { margin-top: 0; }
-.pmd-learn-manage-fmt {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 0.05rem 0.3rem;
-  border-radius: 3px;
-  background: var(--pmd-c-surface);
-  border: 1px solid var(--pmd-c-border-soft);
-  color: var(--pmd-c-text-muted);
-}
 .pmd-learn-manage-group-name {
   font-weight: 600;
   font-size: 0.85rem;

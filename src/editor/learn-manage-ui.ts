@@ -177,7 +177,7 @@ export function openLearnManage(): void {
       const entry = docs.get(docId);
       const due = learnStore.dueCount({ kind: 'file', docId }, today);
       listEl.appendChild(
-        groupHeader(entry?.lastName ?? 'Untitled', entry?.format ?? null, ids.length, due, () =>
+        groupHeader(entry?.lastName ?? 'Untitled', ids.length, due, () =>
           openLearnSession({ kind: 'file', docId }, { title: `Review — ${entry?.lastName ?? 'Untitled'}` }),
         ),
       );
@@ -192,7 +192,7 @@ export function openLearnManage(): void {
     const orphans = cards.filter((c) => !anchoredIds.has(c.id) && visible(c.id));
     if (orphans.length > 0) {
       anyShown = true;
-      listEl.appendChild(groupHeader('Unanchored', null, orphans.length, 0, null));
+      listEl.appendChild(groupHeader('Unanchored', orphans.length, 0, null));
       for (const c of orphans) listEl.appendChild(cardRow(c, today, false));
     }
 
@@ -204,22 +204,17 @@ export function openLearnManage(): void {
     }
   }
 
-  /** A file/section heading with a card count and an optional Review link. */
+  /** A file/section heading with a card count and an optional Review link.
+   *  No format chip — the filename's extension already shows the format,
+   *  and a chip there competed with the per-card type badge. */
   function groupHeader(
     name: string,
-    format: 'cmir' | 'docx' | null,
     cardN: number,
     due: number,
     onReview: (() => void) | null,
   ): HTMLElement {
     const row = document.createElement('div');
     row.className = 'pmd-learn-manage-group';
-    if (format) {
-      const fmt = document.createElement('span');
-      fmt.className = `pmd-learn-manage-fmt pmd-learn-manage-fmt-${format}`;
-      fmt.textContent = format.toUpperCase();
-      row.appendChild(fmt);
-    }
     const label = document.createElement('span');
     label.className = 'pmd-learn-manage-group-name';
     label.textContent = name;
