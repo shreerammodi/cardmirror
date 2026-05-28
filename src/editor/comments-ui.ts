@@ -38,6 +38,7 @@ import { makeActivityStage, cycleActivityText } from './ai/activity-cycler.js';
 import { showToast } from './toast.js';
 import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
 import { setIcon } from './icons';
+import { preciseScrollIntoView } from './precise-scroll.js';
 import { learnStore, localToday } from './learn-store-host.js';
 import { resolveDescriptor, buildDescriptor } from './learn-anchor.js';
 import { openCardEditor } from './learn-create-ui.js';
@@ -1392,18 +1393,16 @@ export class CommentsColumn {
       // Cursor placement may fail if the position isn't inside an
       // inline-content block — skip the caret move, still scroll below.
     }
-    // Scroll the EDITOR to the anchored text. A direct DOM scroll on the
-    // text element reliably scrolls the editor's scroll container (the
-    // comments column is now a separate fixed panel, and PM's
-    // `tr.scrollIntoView()` wasn't moving the page here).
+    // Jump the EDITOR to the anchored text — same mechanism as the nav
+    // pane's reliable "jump to heading" (`preciseScrollIntoView`): an
+    // instant scroll that re-measures + converges, so it doesn't
+    // undershoot when content-visibility:auto cards realize their real
+    // height mid-scroll (the cause of the "smooth but inaccurate" drift).
     try {
       const at = view.domAtPos(range.from);
-      const node: Node | null = at.node ?? null;
-      const el =
-        node && node.nodeType === Node.ELEMENT_NODE
-          ? (node as Element)
-          : (node?.parentElement ?? null);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      let node: Node | null = at.node ?? null;
+      while (node && node.nodeType !== Node.ELEMENT_NODE) node = node.parentNode;
+      if (node instanceof HTMLElement) preciseScrollIntoView(view, node, 'center');
     } catch {
       // Position detached / not yet laid out — ignore.
     }

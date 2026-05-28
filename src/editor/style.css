@@ -5557,42 +5557,33 @@ body.pmd-comments-resize-active {
 /* Inline indicator on commented text — subtle yellow underline so
    you can see at a glance what's commented. Doesn't fight with
    highlight backgrounds since it's an underline. */
-/* Annotation underlines are drawn as a TWO-TONE bottom strip (an
-   identity-colored line over a theme-contrast edge) rather than a
-   background tint — so the underlying text highlight stays fully
-   visible, and the cue is guaranteed to contrast against ANY highlight
-   color or theme (a single color would vanish on a matching highlight,
-   e.g. the old gold tint on yellow text). Inline backgrounds paint per
-   line, so this underlines wrapped spans correctly. */
-:is(#editor, .pmd-pane-editor) .pmd-comment-range {
-  background-image:
-    linear-gradient(var(--pmd-c-comment-cite-border) 0 0),
-    linear-gradient(var(--pmd-c-annotation-edge) 0 0);
-  background-repeat: no-repeat, no-repeat;
-  background-size: 100% 2px, 100% 1px;
-  background-position: bottom 1px left, bottom left;
+/* Annotation markers (comment + flashcard) = a translucent identity
+   highlight PLUS a thin underline. The highlight gives presence + tells
+   the two apart (gold vs accent); the underline uses the theme-contrast
+   edge (dark in light theme / light in dark) so the cue stays visible
+   even when the text already carries a matching highlight — the old
+   gold-tint-on-yellow invisibility. Shown only while the comments panel
+   is open: flashcards (decorations) are cleared on close; the comment
+   mark is in the doc always, so its styling is gated on the panel via
+   `:has`. */
+body:has(#comments-column:not([hidden])) :is(#editor, .pmd-pane-editor) .pmd-comment-range {
+  background-color: var(--pmd-c-comment-cite-bg);
+  border-bottom: 1px dotted var(--pmd-c-annotation-edge);
   cursor: help;
 }
-
-/* Flashcard anchor highlight (view-only decoration, never serialized) —
-   same two-tone underline, in the accent color so it reads apart from
-   the gold comment underline. */
 :is(#editor, .pmd-pane-editor) .pmd-flashcard-range {
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--pmd-c-accent) 85%, transparent) 0 0),
-    linear-gradient(var(--pmd-c-annotation-edge) 0 0);
-  background-repeat: no-repeat, no-repeat;
-  background-size: 100% 2px, 100% 1px;
-  background-position: bottom 1px left, bottom left;
+  background-color: color-mix(in srgb, var(--pmd-c-accent) 13%, transparent);
+  border-bottom: 2px solid var(--pmd-c-annotation-edge);
+  border-radius: 2px;
   cursor: pointer;
 }
 
 /* Active annotation — the comment/flashcard whose card is selected in
-   the column. A boxed accent outline (contrasts on any background) plus
-   a soft tint, so the selected one stands out in the text. */
+   the column: a stronger accent tint + a thin outline so the selected
+   one stands out in the text. */
 :is(#editor, .pmd-pane-editor) .pmd-annotation-active {
-  background-color: color-mix(in srgb, var(--pmd-c-accent) 18%, transparent);
-  box-shadow: inset 0 0 0 1.5px var(--pmd-c-accent);
+  background-color: color-mix(in srgb, var(--pmd-c-accent) 22%, transparent);
+  box-shadow: inset 0 0 0 1px var(--pmd-c-accent);
   border-radius: 2px;
 }
 
