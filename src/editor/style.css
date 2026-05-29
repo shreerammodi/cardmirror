@@ -1033,6 +1033,18 @@ body.pmd-host-browser #autosave-btn { display: none; }
   border-left: 1px solid var(--pmd-c-border-soft);
 }
 .ribbon-doc-ops-panel.hidden { display: none; }
+/* 2×2 variant (comments group: toggle / add on top, flashcard / AI
+   below) — a second column, same two fixed rows so the panel keeps the
+   ribbon's height. */
+.ribbon-doc-ops-panel-2col {
+  grid-template-columns: auto auto;
+}
+/* `#ribbon button` forces `display: inline-flex`, which defeats the UA
+   `[hidden]` rule — restore it so the Ask-AI button can hide when AI is
+   off. */
+#ribbon .ribbon-doc-ops-btn[hidden] {
+  display: none;
+}
 
 /* Editable font-size control inside the color panel — sits in the
    4th cell of the 2×2 grid alongside the three color controls.

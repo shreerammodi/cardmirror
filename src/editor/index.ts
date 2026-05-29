@@ -497,6 +497,8 @@ getSpeechDocResolver().subscribe(() => refreshSpeechMarkBtn());
 const wordCountBtn = document.getElementById('word-count-btn') as HTMLButtonElement;
 const commentsToggleBtn = document.getElementById('comments-toggle-btn') as HTMLButtonElement | null;
 const commentsAddBtn = document.getElementById('comments-add-btn') as HTMLButtonElement | null;
+const createFlashcardBtn = document.getElementById('create-flashcard-btn') as HTMLButtonElement | null;
+const askAiBtn = document.getElementById('ask-ai-btn') as HTMLButtonElement | null;
 const commentsColumnEl = document.getElementById('comments-column') as HTMLElement | null;
 const wordCountText = document.getElementById('word-count-text')!;
 const cursorColorDisplay = document.getElementById('cursor-color-display') as HTMLElement;
@@ -1552,10 +1554,25 @@ if (commentsAddBtn && commentsColumn) {
     commentsColumn.focusReplyForThread(newId);
   });
 }
-// The "Ask AI about selection" affordance lives only on the
-// keyboard now (Mod-Shift-Q by default, rebindable in the
-// keybinding editor). The button used to be next to + in the
-// comments panel but the user prefers the panel clean.
+// Create-flashcard + Ask-AI buttons (bottom row of the comments
+// panel). Both act on the selection, so preventDefault on mousedown
+// keeps the editor focused + the selection live; the click runs the
+// same bindable command the keyboard does. The Ask-AI button is shown
+// only while AI features are enabled (see `applyAskAiButtonVisibility`).
+if (createFlashcardBtn) {
+  createFlashcardBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  createFlashcardBtn.addEventListener('click', () => runRibbonCommandById('createFlashcard'));
+}
+if (askAiBtn) {
+  askAiBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  askAiBtn.addEventListener('click', () => runRibbonCommandById('aiAskAboutSelection'));
+}
+
+/** Show the Ask-AI ribbon button only when AI features are enabled. */
+function applyAskAiButtonVisibility(enabled: boolean): void {
+  if (askAiBtn) askAiBtn.hidden = !enabled;
+}
+applyAskAiButtonVisibility(settings.get('aiFeaturesEnabled'));
 
 /** Find the threadId of a comment_range mark at the current cursor
  *  position. Returns null when the cursor isn't inside or touching
@@ -2008,6 +2025,7 @@ settings.subscribe((s) => {
   );
   applyBodyFont(s.bodyFont);
   applyUiFont(s.uiFont);
+  applyAskAiButtonVisibility(s.aiFeaturesEnabled);
   reapplyAllRibbonTooltips();
   pushNativeMenuBindings();
   document.documentElement.classList.toggle(
@@ -2236,6 +2254,8 @@ if (timerToggleBtn) {
   button('nav-pane-toggle-btn', 'toggleNavPane');
   button('comments-toggle-btn', 'toggleCommentsVisible');
   button('add-comment-btn', 'addCommentToSelection');
+  button('create-flashcard-btn', 'createFlashcard', 'Create flashcard from selection');
+  button('ask-ai-btn', 'aiAskAboutSelection', 'Ask AI about selection');
   button('highlight-btn', 'applyHighlight');
   button('highlight-picker-btn', 'openHighlightPicker', 'Highlight color');
   button('shading-btn', 'applyShading');

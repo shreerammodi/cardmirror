@@ -7,6 +7,21 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Ribbon: Create-flashcard + Ask-AI buttons in the comments group.**
+  Both commands were bindable / palette-only; they now have ribbon
+  buttons. The comments ops-panel becomes a 2×2 grid (`ribbon-doc-ops-
+  panel-2col`): comments-toggle / add-comment on top, create-flashcard /
+  ask-ai below. Clicks `preventDefault` on mousedown (keep the selection
+  live) and run the bindable command via `runRibbonCommandById`. The
+  **Ask-AI** button is hidden unless `aiFeaturesEnabled`
+  (`applyAskAiButtonVisibility`, driven by the central `settings.subscribe`
+  + an explicit `#ribbon .ribbon-doc-ops-btn[hidden]` rule, since
+  `#ribbon button { display: inline-flex }` otherwise defeats `[hidden]`).
+  Two new icons (`flashcard` → graduation-hat-02, `ai` → stars-02) added
+  to `gen-icons.mjs` + the `IconName` union. Tooltips use sentence-case
+  label overrides (`Create flashcard from selection` / `Ask AI about
+  selection`) while the command-palette labels stay title-case.
+
 - **Frozen selection: keep the selection painted while the editor is
   blurred.** A contenteditable's native selection vanishes when focus
   leaves it (the command / search palette input, the find bar, etc.), so

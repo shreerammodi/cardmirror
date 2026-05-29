@@ -11,8 +11,9 @@ see `DETAILED_CHANGELOG.md`.
 
 - **Learn — flashcards & review (early).** Turn evidence into spaced-
   repetition flashcards without leaving the editor.
-  - **Create Flashcard** (command palette / ribbon → Learn): with text
-    selected, anchor a new card to it. Pick **Q & A** (a question and an
+  - **Create Flashcard** (a button in the ribbon's comments group, the
+    command palette, or a bound key): with text selected, anchor a new
+    card to it. Pick **Q & A** (a question and an
     answer) or **Cloze** (one sentence with the deletion wrapped in
     `{{double braces}}`). The answer field pre-fills with the selected
     text. Cards are due immediately.
@@ -280,7 +281,10 @@ see `DETAILED_CHANGELOG.md`.
   the text and following it as you edit (dropping into the **Unanchored**
   list with a **Re-ground** button if its text is deleted). Existing AI *comments*
   in older documents are left as-is. (Typing `@AI` inside a regular
-  comment still works the usual way, as a comment.) An active AI note also
+  comment still works the usual way, as a comment.) **Ask AI about
+  selection** has a ribbon button now (in the comments group, shown only
+  while AI features are enabled), alongside Create Flashcard. An active AI
+  note also
   has a **Convert to Flashcard** button: it asks the AI for a flashcard
   (a Q&A or a cloze, whichever fits) capturing what you were exploring —
   drawing on your questions and the card's tag to aim at what *you* cared

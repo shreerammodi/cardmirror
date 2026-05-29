@@ -44,7 +44,9 @@ export type IconName =
   | 'comments'
   | 'shortcuts'
   | 'timer'
-  | 'link';
+  | 'link'
+  | 'flashcard'
+  | 'ai';
 
 /** Create an icon span. Decorative by default (`aria-hidden`); pass a
  *  `label` for standalone icon buttons whose accessible name should be
