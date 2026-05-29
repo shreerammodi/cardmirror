@@ -3560,7 +3560,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   togglePaintbrushShading: 'Toggle Background-Color Paint Mode',
   openFind: 'Find',
   openFindReplace: 'Find and Replace',
-  openFindByProximity: 'Find by Proximity (No Category Boost)',
+  openFindByProximity: 'Find Without Category Grouping',
   toggleNavPane: 'Show / Hide Navigation Pane',
   adjustFontSizeUp: 'Increase Font Size by 1pt',
   adjustFontSizeDown: 'Decrease Font Size by 1pt',
@@ -3862,9 +3862,9 @@ export interface RibbonContext {
    *  or Escape). */
   togglePaintbrushHighlight: () => void;
   togglePaintbrushShading: () => void;
-  /** Open the floating Find / Find+Replace bar. The proximity
-   *  variant is Alt-F's behavior: no category boost, pure
-   *  closest-match-to-cursor ranking. */
+  /** Open the floating Find / Find+Replace bar. The `openFindByProximity`
+   *  variant (Alt-F; name kept for binding stability) skips category
+   *  grouping — matches run in document order from the cursor, wrapping. */
   openFind: () => void;
   openFindReplace: () => void;
   openFindByProximity: () => void;

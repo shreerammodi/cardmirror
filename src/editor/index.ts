@@ -1013,7 +1013,7 @@ const ribbonContext: RibbonContext = {
   },
   openFindByProximity: () => {
     if (!view) return;
-    ensureFindReplaceBar().open({ mode: 'find', sortMode: 'proximity' });
+    ensureFindReplaceBar().open({ mode: 'find', sortMode: 'uncategorized' });
   },
   toggleNavPane: () => {
     settings.set('navPaneVisible', !settings.get('navPaneVisible'));

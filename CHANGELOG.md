@@ -280,6 +280,16 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Changed
 
+- **Find now walks the document top-to-bottom from your cursor.** Both
+  Find modes used to rank matches by closeness to the cursor (nearest
+  first, in either direction), so stepping through hits jumped around.
+  Now they go in document order starting at the cursor and wrapping to
+  the top: **Ctrl+F** still groups by category (headings, then tags, then
+  cites, then everything else) with each group in document order;
+  **Alt+F** ignores categories and runs straight down the document from
+  the cursor (its command is now labeled "Find Without Category
+  Grouping").
+
 - **Comments, flashcards, and AI notes now share one card design.** Every
   card in the comments pane leads with a small **type chip** — `COMMENT`,
   `Q&A`/`CLOZE`, or `AI` — color-matched to the highlight it sits on

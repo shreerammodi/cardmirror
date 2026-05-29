@@ -49,13 +49,15 @@ import { isWordChar } from './word-break.js';
  *  structurally-significant matches to the top of the result list. */
 export type FindCategory = 'heading' | 'tag' | 'cite' | 'other';
 
-/** Sort modes the plugin supports:
+/** Sort modes the plugin supports. Both traverse top-to-bottom starting
+ *  at the cursor and wrapping to the top of the document:
  *   - `categorized` (Ctrl-F): order by category priority (see
- *     `categoryOrder`), then by proximity to the cursor within each
- *     category. Matches AFTER the anchor come before matches before.
- *   - `proximity` (Alt-F): pure proximity. Ignore category.
+ *     `categoryOrder`), then document-order-from-cursor within each
+ *     category.
+ *   - `uncategorized` (Alt-F): document-order-from-cursor across the
+ *     whole match set; categories ignored.
  */
-export type FindSortMode = 'categorized' | 'proximity';
+export type FindSortMode = 'categorized' | 'uncategorized';
 
 export interface FindMatch {
   from: number;
@@ -73,13 +75,14 @@ export interface FindReplaceState {
   query: string;
   caseSensitive: boolean;
   wholeWord: boolean;
-  /** Cursor anchor used for proximity ranking. Captured once at
-   *  `setQuery` time so navigating through matches doesn't shuffle
-   *  the order. Set to -1 when there's no active query. */
+  /** Cursor anchor — the wrap point for document-order-from-cursor
+   *  ordering. Captured once at `setQuery` time so navigating through
+   *  matches doesn't shuffle the order. Set to -1 when there's no
+   *  active query. */
   anchor: number;
   sortMode: FindSortMode;
   /** Category priority used by `categorized` sort. Lower index ==
-   *  higher priority. Ignored when sortMode is `proximity`. */
+   *  higher priority. Ignored when sortMode is `uncategorized`. */
   categoryOrder: FindCategory[];
   /** When set, matches are restricted to this range. Captured from
    *  the editor selection at the moment the user activates the
@@ -225,37 +228,35 @@ function findMatches(
   return out;
 }
 
-/** Proximity comparator: matches AFTER the anchor come before
- *  matches before the anchor (so the first hit on Next is the next
- *  hit downstream of the cursor); within each side, the closer
- *  match wins. Equal-distance ties fall back to absolute position
- *  order for a stable sort. */
-function compareByProximity(
+/** Document-order-from-cursor comparator: matches at/after the anchor
+ *  come first, then matches before it — each side in ascending document
+ *  position. So traversal runs top-to-bottom starting at the cursor and
+ *  wraps to the top of the document (the first Next lands on the match
+ *  at/after the cursor, then continues downward, then wraps). NOT
+ *  proximity — a far-below match still precedes a just-above one. */
+function compareFromCursor(
   a: FindMatch,
   b: FindMatch,
   anchor: number,
 ): number {
-  const da = a.from - anchor;
-  const db = b.from - anchor;
-  const aAfter = da >= 0;
-  const bAfter = db >= 0;
-  if (aAfter && !bAfter) return -1;
-  if (!aAfter && bAfter) return 1;
-  const diff = Math.abs(da) - Math.abs(db);
-  if (diff !== 0) return diff;
+  const aAfter = a.from >= anchor;
+  const bAfter = b.from >= anchor;
+  if (aAfter !== bAfter) return aAfter ? -1 : 1;
   return a.from - b.from;
 }
 
-/** Apply the chosen sort mode in place. Categorized: by category
- *  index in `order`, then proximity. Proximity: just proximity. */
+/** Apply the chosen sort mode in place. Both modes walk top-to-bottom
+ *  from the cursor (wrapping). Categorized: by category index in
+ *  `order` first, then document-order-from-cursor within each category.
+ *  Uncategorized: document-order-from-cursor across the whole match set. */
 function sortMatches(
   matches: FindMatch[],
   sortMode: FindSortMode,
   anchor: number,
   order: FindCategory[],
 ): void {
-  if (sortMode === 'proximity') {
-    matches.sort((a, b) => compareByProximity(a, b, anchor));
+  if (sortMode === 'uncategorized') {
+    matches.sort((a, b) => compareFromCursor(a, b, anchor));
     return;
   }
   // Look up category priority once per match (small set, but cheap
@@ -274,12 +275,12 @@ function sortMatches(
   matches.sort((a, b) => {
     const cmp = prio[a.category] - prio[b.category];
     if (cmp !== 0) return cmp;
-    // Within a category, sub-rank wins before proximity. Today the
+    // Within a category, sub-rank wins before document order. Today the
     // only category with a non-zero sub-rank is `cite` (cite-marked
     // vs. just-in-cite-paragraph).
     const sub = a.subcategory - b.subcategory;
     if (sub !== 0) return sub;
-    return compareByProximity(a, b, anchor);
+    return compareFromCursor(a, b, anchor);
   });
 }
 
@@ -495,7 +496,7 @@ export function runReplace(replacement: string): Command {
  *
  *  Must iterate from the END of the doc to the START so earlier
  *  replacements don't shift later positions and corrupt them.
- *  `s.matches` is sorted for display (categorized / proximity),
+ *  `s.matches` is sorted for display (categorized / uncategorized),
  *  NOT in doc order, so we re-sort by doc position here before
  *  iterating. Walking the display order in reverse used to work
  *  back when matches were always returned in doc order, but

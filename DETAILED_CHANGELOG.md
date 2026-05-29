@@ -7,6 +7,19 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Find ordering: document-order-from-cursor, not proximity.**
+  `find-replace-plugin.ts`'s `compareByProximity` (nearest-first in both
+  directions) is replaced by `compareFromCursor`: matches at/after the
+  anchor come first, then those before it, each side ascending by
+  document position — i.e. top-to-bottom from the cursor, wrapping to the
+  top. Both sort modes use it: `categorized` (Ctrl-F) as the
+  within-category tiebreak (after category priority + the cite sub-rank);
+  the former `proximity` mode is renamed **`uncategorized`** (Alt-F) and
+  is just `compareFromCursor` over the flat match set. `openFindByProximity`
+  keeps its command id (so existing rebinds don't orphan) but its label is
+  now "Find Without Category Grouping" and `index.ts` opens it with
+  `sortMode: 'uncategorized'`; the find-bar mode chip + tooltips updated.
+
 - **Flashcard export / import (Manage flashcards).** `learn-store.ts`
   gains `exportCards()` → `ExportedCard[]` (per card: content + a
   cardId-less `schedule` + its `{ docId, anchor }[]` groundings) and

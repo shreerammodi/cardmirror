@@ -92,9 +92,10 @@ export class FindReplaceBar {
   private getNavPanel: () => NavigationPanel | null;
   private mode: Mode = 'find';
   private sortMode: FindSortMode = 'categorized';
-  /** Cursor position captured at `open()` time. Used as the
-   *  proximity anchor so navigating through matches doesn't
-   *  shuffle the order under the user's feet. */
+  /** Cursor position captured at `open()` time. Used as the wrap
+   *  anchor (ordering runs top-to-bottom from here, then wraps) so
+   *  navigating through matches doesn't shuffle the order under the
+   *  user's feet. */
   private anchor = 0;
   private setQueryTimer: ReturnType<typeof setTimeout> | null = null;
   private unsubscribeView: (() => void) | null = null;
@@ -374,17 +375,17 @@ export class FindReplaceBar {
     this.root.hidden = false;
     this.replaceRow.hidden = opts.mode === 'find';
     this.sortLabel.textContent =
-      opts.sortMode === 'proximity' ? 'proximity' : 'categorized';
+      opts.sortMode === 'uncategorized' ? 'uncategorized' : 'categorized';
     this.sortLabel.title =
-      opts.sortMode === 'proximity'
-        ? 'Alt-F: matches ordered by proximity to the cursor only'
-        : 'Ctrl-F: matches ordered by category, then proximity. Configure category order in Settings.';
+      opts.sortMode === 'uncategorized'
+        ? 'Alt-F: matches in document order from the cursor (wrapping), categories ignored'
+        : 'Ctrl-F: matches grouped by category, each in document order from the cursor (wrapping). Configure category order in Settings.';
 
-    // Capture the cursor position as the proximity anchor. Stays
-    // fixed for the lifetime of this open — navigating through
-    // matches doesn't re-anchor (otherwise hopping to match 1
-    // would make match 2 the new "closest" and the order would
-    // shift under the user's feet).
+    // Capture the cursor position as the wrap anchor: ordering runs
+    // top-to-bottom from here, then wraps to the top. Stays fixed for
+    // the lifetime of this open — navigating through matches doesn't
+    // re-anchor (otherwise the order would shift under the user's
+    // feet as they step through).
     const view = this.getView();
     this.anchor = view ? view.state.selection.head : 0;
 

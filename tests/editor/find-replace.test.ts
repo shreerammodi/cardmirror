@@ -38,7 +38,7 @@ function setQuery(
   opts: {
     caseSensitive?: boolean;
     wholeWord?: boolean;
-    sortMode?: 'categorized' | 'proximity';
+    sortMode?: 'categorized' | 'uncategorized';
     anchor?: number;
     categoryOrder?: ('heading' | 'tag' | 'cite' | 'other')[];
   } = {},
@@ -49,10 +49,11 @@ function setQuery(
       query,
       caseSensitive: !!opts.caseSensitive,
       wholeWord: !!opts.wholeWord,
-      // Tests default to proximity sort anchored at position 0 so
-      // matches stay in document order (matches the pre-sort scan
-      // order) — that's what most legacy expectations assume.
-      sortMode: opts.sortMode ?? 'proximity',
+      // Tests default to uncategorized sort anchored at position 0 so
+      // matches stay in document order (anchor 0 ⇒ every match is
+      // "after" the cursor ⇒ pure doc order) — what most expectations
+      // assume.
+      sortMode: opts.sortMode ?? 'uncategorized',
       anchor: opts.anchor ?? 0,
       categoryOrder: opts.categoryOrder ?? ['heading', 'tag', 'cite', 'other'],
     }),
@@ -127,8 +128,8 @@ describe('find-replace plugin', () => {
 
   it('replace all is correct when matches are sorted out of doc order (categorized)', () => {
     // Five paragraphs each ending in "---1AC". Sort with an anchor
-    // between paragraphs 2 and 3 so the proximity rule produces a
-    // matches array NOT in doc order: [p3, p4, p5, p2, p1].
+    // between paragraphs 2 and 3 so the document-order-from-cursor rule
+    // produces a matches array NOT in doc order: [p3, p4, p5, p1, p2].
     // Replace All with a longer string previously corrupted every
     // match except the last-in-display-order — see the bug fix.
     const doc = makeDoc([
@@ -145,8 +146,8 @@ describe('find-replace plugin', () => {
     });
     // Use a categorized sort to verify the array order is what
     // would have triggered the bug. All matches are 'other' here,
-    // so the categorized branch falls through to proximity.
-    const scout = setQuery(state, '---1AC', { sortMode: 'proximity', anchor: 0 });
+    // so the categorized branch falls through to document-order-from-cursor.
+    const scout = setQuery(state, '---1AC', { sortMode: 'uncategorized', anchor: 0 });
     const docOrderFroms = findReplaceKey
       .getState(scout)!.matches.map((m) => m.from);
     const anchor = (docOrderFroms[1]! + docOrderFroms[2]!) / 2;
@@ -343,11 +344,11 @@ describe('find ordering', () => {
     expect(cats).toEqual(['heading', 'tag', 'cite', 'other', 'other']);
   });
 
-  it('proximity: matches after the anchor come before matches before it', () => {
+  it('uncategorized: document order from the cursor, wrapping to the top', () => {
     // 5 matches in order: 'foo' at positions p1 < p2 < p3 < p4 < p5.
-    // With anchor between p2 and p3, the result order should be
-    // p3, p4, p5 (after-anchor, closest-first), then p2, p1
-    // (before-anchor, closest-first).
+    // With anchor between p2 and p3, the result order runs top-to-bottom
+    // from the cursor — p3, p4, p5 (after-anchor, doc order) — then wraps
+    // to the top — p1, p2 (before-anchor, doc order). NOT closest-first.
     const doc = makeDoc([
       paragraph('foo one'),
       paragraph('foo two'),
@@ -360,27 +361,28 @@ describe('find ordering', () => {
       schema,
       plugins: [findReplacePlugin()],
     });
-    // First scan with proximity-from-zero so we can grab the raw
-    // match positions in doc order without sort interference.
-    const scout = setQuery(state, 'foo', { sortMode: 'proximity', anchor: 0 });
+    // Scan anchored at 0 so every match is "after" → raw doc-order froms.
+    const scout = setQuery(state, 'foo', { sortMode: 'uncategorized', anchor: 0 });
     const docOrderFroms = findReplaceKey.getState(scout)!.matches.map((m) => m.from);
     // Anchor between match 2 and match 3.
     const anchor = (docOrderFroms[1]! + docOrderFroms[2]!) / 2;
-    const next = setQuery(state, 'foo', { sortMode: 'proximity', anchor });
+    const next = setQuery(state, 'foo', { sortMode: 'uncategorized', anchor });
     const orderedFroms = findReplaceKey.getState(next)!.matches.map((m) => m.from);
-    // After-anchor first: m3, m4, m5; then before-anchor closest-first: m2, m1.
+    // After-anchor in doc order (m3, m4, m5), then wrap to the top in
+    // doc order (m1, m2).
     expect(orderedFroms).toEqual([
       docOrderFroms[2],
       docOrderFroms[3],
       docOrderFroms[4],
-      docOrderFroms[1],
       docOrderFroms[0],
+      docOrderFroms[1],
     ]);
   });
 
-  it('categorized: within a category, ranking falls back to proximity', () => {
-    // Two paragraphs both 'other'. Anchor closer to the SECOND one
-    // → second should come first within the 'other' bucket.
+  it('categorized: within a category, ranking falls back to document order from the cursor', () => {
+    // Two paragraphs both 'other'. Anchor at the SECOND one → it's the
+    // first match at/after the cursor, so it leads the 'other' bucket;
+    // the first match wraps to after it.
     const doc = makeDoc([
       paragraph('foo one'),
       paragraph('foo two'),
@@ -390,7 +392,7 @@ describe('find ordering', () => {
       schema,
       plugins: [findReplacePlugin()],
     });
-    const scout = setQuery(state, 'foo', { sortMode: 'proximity', anchor: 0 });
+    const scout = setQuery(state, 'foo', { sortMode: 'uncategorized', anchor: 0 });
     const fromsDocOrder = findReplaceKey.getState(scout)!.matches.map((m) => m.from);
     const anchor = fromsDocOrder[1]!;
     const next = setQuery(state, 'foo', {
@@ -411,7 +413,7 @@ describe('find ordering', () => {
     // cite_mark applied to the 'foo' run. Even though it's later in
     // doc order, it should rank above the first when sorted
     // categorized — the cite-mark sub-priority wins before
-    // proximity.
+    // document order.
     const doc = makeDoc([
       schema.nodes['cite_paragraph']!.create(
         null,
