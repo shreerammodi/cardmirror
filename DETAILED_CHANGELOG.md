@@ -7,6 +7,8 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+## 0.1.0-alpha.5 — 2026-05-29
+
 - **Find ordering: document-order-from-cursor, not proximity.**
   `find-replace-plugin.ts`'s `compareByProximity` (nearest-first in both
   directions) is replaced by `compareFromCursor`: matches at/after the

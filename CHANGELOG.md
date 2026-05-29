@@ -7,6 +7,8 @@ see `DETAILED_CHANGELOG.md`.
 
 ## Unreleased
 
+## 0.1.0-alpha.5 — 2026-05-29
+
 ### Added
 
 - **Learn — flashcards & review (early).** Turn evidence into spaced-
