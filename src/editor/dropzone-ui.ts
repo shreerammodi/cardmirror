@@ -39,6 +39,7 @@ import {
   type DragSurface,
 } from './drag-controller.js';
 import { dropzoneStore, deriveDropzoneLabel, type DropzoneItem } from './dropzone-store.js';
+import { TYPE_TO_LEVEL } from './headings.js';
 import { schema } from '../schema/index.js';
 import { setIcon } from './icons';
 
@@ -144,6 +145,11 @@ export class DropzoneController {
     // counts as a shelf drop.
     this.surface = {
       hitTest: (clientX, clientY) => {
+        // Don't absorb our own drag-out: virtual sessions originate from
+        // the shelf, so dropping a shelf item back onto the shelf would
+        // just duplicate it. Returning null makes that a no-op (and frees
+        // the editor surface to win the hit instead).
+        if (dragController.getSession()?.virtual) return null;
         const rect = this.root.getBoundingClientRect();
         const inside =
           clientX >= rect.left &&
@@ -340,12 +346,21 @@ export class DropzoneController {
     } catch {
       return false;
     }
+    const type = item.type || 'dropzone';
     const dragItem: DragItem = {
       from: 0,
       to: 0,
       id: null,
-      type: item.type || 'dropzone',
-      level: 0,
+      type,
+      // Mirror the native drag's level so the editor / nav surfaces gate
+      // drop indicators the same way: a block (level 3) can only land at
+      // pocket/hat/block boundaries, not inside another block before a
+      // tag. Headings map via TYPE_TO_LEVEL; card / analytic_unit drag at
+      // tag level (4, like the native container drag); anything else
+      // (loose paragraph / unknown) is generic content that can go
+      // anywhere, so it gets the deepest level. (At level 0 the surfaces
+      // gated all indicators out, so the drag had no target.)
+      level: dropzoneDragLevel(type),
       label: item.label,
       prebuilt: slice,
     };
@@ -420,4 +435,14 @@ function inferTypeFromSlice(slice: Slice): string {
   if (slice.content.childCount === 0) return 'text';
   const first = slice.content.firstChild;
   return first ? first.type.name : 'text';
+}
+
+/** Outline level a dropzone item should drag at, matching the native
+ *  editor / nav drag so drop indicators are gated identically. Headings
+ *  map via `TYPE_TO_LEVEL`; `card` / `analytic_unit` drag at tag level
+ *  (4, like the native container drag); generic content (loose
+ *  paragraph / unknown) can go anywhere, so it gets the deepest level. */
+function dropzoneDragLevel(type: string): number {
+  if (type === 'card' || type === 'analytic_unit') return 4;
+  return TYPE_TO_LEVEL[type] ?? 4;
 }

@@ -976,6 +976,19 @@ in each release, see `CHANGELOG.md`.
   - Drag-out always copies (the source isn't a real view
     location), regardless of whether the user holds the
     copy modifier.
+  - Drag-out targeting: the virtual `DragItem`'s level is derived from
+    the item's stored `type` (`dropzoneDragLevel`: headings via
+    `TYPE_TO_LEVEL`; card / analytic_unit at tag level 4; generic content
+    anywhere at 4), so the editor / nav surfaces gate drop indicators the
+    same way the native drag does — a block lands only at pocket/hat/block
+    boundaries, not inside another block. (At the earlier `level: 0` the
+    surfaces gated *all* indicators out, so the drag had no target and
+    appeared to vanish; a blanket `level: 4` fixed that but wrongly let a
+    block drop inside another block.) The shelf's own `hitTest` returns
+    null while a `virtual` session is active, so dropping a shelf item
+    back onto the shelf is a no-op rather than duplicating it. (Indicators
+    are heading-based, so a doc with no headings only offers the doc-end
+    target — click-to-insert still covers that case.)
   - No drag-out-to-other-app yet; the controller's surfaces
     only know about nav-pane and editor-surface drops.
 
