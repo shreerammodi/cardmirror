@@ -7,6 +7,8 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+## 0.1.0-alpha.6 — 2026-05-30
+
 - **`.cmir` loader stamps fresh ids on id-less headings at parse
   time.** New `stampMissingHeadingIds(doc)` in `src/schema/ids.ts`
   walks the parsed `PMNode` tree and reconstructs any pocket /

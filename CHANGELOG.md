@@ -7,6 +7,8 @@ see `DETAILED_CHANGELOG.md`.
 
 ## Unreleased
 
+## 0.1.0-alpha.6 — 2026-05-30
+
 ### Added
 
 - **Integration surface for a future external paste tool (Fast Debate
