@@ -8525,6 +8525,10 @@ textarea.pmd-text-prompt-input {
 }
 .pmd-learn-session-forgot:hover { border-color: var(--pmd-c-error); color: var(--pmd-c-error); }
 .pmd-learn-session-remembered:hover { border-color: var(--pmd-c-accent); color: var(--pmd-c-accent); }
+/* Secondary action — navigates to the source rather than grading, so
+   it reads quieter than the two grade buttons. */
+.pmd-learn-session-context { color: var(--pmd-c-text-secondary); }
+.pmd-learn-session-context:hover { border-color: var(--pmd-c-accent); color: var(--pmd-c-accent); }
 .pmd-learn-session-done {
   flex: 1 1 auto;
   padding: 2.25rem 1.5rem;

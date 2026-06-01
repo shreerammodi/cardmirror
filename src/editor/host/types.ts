@@ -222,4 +222,11 @@ export interface SpawnWindowPayload {
    *  the New Speech Document flow so the freshly-spawned window
    *  becomes the routing target for subsequent ` send-to-speech. */
   markAsSpeech?: boolean;
+  /** When set, the spawned window resolves this anchor against the
+   *  mounted doc and scrolls + selects it. Used by the flashcard
+   *  review's "Show in context" to open a card's source in its own
+   *  window focused on the anchored text. Shape mirrors
+   *  `AnchorDescriptor` (kept inline so host types don't depend on the
+   *  editor layer). */
+  focusAnchor?: { quote: string; prefix: string; suffix: string; approxPos: number };
 }

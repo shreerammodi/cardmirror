@@ -9,8 +9,36 @@
  * Reads entirely from the local learn store; no file I/O.
  */
 
-import { learnStore, localToday } from './learn-store-host.js';
-import type { Scope } from './learn-store.js';
+import {
+  learnStore,
+  localToday,
+  canShowInContext,
+  showFlashcardInContext,
+  type ShowInContextRequest,
+} from './learn-store-host.js';
+import type { Scope, CardAnchor, DocRegistryEntry } from './learn-store.js';
+
+/** Pure: pick a card's openable source — the first of its anchors whose
+ *  doc has a known on-disk path. Null when the card is unanchored, or no
+ *  anchored doc has a path (e.g. never saved / web build). Exported for
+ *  testing. */
+export function pickCardSource(
+  cardId: string,
+  anchors: readonly CardAnchor[],
+  docs: readonly DocRegistryEntry[],
+): ShowInContextRequest | null {
+  for (const a of anchors) {
+    if (a.cardId !== cardId || !a.anchor) continue;
+    const doc = docs.find((d) => d.docId === a.docId);
+    const path = doc?.knownPaths[0];
+    if (path) return { path, name: doc.lastName, descriptor: a.anchor };
+  }
+  return null;
+}
+
+function sourceForCard(cardId: string): ShowInContextRequest | null {
+  return pickCardSource(cardId, learnStore.listAnchors(), learnStore.listDocs());
+}
 
 interface SessionOpts {
   title?: string;
@@ -59,6 +87,9 @@ export function openLearnSession(scope: Scope, opts: SessionOpts = {}): void {
       } else if (e.key === '2' || e.key === ' ' || e.key === 'Enter') {
         e.preventDefault();
         grade('remembered');
+      } else if (e.key === '3') {
+        e.preventDefault();
+        showContext();
       }
     }
   };
@@ -148,6 +179,17 @@ export function openLearnSession(scope: Scope, opts: SessionOpts = {}): void {
       got.innerHTML = 'Remembered <kbd>2</kbd>';
       got.addEventListener('click', () => grade('remembered'));
       actions.append(forgot, got);
+      // "Show in context" — opens the card's source file and focuses the
+      // anchored text. Only shown when that's possible (handler wired AND
+      // the card has an anchor in a doc with a known path).
+      if (canShowInContext() && sourceForCard(cardId)) {
+        const context = document.createElement('button');
+        context.type = 'button';
+        context.className = 'pmd-learn-session-grade pmd-learn-session-context';
+        context.innerHTML = 'Show in context <kbd>3</kbd>';
+        context.addEventListener('click', showContext);
+        actions.appendChild(context);
+      }
     }
     panel.appendChild(actions);
   }
@@ -156,6 +198,20 @@ export function openLearnSession(scope: Scope, opts: SessionOpts = {}): void {
     if (state !== 'front') return;
     state = 'back';
     renderCard();
+  }
+
+  /** Open the current card's source focused on its anchored text. The
+   *  handler keeps the review up when it opens a separate window, or
+   *  closes it (via the `cleanup` callback) when the source opens in this
+   *  window. Doesn't grade the card — it stays due; it's purely "show me
+   *  where this is." */
+  function showContext(): void {
+    if (state !== 'back') return;
+    const cardId = work[0];
+    if (!cardId) return;
+    const src = sourceForCard(cardId);
+    if (!src) return;
+    showFlashcardInContext(src, cleanup);
   }
 
   function grade(g: 'forgot' | 'remembered'): void {

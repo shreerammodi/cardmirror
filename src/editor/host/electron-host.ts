@@ -145,6 +145,19 @@ interface ElectronAPI {
   openPathCheck(path: string): Promise<{ takenByOther: boolean }>;
   openPathRegister(path: string): Promise<void>;
   openPathRelease(path: string): Promise<void>;
+  /** "Show in context": if another window owns `path`, focus it and send
+   *  it the anchor to scroll to. `delivered: false` ⇒ spawn a window. */
+  focusAnchorInWindow(
+    path: string,
+    descriptor: { quote: string; prefix: string; suffix: string; approxPos: number },
+  ): Promise<{ delivered: boolean }>;
+  /** Receive a "scroll to this anchor" request from another window's
+   *  "Show in context" (this window owns the path). Returns unsubscribe. */
+  onFocusAnchor(
+    handler: (payload: {
+      descriptor: { quote: string; prefix: string; suffix: string; approxPos: number };
+    }) => void,
+  ): () => void;
   speechSet(uid: string | null): Promise<void>;
   speechGet(): Promise<{ uid: string | null }>;
   onSpeechChanged(handler: (state: { uid: string | null }) => void): () => void;
@@ -501,6 +514,24 @@ export class ElectronHost implements Host {
 
   async openPathRelease(path: string): Promise<void> {
     await api().openPathRelease(path);
+  }
+
+  async focusAnchorInWindow(
+    path: string,
+    descriptor: { quote: string; prefix: string; suffix: string; approxPos: number },
+  ): Promise<{ delivered: boolean }> {
+    const fn = api().focusAnchorInWindow;
+    if (typeof fn !== 'function') return { delivered: false };
+    return await fn(path, descriptor);
+  }
+
+  onFocusAnchor(
+    handler: (payload: {
+      descriptor: { quote: string; prefix: string; suffix: string; approxPos: number };
+    }) => void,
+  ): () => void {
+    const fn = api().onFocusAnchor;
+    return typeof fn === 'function' ? fn(handler) : () => {};
   }
 
   /** Set / clear the current speech-doc designation. Main broadcasts

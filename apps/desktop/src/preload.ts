@@ -168,6 +168,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     format: 'cmir' | 'docx' | null;
     uid: string | null;
     markAsSpeech?: boolean;
+    focusAnchor?: { quote: string; prefix: string; suffix: string; approxPos: number };
   } | null) => ipcRenderer.invoke('host:spawn-window', payload),
 
   /** Called once at renderer boot to retrieve any initial-doc
@@ -236,6 +237,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('host:open-path-register', path),
   openPathRelease: (path: string) =>
     ipcRenderer.invoke('host:open-path-release', path),
+  /** "Show in context": if another window already has `path` open, focus
+   *  it and tell it to scroll to `descriptor`. `delivered: false` ⇒ no
+   *  such window, so the caller spawns a new one. */
+  focusAnchorInWindow: (
+    path: string,
+    descriptor: { quote: string; prefix: string; suffix: string; approxPos: number },
+  ) =>
+    ipcRenderer.invoke('host:focus-anchor-in-window', path, descriptor) as Promise<{
+      delivered: boolean;
+    }>,
+  /** The window that owns a path receives this when another window's
+   *  "Show in context" targets it; it resolves the descriptor in its
+   *  doc and scrolls. Returns an unsubscribe. */
+  onFocusAnchor(
+    handler: (payload: {
+      descriptor: { quote: string; prefix: string; suffix: string; approxPos: number };
+    }) => void,
+  ): () => void {
+    const listener = (
+      _evt: unknown,
+      payload: { descriptor: { quote: string; prefix: string; suffix: string; approxPos: number } },
+    ): void => handler(payload);
+    ipcRenderer.on('host:focus-anchor', listener);
+    return () => ipcRenderer.removeListener('host:focus-anchor', listener);
+  },
 
   /** Set / clear / read the current speech-doc designation. Main
    *  broadcasts `speech:changed` to every window after any state

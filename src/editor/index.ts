@@ -58,8 +58,15 @@ import {
   openQuickCardTagPicker,
   prewarmQuickCardFiles,
 } from './quick-card-search-ui.js';
-import { learnStore, loadLearnStore, localToday } from './learn-store-host.js';
-import { buildDescriptor } from './learn-anchor.js';
+import {
+  learnStore,
+  loadLearnStore,
+  localToday,
+  setShowInContextHandler,
+  type ShowInContextRequest,
+} from './learn-store-host.js';
+import { buildDescriptor, resolveDescriptor, type AnchorDescriptor } from './learn-anchor.js';
+import { preciseScrollIntoView } from './precise-scroll.js';
 import { openCardEditor } from './learn-create-ui.js';
 import { openLearnManage } from './learn-manage-ui.js';
 import { openBulkConvert } from './bulk-convert-ui.js';
@@ -552,6 +559,10 @@ let multiDocActive = false;
 /** When the multi-pane shell is active, this delegates file-open
  *  routing to its prompt-for-slot flow. */
 let multiDocOnFileOpen: ((opened: OpenedFile) => Promise<void> | void) | null = null;
+/** When the multi-pane shell is active, "Show in context" routes a
+ *  flashcard's source into a slot of this window (rather than a separate
+ *  window) and scrolls to the anchor. */
+let multiDocShowInContext: ((req: ShowInContextRequest) => Promise<void> | void) | null = null;
 /** When the multi-pane shell is active, this delegates the
  *  "New doc" ribbon button to the shell's slot-routing flow. */
 let multiDocOnNewDoc: (() => Promise<void> | void) | null = null;
@@ -656,6 +667,7 @@ let multiDocOnRecoveredDoc:
  *  mountView paths into per-pane routing. */
 export function enableMultiDocMode(opts: {
   onFileOpen: (opened: OpenedFile) => Promise<void> | void;
+  showInContext?: (req: ShowInContextRequest) => Promise<void> | void;
   onNewDoc?: () => Promise<void> | void;
   toggleReadMode?: () => void;
   toggleAutosave?: () => void;
@@ -694,6 +706,7 @@ export function enableMultiDocMode(opts: {
 }): void {
   multiDocActive = true;
   multiDocOnFileOpen = opts.onFileOpen;
+  multiDocShowInContext = opts.showInContext ?? null;
   multiDocOnNewDoc = opts.onNewDoc ?? null;
   multiDocToggleReadMode = opts.toggleReadMode ?? null;
   multiDocToggleAutosave = opts.toggleAutosave ?? null;
@@ -4089,6 +4102,128 @@ async function openFileByPath(path: string, name: string): Promise<void> {
   await routeOpenedFile({ name: file.name, bytes: file.bytes, handle: file.handle });
 }
 
+/** Resolve `descriptor` against the active view's doc and select +
+ *  scroll to it. Best-effort: toasts (using `name`) when the text can no
+ *  longer be located, falls back to a caret when the range isn't a valid
+ *  text selection, and tolerates a not-yet-laid-out position. Call inside
+ *  a rAF after a mount so the DOM is measurable by preciseScrollIntoView. */
+function focusDescriptorInActiveView(descriptor: AnchorDescriptor, name: string): void {
+  const v = getActiveView();
+  if (!v) return;
+  const r = resolveDescriptor(v.state.doc, descriptor);
+  if (!r) {
+    showToast(`Opened "${name}", but couldn't locate the card's text — it may have changed.`);
+    return;
+  }
+  // Select the anchored text when possible (highlights it); fall back to
+  // a caret at its start if the range isn't a valid text selection.
+  try {
+    v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, r.from, r.to)));
+  } catch {
+    try {
+      v.dispatch(v.state.tr.setSelection(TextSelection.near(v.state.doc.resolve(r.from))));
+    } catch {
+      /* not selectable — still scroll below */
+    }
+  }
+  try {
+    const at = v.domAtPos(r.from);
+    let node: Node | null = at.node ?? null;
+    while (node && node.nodeType !== Node.ELEMENT_NODE) node = node.parentNode;
+    if (node instanceof HTMLElement) preciseScrollIntoView(v, node, 'center');
+  } catch {
+    /* position detached / not laid out — ignore */
+  }
+  v.focus();
+}
+
+/** "Show in context" from a flashcard review. Routes the card's source to
+ *  a focused view of its anchored text:
+ *   1. This window already shows the source → close the review (it covers
+ *      the doc) and focus in place.
+ *   2. Another window has it open → focus that window and message it to
+ *      scroll to the anchor; the review stays up.
+ *   3. Not open anywhere → spawn a new window carrying the anchor (which
+ *      it focuses on mount); the review stays up.
+ *   4. No window-spawning host (web) → close the review and open in place.
+ *  `closeSession` dismisses the review overlay; called only in 1 / 4. */
+async function showFlashcardSource(
+  req: ShowInContextRequest,
+  closeSession: () => void,
+): Promise<void> {
+  const host = getHost();
+  const electron = getElectronHost();
+
+  // Multi-pane: the workspace is this one window, so route the source
+  // into a slot here (never a separate window). The review + home both
+  // cover the whole workspace, so close them to reveal the focused pane.
+  if (multiDocActive && multiDocShowInContext) {
+    closeSession();
+    homeScreen.hide();
+    await multiDocShowInContext(req);
+    return;
+  }
+
+  // 1 / 4 — opens in THIS window: close the review AND the home screen
+  // (both overlay the doc) so the focused text is actually visible, then
+  // focus on the next frame.
+  const openInThisWindow = async (reopen: boolean): Promise<void> => {
+    closeSession();
+    homeScreen.hide();
+    if (reopen) await openFileByPath(req.path, req.name);
+    requestAnimationFrame(() => focusDescriptorInActiveView(req.descriptor, req.name));
+  };
+
+  if (!electron || !host.canSpawnWindow) {
+    // Web: no separate windows — replace the doc here (unless it's
+    // already current) and focus.
+    const isCurrent = typeof currentDocHandle === 'string' && currentDocHandle === req.path;
+    await openInThisWindow(!isCurrent);
+    return;
+  }
+
+  // 1 — the source IS this window's current doc: don't spawn a duplicate;
+  // close the review and focus the already-open doc in place.
+  if (typeof currentDocHandle === 'string' && currentDocHandle === req.path) {
+    await openInThisWindow(false);
+    return;
+  }
+
+  // 2 — open in another window: focus it + have it scroll to the anchor.
+  const { delivered } = await electron.focusAnchorInWindow(req.path, req.descriptor);
+  if (delivered) return;
+
+  // 3 — not open anywhere: spawn a new window that focuses the anchor.
+  let file: Awaited<ReturnType<typeof electron.readFileAtPath>>;
+  try {
+    file = await electron.readFileAtPath(req.path);
+  } catch {
+    file = null;
+  }
+  if (!file) {
+    showToast(`Couldn't open "${req.name}" — file moved or deleted.`);
+    return;
+  }
+  const format = formatFromFilename(file.name) ?? 'docx';
+  await host.spawnWindow({
+    filename: file.name,
+    bytes: file.bytes,
+    handle: typeof file.handle === 'string' ? file.handle : null,
+    format,
+    uid: null,
+    focusAnchor: req.descriptor,
+  });
+}
+setShowInContextHandler((req, closeSession) => void showFlashcardSource(req, closeSession));
+// Receive a cross-window "scroll to this anchor" request — this window
+// owns the path another window's "Show in context" targeted. Wired for
+// every window (single-doc or multi-pane), unlike the OS-open listener.
+getElectronHost()?.onFocusAnchor(({ descriptor }) => {
+  requestAnimationFrame(() =>
+    focusDescriptorInActiveView(descriptor, currentDocFilename || 'document'),
+  );
+});
+
 /** Subscribe to main's `host:external-open` forward (an OS "Open
  *  with… CardMirror" routed to this existing multi-pane window). Opens
  *  the path through the standard routing, so it lands in this window's
@@ -5254,6 +5389,12 @@ async function mountFromSpawnPayload(
           ),
         );
       }
+    }
+    // "Show in context": focus the card's anchored text once the new
+    // doc's DOM has laid out (preciseScrollIntoView measures it).
+    if (payload.focusAnchor) {
+      const anchor = payload.focusAnchor;
+      requestAnimationFrame(() => focusDescriptorInActiveView(anchor, payload.filename));
     }
     markNonPristineStarter();
     updateWindowTitle();

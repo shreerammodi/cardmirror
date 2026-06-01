@@ -92,6 +92,10 @@ interface InitialDocPayload {
    *  doc as the speech doc after mounting. Optional / absent for
    *  normal Open + New spawns. */
   markAsSpeech?: boolean;
+  /** "Show in context": spawned window scrolls + selects this anchor
+   *  after mounting. Passed through opaquely (stored + returned via
+   *  get-initial-doc); the renderer resolves it. */
+  focusAnchor?: { quote: string; prefix: string; suffix: string; approxPos: number };
 }
 const pendingInitialDocs = new Map<number, InitialDocPayload>();
 
@@ -1222,6 +1226,30 @@ ipcMain.handle('host:open-path-check', async (event, p: string) => {
   ownerWin.focus();
   return { takenByOther: true };
 });
+
+// "Show in context" cross-window focus: if another window owns `p`,
+// focus it AND send it the anchor so it scrolls to the card's text.
+// Returns whether it was delivered (false ⇒ caller spawns a window).
+ipcMain.handle(
+  'host:focus-anchor-in-window',
+  async (event, p: string, descriptor: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || typeof p !== 'string' || !p) return { delivered: false };
+    const norm = canonicalOpenPath(p);
+    const ownerId = openPathOwners.get(norm);
+    if (ownerId === undefined || ownerId === win.id) return { delivered: false };
+    const ownerWin = BrowserWindow.fromId(ownerId);
+    if (!ownerWin || ownerWin.isDestroyed()) {
+      openPathOwners.delete(norm);
+      windowOpenPaths.get(ownerId)?.delete(norm);
+      return { delivered: false };
+    }
+    if (ownerWin.isMinimized()) ownerWin.restore();
+    ownerWin.focus();
+    ownerWin.webContents.send('host:focus-anchor', { descriptor });
+    return { delivered: true };
+  },
+);
 
 // Register `p` as owned by the caller's window. Idempotent — if
 // the caller already owns it, no-op. If another window owns it,

@@ -9,6 +9,18 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **"Show in context" in flashcard review.** After you reveal a card's
+  answer, a third option (button or key **3**) opens the card's source
+  document focused on the exact text it was made from. It appears only
+  when the card is anchored in a file you have on disk, and it doesn't
+  grade the card — it's a quick "show me where this is." Where it lands:
+  in the three-pane workspace it opens into a slot of the current window
+  (the one already holding it if any, otherwise the first free slot);
+  in single-document mode it focuses the doc in place if it's already
+  open here, jumps to it if you have it open in another window, or opens
+  it in a new window otherwise — leaving the review running unless the
+  document opens in this same window.
+
 - **Live word count for the current selection (optional).** A new
   Settings → General toggle, off by default. When on, the bottom bar's
   word count / read time updates the moment you change the selection,

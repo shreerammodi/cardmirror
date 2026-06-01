@@ -34,7 +34,9 @@ import { fromDocxFull, parseNative, serializeNative, NATIVE_FILE_EXTENSION } fro
 import { settings } from './settings.js';
 import { getHost, getElectronHost, isSameOpenHandle, type OpenedFile } from './host/index.js';
 import { getCommentsState, loadThreads, type Thread } from './comments-plugin.js';
-import { learnStore } from './learn-store-host.js';
+import { learnStore, type ShowInContextRequest } from './learn-store-host.js';
+import { resolveDescriptor, type AnchorDescriptor } from './learn-anchor.js';
+import { preciseScrollIntoView } from './precise-scroll.js';
 
 type DocFormat = 'cmir' | 'docx';
 
@@ -1710,6 +1712,45 @@ class MultiPaneShell {
     await this.loadOpenedIntoSlot(opened, choice);
   }
 
+  /** Flashcard review's "Show in context": reveal the card's source in a
+   *  slot of this window, scrolled to the anchored text. If the doc is
+   *  already open in a slot, focus + scroll it (no reload). Otherwise
+   *  load it into the first empty slot — or slot 1 when all three are
+   *  occupied — without prompting (the user picked "show in context", not
+   *  "open"), then scroll once it mounts. */
+  async showInContext(req: ShowInContextRequest): Promise<void> {
+    const existing = await this.findOpenRecordByHandle(req.path);
+    if (existing) {
+      existing.slot.showRecord(existing.record);
+      this.focusSlot(existing.slot);
+      const record = existing.record;
+      requestAnimationFrame(() => scrollRecordToDescriptor(record, req.descriptor, req.name));
+      return;
+    }
+    const electron = getElectronHost();
+    if (!electron) return;
+    let file: Awaited<ReturnType<typeof electron.readFileAtPath>>;
+    try {
+      file = await electron.readFileAtPath(req.path);
+    } catch {
+      file = null;
+    }
+    if (!file) {
+      showToast(`Couldn't open "${req.name}" — file moved or deleted.`);
+      return;
+    }
+    const target =
+      SLOT_IDS.find((id) => this.slots[id].stack.length === 0) ?? 'slot1';
+    await this.loadOpenedIntoSlot(
+      { name: file.name, bytes: file.bytes, handle: file.handle },
+      target,
+    );
+    const record = this.slots[target].visible;
+    if (record) {
+      requestAnimationFrame(() => scrollRecordToDescriptor(record, req.descriptor, req.name));
+    }
+  }
+
   /** Duplicate-open guard: if `opened` is already loaded in the
    *  workspace, focus + show the existing copy, toast the user,
    *  and return true so the caller can short-circuit. The shell
@@ -2071,6 +2112,42 @@ export async function tryCloseVisibleInFocusedSlot(): Promise<boolean> {
 
 /** Build a fresh DocRecord — wraps the per-doc PM state, nav panel,
  *  editor drag surface, and DOM containers needed for slot mounting. */
+/** Resolve `descriptor` against a record's doc and select + scroll its
+ *  view to it (preciseScrollIntoView, like the nav-pane jump). Best-
+ *  effort — toasts if the text can't be located, falls back to a caret,
+ *  tolerates a not-yet-laid-out position. Call inside a rAF after a
+ *  mount / pane switch so the DOM is measurable. */
+function scrollRecordToDescriptor(
+  record: DocRecord,
+  descriptor: AnchorDescriptor,
+  name: string,
+): void {
+  const v = record.view;
+  const r = resolveDescriptor(v.state.doc, descriptor);
+  if (!r) {
+    showToast(`Opened "${name}", but couldn't locate the card's text — it may have changed.`);
+    return;
+  }
+  try {
+    v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, r.from, r.to)));
+  } catch {
+    try {
+      v.dispatch(v.state.tr.setSelection(TextSelection.near(v.state.doc.resolve(r.from))));
+    } catch {
+      /* not selectable — still scroll below */
+    }
+  }
+  try {
+    const at = v.domAtPos(r.from);
+    let node: Node | null = at.node ?? null;
+    while (node && node.nodeType !== Node.ELEMENT_NODE) node = node.parentNode;
+    if (node instanceof HTMLElement) preciseScrollIntoView(v, node, 'center');
+  } catch {
+    /* position detached / not laid out — ignore */
+  }
+  v.focus();
+}
+
 function buildDocRecord(
   filename: string,
   doc: PMNode,
@@ -2262,6 +2339,7 @@ export function mountMultiPaneShell(): void {
   shell = new MultiPaneShell();
   enableMultiDocMode({
     onFileOpen: (file) => shell!.onFileOpen(file),
+    showInContext: (req) => shell!.showInContext(req),
     onNewDoc: () => shell!.createNewDoc(),
     toggleReadMode: () => shell!.toggleFocusedReadMode(),
     toggleAutosave: () => shell!.toggleFocusedAutosave(),

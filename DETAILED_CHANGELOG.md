@@ -7,6 +7,38 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **"Show in context" from a flashcard review.** A third action in the
+  review session (`learn-session-ui.ts`, button + key `3`, shown only
+  when the card has an anchor whose doc has a known path —
+  `pickCardSource`, unit-tested) opens the card's source focused on its
+  anchored text, without grading the card. The session UI stays
+  store-only and reaches the app through a host hook in
+  `learn-store-host.ts` (`setShowInContextHandler` /
+  `showFlashcardInContext`, passed the session's `cleanup` so the handler
+  decides whether to close the review). `index.ts` registers
+  `showFlashcardSource`, which routes by context, reusing a shared
+  `focusDescriptorInActiveView` (resolveDescriptor → select +
+  `preciseScrollIntoView`):
+  - **Multi-pane:** delegates to `MultiPaneShell.showInContext` (new
+    `enableMultiDocMode` hook) — focuses the slot already holding the doc
+    and scrolls, or loads it into the first empty slot (slot 1 if all
+    three are occupied; no picker) and scrolls on mount; closes the
+    review + home (they cover the whole workspace).
+  - **Single-doc, source is the current doc:** closes the review *and the
+    home screen* (both overlay the doc) and focuses in place.
+  - **Single-doc, open in another window:** new cross-window IPC
+    (`host:focus-anchor-in-window` → main focuses the owner window and
+    sends it `host:focus-anchor`; every window registers an
+    `onFocusAnchor` receiver that scrolls its doc). Review stays up.
+  - **Single-doc, not open:** spawns a new window carrying a
+    `focusAnchor` on the spawn payload (`SpawnWindowPayload` /
+    `InitialDocPayload`), which `mountFromSpawnPayload` focuses on mount.
+    Review stays up.
+  - **Web / no spawn host:** opens in place + focuses; closes review.
+  New host-bridge surface: `focusAnchorInWindow` / `onFocusAnchor` on the
+  preload, `ElectronAPI` interface, and `ElectronHost` class (guarded so
+  an older preload degrades gracefully).
+
 - **Cursor focus for AI-comment / flashcard cards (consistent with
   comments).** Clicking commented text focuses its thread because
   `threadIdAtCursor` (`index.ts`) reads the `comment_range` mark at the
