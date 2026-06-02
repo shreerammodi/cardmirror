@@ -7,6 +7,20 @@ see `DETAILED_CHANGELOG.md`.
 
 ## Unreleased
 
+### Added
+
+- **Save Send Doc command + shortcut.** A new bindable command (default
+  **Ctrl/Cmd+Alt+S**) that saves a send doc — the document with comments,
+  analytics, and undertags stripped, the same content as the Save As
+  dialog's Send Doc preset — in one keystroke, no dialog. Two new
+  Settings → General options control where it goes: **Send Doc
+  destination** (the source file's own folder, or a fixed folder you
+  pick) and the **Send Doc folder** for the fixed-folder option. It uses
+  your default new-document format and the same `SEND_` prefix as the
+  preset. If the document hasn't been saved yet (same-folder mode), the
+  fixed folder isn't set, or the name would overwrite the source, it
+  falls back to the normal Save As dialog so nothing is lost.
+
 ## 0.1.0-alpha.8 — 2026-06-01
 
 ### Added

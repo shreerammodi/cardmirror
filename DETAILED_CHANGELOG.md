@@ -7,6 +7,37 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Save Send Doc command + shortcut.** A new bindable command
+  `saveSendDoc` (`ribbon-commands.ts`, default `Mod-Alt-s`, File group,
+  palette aliases "send doc" / "export send doc" / "send version") that
+  automates the Save As dialog's Send Doc preset: it saves the document
+  with comments, analytics, and undertags stripped (full, non-read-mode
+  export — same `transformForExport` filter the preset uses) in one
+  keystroke, with no dialog. Driven by `runSaveSendDocFlow` (`index.ts`),
+  a lossy export that leaves the working doc's identity, dirty state, and
+  journal untouched (only a recents entry is added), mirroring the
+  preset's non-full-save branch.
+
+  Destination and format come from settings rather than the dialog:
+  - `sendDocDestination` (new `sendDocDestination` setting kind — radio
+    editor in `settings-ui.ts`, electron-only) chooses between
+    `sameFolder` (write beside the source file) and `fixedFolder`.
+  - `sendDocFolder` (reuses the existing `folder` setting kind, with the
+    `pickDirectory` browse/clear UI) is the fixed-folder target.
+  - Format follows `defaultSaveFormat`; the `SEND_` filename prefix
+    honors `prefixPresetSaveFilenames`, exactly like the preset.
+
+  The silent write goes through a new Electron host method
+  `ElectronHost.saveSendDoc` → IPC `host:save-send-doc` (`main.ts`):
+  the renderer resolves the destination (`folder`, or the source's
+  `siblingHandle`) plus the final filename, and main joins, `mkdir -p`s,
+  and writes. Main returns the literal `'collision'` when the resolved
+  target would overwrite the source document (prefix off + same folder +
+  same format) so the renderer can fall back to the dialog instead of
+  clobbering it. The flow also falls back to `getHost().saveAs` for a
+  never-saved doc in same-folder mode, an unset fixed folder, or a
+  non-Electron host — so the command always does *something* sensible.
+
 ## 0.1.0-alpha.8 — 2026-06-01
 
 - **"Show in context" from a flashcard review.** A third action in the

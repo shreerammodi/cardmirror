@@ -610,6 +610,10 @@ class SettingsModal {
       row.appendChild(text);
       row.appendChild(buildSaveFormatEditor());
       return row;
+    } else if (meta.kind === 'sendDocDestination') {
+      row.appendChild(text);
+      row.appendChild(buildSendDocDestinationEditor());
+      return row;
     } else if (meta.kind === 'findCategoryOrder') {
       row.appendChild(text);
       row.appendChild(buildFindCategoryOrderEditor());
@@ -2274,6 +2278,35 @@ function buildSaveFormatEditor(): HTMLElement {
     input.checked = o.value === settings.get('defaultSaveFormat');
     input.addEventListener('change', () => {
       if (input.checked) settings.set('defaultSaveFormat', o.value);
+    });
+    row.appendChild(input);
+    const labelText = document.createElement('span');
+    labelText.className = 'pmd-multi-doc-layout-mode-row-label';
+    labelText.textContent = o.label;
+    row.appendChild(labelText);
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+function buildSendDocDestinationEditor(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'pmd-multi-doc-layout-mode-editor';
+  const options: { value: 'sameFolder' | 'fixedFolder'; label: string }[] = [
+    { value: 'sameFolder', label: 'Same folder as the document (default)' },
+    { value: 'fixedFolder', label: 'Fixed folder (set below)' },
+  ];
+  const groupName = `pmd-send-doc-dest-${Math.random().toString(36).slice(2, 8)}`;
+  for (const o of options) {
+    const row = document.createElement('label');
+    row.className = 'pmd-multi-doc-layout-mode-row';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = groupName;
+    input.value = o.value;
+    input.checked = o.value === settings.get('sendDocDestination');
+    input.addEventListener('change', () => {
+      if (input.checked) settings.set('sendDocDestination', o.value);
     });
     row.appendChild(input);
     const labelText = document.createElement('span');

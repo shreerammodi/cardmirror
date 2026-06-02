@@ -3391,6 +3391,7 @@ export type RibbonCommandId =
   | 'openFile'
   | 'save'
   | 'saveAs'
+  | 'saveSendDoc'
   | 'toggleAutosave'
   | 'newSpeechDocument'
   | 'markActiveAsSpeech'
@@ -3526,6 +3527,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'openFile',
   'save',
   'saveAs',
+  'saveSendDoc',
   'toggleAutosave',
   'newSpeechDocument',
   'markActiveAsSpeech',
@@ -3637,6 +3639,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   openFile: 'Open File',
   save: 'Save',
   saveAs: 'Save As…',
+  saveSendDoc: 'Save Send Doc',
   toggleAutosave: 'Toggle Autosave',
   newSpeechDocument: 'New Speech Document',
   markActiveAsSpeech: 'Mark / Unmark Active Doc as the Speech Doc',
@@ -3716,6 +3719,7 @@ export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly st
   zoomReset: ['actual size'],
   cycleTheme: ['dark mode', 'light mode', 'toggle theme', 'switch theme', 'appearance'],
   deleteCurrentHeading: ['delete card', 'delete heading', 'remove card', 'delete current card'],
+  saveSendDoc: ['send doc', 'export send doc', 'send version'],
 };
 
 /**
@@ -3796,6 +3800,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   openFile: 'Mod-o',
   save: 'Mod-s',
   saveAs: 'Mod-Shift-s',
+  saveSendDoc: 'Mod-Alt-s',
   toggleAutosave: '',
   // Verbatim's "Send to speech" — bare backtick (next to 1 on US
   // layouts) for at-cursor, Alt-backtick for at-end-of-doc. Same
@@ -3950,6 +3955,7 @@ export interface RibbonContext {
   openFile: () => void;
   save: () => void;
   saveAs: () => void;
+  saveSendDoc: () => void;
   toggleAutosave: () => void;
   /** Speech-doc commands (Verbatim's `Paperless.SendToSpeech` family).
    *  All four are wired via the speech-doc registry — when the host
@@ -4063,6 +4069,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   openFile: () => {},
   save: () => {},
   saveAs: () => {},
+  saveSendDoc: () => {},
   toggleAutosave: () => {},
   newSpeechDocument: () => {},
   markActiveAsSpeech: () => {},
@@ -4298,6 +4305,12 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return (_state, dispatch) => {
         if (!dispatch) return true;
         ctx.saveAs();
+        return true;
+      };
+    case 'saveSendDoc':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.saveSendDoc();
         return true;
       };
     case 'toggleAutosave':

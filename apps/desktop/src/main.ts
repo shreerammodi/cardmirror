@@ -630,6 +630,31 @@ ipcMain.handle(
   },
 );
 
+// Silent "Save Send Doc" write. The renderer has already resolved the
+// destination (a fixed folder, or the source file's own folder) and the
+// final filename; main just joins, guards against clobbering the source,
+// and writes. Returns the literal string 'collision' when the resolved
+// target would overwrite the source document (prefix off + same folder +
+// same format) so the renderer can defer to the Save As dialog instead.
+ipcMain.handle(
+  'host:save-send-doc',
+  async (
+    _event,
+    opts: { folder: string | null; siblingHandle: string | null; filename: string },
+    bytes: unknown,
+  ) => {
+    const dir = opts.folder ?? (opts.siblingHandle ? path.dirname(opts.siblingHandle) : null);
+    if (!dir) return null;
+    const target = path.join(dir, opts.filename);
+    if (opts.siblingHandle && path.resolve(target) === path.resolve(opts.siblingHandle)) {
+      return 'collision';
+    }
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, bytesToBuffer(bytes));
+    return { name: path.basename(target), handle: target };
+  },
+);
+
 ipcMain.handle('host:save-existing', async (_event, handle: string, bytes: unknown) => {
   if (typeof handle !== 'string' || handle.length === 0) {
     throw new Error('host:save-existing: handle must be a non-empty path string.');

@@ -26,7 +26,7 @@ export interface RibbonGroup {
 export const RIBBON_GROUPS: RibbonGroup[] = [
   {
     title: 'File',
-    commands: ['newDocument', 'openFile', 'save', 'saveAs', 'toggleAutosave', 'goHome'],
+    commands: ['newDocument', 'openFile', 'save', 'saveAs', 'saveSendDoc', 'toggleAutosave', 'goHome'],
   },
   {
     title: 'Speech',

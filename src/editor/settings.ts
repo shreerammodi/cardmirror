@@ -193,6 +193,16 @@ export interface Settings {
    *  button are never prefixed. Off saves presets under the exact
    *  name shown in the box. */
   prefixPresetSaveFilenames: boolean;
+  /** Where Save Send Doc writes. `sameFolder` (default) drops the
+   *  send doc beside the source file; `fixedFolder` always writes into
+   *  `sendDocFolder`. Either way, an unresolvable destination (a
+   *  never-saved doc in same-folder mode, or an unset fixed folder)
+   *  falls the command back to the Save-As dialog. */
+  sendDocDestination: 'sameFolder' | 'fixedFolder';
+  /** Destination folder for Save Send Doc when `sendDocDestination`
+   *  is `fixedFolder`. Empty falls the command back to the OS save
+   *  dialog. */
+  sendDocFolder: string;
   /** When on, the highlight marks in the doc render in the colors
    *  defined by `overrideHighlightSlots` rather than their stored
    *  colors. Display-only — does NOT mutate the doc, so saving
@@ -801,6 +811,8 @@ const DEFAULTS: Settings = {
   defaultSpeechDocFormat: 'docx',
   defaultSaveFormat: 'docx',
   prefixPresetSaveFilenames: true,
+  sendDocDestination: 'sameFolder',
+  sendDocFolder: '',
   theme: 'system',
   themeAppliesToDocument: false,
   iconSet: 'modern',
@@ -974,6 +986,7 @@ export interface SettingMeta {
     | 'fileSearchOutlineDepth'
     | 'speechDocFormat'
     | 'saveFormat'
+    | 'sendDocDestination'
     | 'findCategoryOrder'
     | 'color'
     | 'colorSlots'
@@ -1118,6 +1131,24 @@ export const SETTING_METADATA: SettingMeta[] = [
       'When on (default), the Save As dialog\'s Send Doc and Read Doc presets prepend SEND_ and READ_ to the file name (e.g. SEND_1AC.docx). The As-Is preset and the Save Custom button are never prefixed. Turn off to save presets under the exact name shown in the box.',
     kind: 'toggle',
     category: 'general',
+  },
+  {
+    key: 'sendDocDestination',
+    label: 'Send Doc destination',
+    description:
+      'Where the Save Send Doc command (and its shortcut) writes — a send doc is the document with comments, analytics, and undertags stripped, the same content the Save As dialog\'s Send Doc preset produces. "Same folder as the document" drops it beside the source file; "Fixed folder" always writes into the folder below. Either way, a doc you haven\'t saved yet (same-folder mode) or an unset fixed folder falls back to the normal Save As dialog. The send doc is written in your default new-document format, and prefixed SEND_ when that option is on.',
+    kind: 'sendDocDestination',
+    category: 'general',
+    electronOnly: true,
+  },
+  {
+    key: 'sendDocFolder',
+    label: 'Send Doc folder',
+    description:
+      'Destination folder for Save Send Doc when the destination above is set to "Fixed folder". Leave empty to fall back to the Save As dialog.',
+    kind: 'folder',
+    category: 'general',
+    electronOnly: true,
   },
   {
     key: 'includeSpeechDocPocket',
@@ -1706,6 +1737,9 @@ function sanitize(s: Settings): Settings {
     // Default-on: only an explicit `false` disables the preset
     // filename prefixes (survives upgrades from before this existed).
     prefixPresetSaveFilenames: s.prefixPresetSaveFilenames === false ? false : true,
+    sendDocDestination:
+      s.sendDocDestination === 'fixedFolder' ? 'fixedFolder' : 'sameFolder',
+    sendDocFolder: typeof s.sendDocFolder === 'string' ? s.sendDocFolder : '',
     theme:
       s.theme === 'light' || s.theme === 'dark' ? s.theme : 'system',
     themeAppliesToDocument: !!s.themeAppliesToDocument,

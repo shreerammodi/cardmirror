@@ -62,6 +62,10 @@ interface ElectronAPI {
     opts: { filters: FileFilter[] },
   ): Promise<{ name: string; handle: string } | null>;
   saveExisting(handle: string, bytes: Uint8Array): Promise<void>;
+  saveSendDoc(
+    opts: { folder: string | null; siblingHandle: string | null; filename: string },
+    bytes: Uint8Array,
+  ): Promise<{ name: string; handle: string } | 'collision' | null>;
   listFilesRecursive(dir: string, ext: string): Promise<Array<{ path: string; relPath: string }>>;
   listCmirFiles(
     root: string,
@@ -299,6 +303,19 @@ export class ElectronHost implements Host {
       );
     }
     await api().saveExisting(handle, bytes);
+  }
+
+  /** Silent "Save Send Doc" write. `opts.folder` (fixed-folder mode)
+   *  or `opts.siblingHandle` (same-folder mode, the source file's path)
+   *  resolves the destination directory in main. Returns the written
+   *  file's name + path, `'collision'` when the target would overwrite
+   *  the source (caller should fall back to Save As), or `null` when the
+   *  destination couldn't be resolved. */
+  async saveSendDoc(
+    opts: { folder: string | null; siblingHandle: string | null; filename: string },
+    bytes: Uint8Array,
+  ): Promise<{ name: string; handle: string } | 'collision' | null> {
+    return api().saveSendDoc(opts, bytes);
   }
 
   async listFilesRecursive(dir: string, ext: string): Promise<Array<{ path: string; relPath: string }>> {

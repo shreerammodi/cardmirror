@@ -98,6 +98,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveExisting: (handle: string, bytes: Uint8Array) =>
     ipcRenderer.invoke('host:save-existing', handle, bytes),
 
+  /** Silent "Save Send Doc" write to a renderer-resolved folder.
+   *  Resolves to the written file's name + path, the string
+   *  'collision' when the target would overwrite the source, or null
+   *  when the destination couldn't be resolved. */
+  saveSendDoc: (
+    opts: { folder: string | null; siblingHandle: string | null; filename: string },
+    bytes: Uint8Array,
+  ) =>
+    ipcRenderer.invoke('host:save-send-doc', opts, bytes) as Promise<
+      { name: string; handle: string } | 'collision' | null
+    >,
+
   /** Bulk-convert helpers: recursively list files of an extension
    *  under a directory, and write bytes to an arbitrary path. */
   listFilesRecursive: (dir: string, ext: string) =>

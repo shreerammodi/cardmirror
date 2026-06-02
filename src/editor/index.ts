@@ -949,6 +949,9 @@ const ribbonContext: RibbonContext = {
   saveAs: () => {
     void runSaveAsFlow();
   },
+  saveSendDoc: () => {
+    void runSaveSendDocFlow();
+  },
   toggleAutosave: () => {
     if (multiDocActive && multiDocToggleAutosave) {
       multiDocToggleAutosave();
@@ -4574,6 +4577,89 @@ export async function runSaveAsFlow(): Promise<boolean> {
   } catch (err) {
     console.error('Save failed:', err);
     alert(`Save failed: ${err instanceof Error ? err.message : err}`);
+    return false;
+  }
+}
+
+/**
+ * Save a Send Doc silently — the keyboard-bindable automation of the
+ * Save-As dialog's "Send Doc" preset. A send doc drops comments,
+ * analytics, and undertags (full, non-read-mode export). The
+ * destination comes from settings: `sendDocDestination` chooses between
+ * the source file's own folder (`sameFolder`) and a fixed folder
+ * (`sendDocFolder`); the format follows `defaultSaveFormat`; the `SEND_`
+ * prefix honors `prefixPresetSaveFilenames` (same as the preset).
+ *
+ * Falls back to the OS Save-As dialog when the silent destination can't
+ * be resolved — a never-saved doc in same-folder mode, an unset fixed
+ * folder, a name collision with the source file, or a non-Electron host.
+ *
+ * Like the preset, this is a lossy export: the working document keeps
+ * its own identity, dirty state, and recovery journal. Returns `true`
+ * when bytes hit disk, `false` on cancel / error.
+ */
+export async function runSaveSendDocFlow(): Promise<boolean> {
+  const file = activeFile();
+  const format: 'cmir' | 'docx' = settings.get('defaultSaveFormat');
+  const base = basenameWithoutExt(file.filename ?? 'untitled');
+  const filename =
+    (settings.get('prefixPresetSaveFilenames') ? 'SEND_' : '') + `${base}.${format}`;
+
+  // Resolve the silent destination. Fixed-folder mode needs a configured
+  // path; same-folder mode needs an on-disk sibling. Either missing →
+  // the dialog fallback below.
+  let folder: string | null = null;
+  let siblingHandle: string | null = null;
+  if (settings.get('sendDocDestination') === 'fixedFolder') {
+    folder = settings.get('sendDocFolder') || null;
+  } else if (typeof file.handle === 'string' && file.handle) {
+    siblingHandle = file.handle;
+  }
+
+  try {
+    // Send Doc filtering — drop comments / analytics / undertags. Lossy
+    // export → no docId embedded (stays a clean copy).
+    const bytes = await serializeForSave(format, {
+      includeComments: false,
+      includeAnalytics: false,
+      includeUndertags: false,
+      readMode: false,
+    });
+
+    const electron = getElectronHost();
+    let result: { name: string; handle?: unknown } | null = null;
+    if (electron && (folder || siblingHandle)) {
+      const silent = await electron.saveSendDoc({ folder, siblingHandle, filename }, bytes);
+      if (silent === 'collision') {
+        // Target would overwrite the source (prefix off + same folder +
+        // same format) — defer to the dialog so the user can rename.
+        result = await getHost().saveAs(filename, bytes, {
+          filters: saveFiltersForFormat(format),
+        });
+      } else {
+        result = silent;
+      }
+    } else {
+      // Never-saved doc (same-folder mode), unset fixed folder, or a
+      // non-Electron host → let the OS dialog pick the location.
+      result = await getHost().saveAs(filename, bytes, {
+        filters: saveFiltersForFormat(format),
+      });
+    }
+    if (!result) return false;
+    // Surface the export in recents so it's reachable, but never touch
+    // the working doc's identity / dirty state (it's a derived copy).
+    recordRecent({
+      handle: typeof result.handle === 'string' ? result.handle : null,
+      filename: result.name,
+      format,
+    });
+    flashSaveSuccess();
+    markNonPristineStarter();
+    return true;
+  } catch (err) {
+    console.error('Send doc save failed:', err);
+    alert(`Send doc save failed: ${err instanceof Error ? err.message : err}`);
     return false;
   }
 }
