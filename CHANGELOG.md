@@ -9,6 +9,26 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Notes — a private, threaded annotation.** A fourth kind of comments-bar
+  entity, alongside comments, AI notes, and flashcards. Add one with the
+  new green **note button** in the comments cluster (its own third column)
+  or the bindable **Add Note to Selection** command (default
+  **Ctrl/Cmd+Shift+N**). Notes are green throughout — chip, in-text
+  highlight, card accent — and behave like comments (a root message plus
+  replies) but stay **private**: they live in your local layer and never
+  enter the saved file unless you opt in. Click a note's green text to
+  focus its card; unanchored notes get a Re-ground action like flashcards.
+
+- **Edit any comment or note in place.** A pencil button on each comment,
+  reply, and note turn opens an inline editor (Save / Cancel; Enter saves,
+  Esc cancels) so you can fix text after writing it.
+
+- **Opt-in export of private notes and AI comments.** The Save As dialog's
+  Custom Save now has two checkboxes (off by default): include private
+  notes, and include AI comments. When checked, they're written into the
+  saved `.docx` / `.cmir` as real Word-style comments. Leaving them off
+  keeps notes and AI threads entirely private, as before.
+
 - **Save Send Doc command + shortcut.** A new bindable command (default
   **Ctrl/Cmd+Alt+S**) that saves a send doc — the document with comments,
   analytics, and undertags stripped, the same content as the Save As
@@ -46,6 +66,15 @@ see `DETAILED_CHANGELOG.md`.
   "selection" region and the matched instances now use the find bar's
   colors — a faint blue region band with orange match outlines — instead
   of two near-identical oranges that were hard to tell apart.
+
+### Fixed
+
+- **Creating notes, AI comments, and flashcards is fast again on large
+  documents.** Adding one of these annotations (and typing a reply) no
+  longer re-scans the whole document to re-locate every annotation each
+  time — a newly created or re-grounded annotation now uses the position
+  you already selected, and the rest are left where they are. On big docs
+  this takes note / AI-comment creation from sluggish to instant.
 
 ## 0.1.0-alpha.8 — 2026-06-01
 

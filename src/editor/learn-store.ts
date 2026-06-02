@@ -59,6 +59,19 @@ export interface AiThread {
   createdAt: string;
 }
 
+/** A private note — a comment thread that lives in the local annotation
+ *  layer (never serialized into the doc, hence private), anchored by
+ *  descriptor + a green highlight decoration like flashcards / AI
+ *  threads. Same shape as an AiThread minus the AI semantics; all turns
+ *  are the user's. */
+export interface Note {
+  noteId: string;
+  docId: string;
+  comments: LocalComment[];
+  anchor: AnchorDescriptor | null;
+  createdAt: string;
+}
+
 export interface ReviewLogEntry {
   cardId: string;
   at: string; // ISO
@@ -90,19 +103,21 @@ interface Blob {
   schedules: ScheduleEntry[];
   anchors: CardAnchor[];
   aiThreads: AiThread[];
+  notes: Note[];
   log: ReviewLogEntry[];
   decks: CustomDeck[];
   docs: DocRegistryEntry[];
 }
 
 const VERSION = 1;
-const EMPTY: Blob = { version: VERSION, cards: [], schedules: [], anchors: [], aiThreads: [], log: [], decks: [], docs: [] };
+const EMPTY: Blob = { version: VERSION, cards: [], schedules: [], anchors: [], aiThreads: [], notes: [], log: [], decks: [], docs: [] };
 
 export class LearnStore {
   private cards = new Map<string, CardDef>();
   private schedules = new Map<string, ScheduleEntry>();
   private anchors: CardAnchor[] = [];
   private aiThreads: AiThread[] = [];
+  private notes: Note[] = [];
   private log: ReviewLogEntry[] = [];
   private decks: CustomDeck[] = [];
   private docs = new Map<string, DocRegistryEntry>();
@@ -125,6 +140,7 @@ export class LearnStore {
     this.schedules = new Map((b.schedules ?? []).map((s) => [s.cardId, s]));
     this.anchors = b.anchors ?? [];
     this.aiThreads = b.aiThreads ?? [];
+    this.notes = b.notes ?? [];
     this.log = b.log ?? [];
     this.decks = b.decks ?? [];
     this.docs = new Map((b.docs ?? []).map((d) => [d.docId, d]));
@@ -140,6 +156,7 @@ export class LearnStore {
       schedules: [...this.schedules.values()],
       anchors: this.anchors,
       aiThreads: this.aiThreads,
+      notes: this.notes,
       log: this.log,
       decks: this.decks,
       docs: [...this.docs.values()],
@@ -217,6 +234,9 @@ export class LearnStore {
   }
   aiThreadsForDoc(docId: string): AiThread[] {
     return this.aiThreads.filter((t) => t.docId === docId);
+  }
+  notesForDoc(docId: string): Note[] {
+    return this.notes.filter((n) => n.docId === docId);
   }
 
   /** The cardIds belonging to a scope. */
@@ -311,6 +331,49 @@ export class LearnStore {
     this.changed();
   }
 
+  // ── notes (private comment threads in the annotation layer) ────────
+  getNote(noteId: string): Note | undefined {
+    return this.notes.find((n) => n.noteId === noteId);
+  }
+
+  addNote(note: Note): void {
+    this.notes.push(note);
+    this.changed();
+  }
+
+  /** Append a turn (root message or reply) to a note. */
+  appendNoteComment(noteId: string, comment: LocalComment): void {
+    const n = this.notes.find((x) => x.noteId === noteId);
+    if (n) {
+      n.comments.push(comment);
+      this.changed();
+    }
+  }
+
+  /** Edit the text of a note's turn by index. No-op on a bad index. */
+  editNoteComment(noteId: string, index: number, text: string): void {
+    const n = this.notes.find((x) => x.noteId === noteId);
+    const c = n?.comments[index];
+    if (c) {
+      c.text = text;
+      this.changed();
+    }
+  }
+
+  /** Note anchor update (or null to unanchor). */
+  setNoteAnchor(noteId: string, anchor: AnchorDescriptor | null): void {
+    const n = this.notes.find((x) => x.noteId === noteId);
+    if (n) {
+      n.anchor = anchor;
+      this.changed();
+    }
+  }
+
+  removeNote(noteId: string): void {
+    this.notes = this.notes.filter((n) => n.noteId !== noteId);
+    this.changed();
+  }
+
   /** Apply a grade to a card: update schedule + append to the log. Returns
    *  whether to retry the card within the session. */
   grade(cardId: string, g: Grade, today: string, now: string): boolean {
@@ -374,6 +437,7 @@ export class LearnStore {
     // delete
     this.anchors = this.anchors.filter((a) => a.docId !== docId);
     this.aiThreads = this.aiThreads.filter((t) => t.docId !== docId);
+    this.notes = this.notes.filter((n) => n.docId !== docId);
     const stillAnchored = new Set(this.anchors.map((a) => a.cardId));
     for (const id of docCardIds) {
       if (!stillAnchored.has(id)) {
@@ -439,6 +503,15 @@ export class LearnStore {
       });
       changed = true;
     }
+    for (const n of this.notesForDoc(fromId)) {
+      this.notes.push({
+        ...n,
+        noteId: crypto.randomUUID(),
+        docId: toId,
+        comments: n.comments.map((c) => ({ ...c })),
+      });
+      changed = true;
+    }
     if (changed) this.changed();
   }
 
@@ -447,6 +520,7 @@ export class LearnStore {
   rekeyDoc(fromId: string, toId: string): void {
     for (const a of this.anchors) if (a.docId === fromId) a.docId = toId;
     for (const t of this.aiThreads) if (t.docId === fromId) t.docId = toId;
+    for (const n of this.notes) if (n.docId === fromId) n.docId = toId;
     const reg = this.docs.get(fromId);
     if (reg) {
       this.docs.delete(fromId);

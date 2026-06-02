@@ -40,18 +40,26 @@ import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
 import { setIcon } from './icons';
 import { preciseScrollIntoView } from './precise-scroll.js';
 import { learnStore, localToday } from './learn-store-host.js';
-import { resolveDescriptor, buildDescriptor } from './learn-anchor.js';
+import {
+  resolveDescriptor,
+  resolveDescriptorIn,
+  flattenDoc,
+  buildDescriptor,
+  type AnchorDescriptor,
+} from './learn-anchor.js';
 import { openCardEditor, type NewCardDef } from './learn-create-ui.js';
 import { requestFlashcard } from './ai/flashcard-gen.js';
 import { isDue } from './learn-scheduler.js';
 import {
   setFlashcardRangesTr,
   setActiveAnnotationRangeTr,
+  upsertFlashcardRangeTr,
+  flashcardRanges,
   flashcardRangeMap,
   flashcardDropCount,
   type FlashcardRange,
 } from './learn-highlight-plugin.js';
-import type { CardAnchor, AiThread, LocalComment } from './learn-store.js';
+import type { CardAnchor, AiThread, Note, LocalComment } from './learn-store.js';
 
 /** Synthetic column-card id prefix for a flashcard, distinguishing it
  *  from a (numeric) comment thread id in the shared cardEls map / the
@@ -60,6 +68,9 @@ export const FC_PREFIX = 'fc:';
 /** Synthetic column-card id prefix for an AI thread (local annotation
  *  layer), distinct from comment-thread and flashcard ids. */
 export const AI_PREFIX = 'ai:';
+/** Synthetic column-card id prefix for a private note (local annotation
+ *  layer), distinct from comment-thread, flashcard, and AI ids. */
+export const NOTE_PREFIX = 'note:';
 
 /** Resolve the configured AI persona (name + pronouns) from
  *  settings. Centralized here so every consumer (invokeAi,
@@ -167,13 +178,21 @@ function aiPersonaInitials(name: string): string {
 /** The card-type chip shown in every card's header — the unified type
  *  indicator. Color mirrors the in-text highlight: comment = gold,
  *  flashcard (Q&A / cloze) = accent, AI = purple. */
-type CardTypeChipKind = 'comment' | 'qa' | 'cloze' | 'ai';
+type CardTypeChipKind = 'comment' | 'qa' | 'cloze' | 'ai' | 'note';
 function makeCardTypeChip(kind: CardTypeChipKind): HTMLElement {
   const chip = document.createElement('span');
   const tone = kind === 'qa' || kind === 'cloze' ? 'flashcard' : kind;
   chip.className = `pmd-card-type-chip is-${tone}`;
   chip.textContent =
-    kind === 'qa' ? 'Q&A' : kind === 'cloze' ? 'Cloze' : kind === 'ai' ? 'AI' : 'Comment';
+    kind === 'qa'
+      ? 'Q&A'
+      : kind === 'cloze'
+      ? 'Cloze'
+      : kind === 'ai'
+      ? 'AI'
+      : kind === 'note'
+      ? 'Note'
+      : 'Comment';
   return chip;
 }
 
@@ -283,8 +302,13 @@ export class CommentsColumn {
     // created / edited / deleted / re-grounded anywhere. Must NOT be
     // gated on `setVisible` — on boot the column is shown by setting
     // `hidden` directly (in mountView), so setVisible may never run.
-    // `refreshFlashcardAnchors` no-ops while the column is hidden.
-    this.learnUnsub = learnStore.subscribe(() => this.refreshFlashcardAnchors());
+    // `reconcileAnchors` no-ops while the column is hidden. It is the
+    // CHEAP path: it only re-resolves descriptors for annotations that
+    // are genuinely new (and prunes removed ones), so a store change that
+    // doesn't touch anchors — adding a reply, editing text — does no
+    // doc-walk at all. Full re-resolution (`refreshFlashcardAnchors`) is
+    // reserved for doc load, pane switches, and edit-driven drops.
+    this.learnUnsub = learnStore.subscribe(() => this.reconcileAnchors());
   }
 
   /** Add a drag handle on the column's LEFT edge so users can
@@ -453,18 +477,24 @@ export class CommentsColumn {
     const docId = this.getDocId();
     const resolved: FlashcardRange[] = [];
     if (docId) {
+      // Flatten the doc ONCE and resolve every descriptor against it —
+      // not once per descriptor (which used to walk the whole doc N
+      // times). Flashcards, AI threads, and notes share the one flatten.
+      const flat = flattenDoc(view.state.doc);
       for (const a of learnStore.anchorsForDoc(docId)) {
         if (!a.anchor) continue; // explicitly unanchored
-        const r = resolveDescriptor(view.state.doc, a.anchor);
+        const r = resolveDescriptorIn(flat, a.anchor);
         if (r) resolved.push({ cardId: a.cardId, from: r.from, to: r.to, kind: 'flashcard' });
       }
-      // AI threads (local annotation layer) resolve the same way; their
-      // ranges paint purple and live alongside flashcard ranges in the
-      // one highlight plugin.
       for (const t of learnStore.aiThreadsForDoc(docId)) {
         if (!t.anchor) continue;
-        const r = resolveDescriptor(view.state.doc, t.anchor);
+        const r = resolveDescriptorIn(flat, t.anchor);
         if (r) resolved.push({ cardId: t.threadId, from: r.from, to: r.to, kind: 'ai' });
+      }
+      for (const n of learnStore.notesForDoc(docId)) {
+        if (!n.anchor) continue;
+        const r = resolveDescriptorIn(flat, n.anchor);
+        if (r) resolved.push({ cardId: n.noteId, from: r.from, to: r.to, kind: 'note' });
       }
     }
     view.dispatch(setFlashcardRangesTr(view.state, resolved));
@@ -475,6 +505,72 @@ export class CommentsColumn {
     // editor's render trigger — render explicitly so the flashcard
     // cards (which read the new resolved ranges) appear/update.
     this.render();
+  }
+
+  /** Incremental anchor sync — the store-subscription path. Resolves a
+   *  descriptor ONLY for an annotation that's newly anchored but not yet
+   *  in the highlight plugin (e.g. a flashcard created from the manage
+   *  GUI), and prunes ranges whose annotation was deleted. Annotations
+   *  created/re-grounded in-app set their range directly from the known
+   *  selection (`placeLocalAnnotation`), so they're already present and
+   *  cost no doc-walk here. Everything else (replies, edits, grades)
+   *  short-circuits to a plain re-render. */
+  reconcileAnchors(): void {
+    const view = this.getView();
+    if (!view) return;
+    if (this.root.hidden) return;
+    const docId = this.getDocId();
+    // Desired anchored set: id → its descriptor + kind.
+    const wanted = new Map<string, { anchor: AnchorDescriptor; kind: FlashcardRange['kind'] }>();
+    if (docId) {
+      for (const a of learnStore.anchorsForDoc(docId)) {
+        if (a.anchor) wanted.set(a.cardId, { anchor: a.anchor, kind: 'flashcard' });
+      }
+      for (const t of learnStore.aiThreadsForDoc(docId)) {
+        if (t.anchor) wanted.set(t.threadId, { anchor: t.anchor, kind: 'ai' });
+      }
+      for (const n of learnStore.notesForDoc(docId)) {
+        if (n.anchor) wanted.set(n.noteId, { anchor: n.anchor, kind: 'note' });
+      }
+    }
+    const current = flashcardRanges(view.state);
+    const currentIds = new Set(current.map((r) => r.cardId));
+    const newIds = [...wanted.keys()].filter((id) => !currentIds.has(id));
+    const hasRemoved = current.some((r) => !wanted.has(r.cardId));
+    if (newIds.length === 0 && !hasRemoved) {
+      // No anchor set changed — nothing to resolve or prune.
+      this.render();
+      return;
+    }
+    const kept = current.filter((r) => wanted.has(r.cardId));
+    if (newIds.length > 0) {
+      // Resolve only the new ones, flattening the doc once.
+      const flat = flattenDoc(view.state.doc);
+      for (const id of newIds) {
+        const w = wanted.get(id)!;
+        const r = resolveDescriptorIn(flat, w.anchor);
+        if (r) kept.push({ cardId: id, from: r.from, to: r.to, kind: w.kind });
+      }
+    }
+    view.dispatch(setFlashcardRangesTr(view.state, kept));
+    this.lastDropCount = flashcardDropCount(view.state);
+    this.render();
+  }
+
+  /** Set an annotation's highlight range directly from a KNOWN position
+   *  (no descriptor resolution / doc-walk) — used when a note / AI thread
+   *  is created or re-grounded against the live selection. Call this
+   *  BEFORE the store mutation so the following reconcile sees the range
+   *  already present and skips resolving it. */
+  placeLocalAnnotation(
+    cardId: string,
+    from: number,
+    to: number,
+    kind: FlashcardRange['kind'],
+  ): void {
+    const view = this.getView();
+    if (!view) return;
+    view.dispatch(upsertFlashcardRangeTr(view.state, { cardId, from, to, kind }));
   }
 
   /** Re-render the column from the current plugin state + doc.
@@ -544,7 +640,18 @@ export class CommentsColumn {
     const anchoredAi = aiThreads.filter((t) => fcRangeMap.has(t.threadId));
     const unanchoredAi = aiThreads.filter((t) => !fcRangeMap.has(t.threadId));
 
-    if (state.threads.size === 0 && fcAnchors.length === 0 && aiThreads.length === 0) {
+    // Private notes (local annotation layer) — same resolution + range
+    // sharing as AI threads, keyed by noteId.
+    const notes = docId ? learnStore.notesForDoc(docId) : [];
+    const anchoredNotes = notes.filter((n) => fcRangeMap.has(n.noteId));
+    const unanchoredNotes = notes.filter((n) => !fcRangeMap.has(n.noteId));
+
+    if (
+      state.threads.size === 0 &&
+      fcAnchors.length === 0 &&
+      aiThreads.length === 0 &&
+      notes.length === 0
+    ) {
       // Empty early-bail BEFORE the O(doc) `collectRanges` walk: this
       // render fires from `dispatchTransaction` on every doc-changing
       // keystroke, so docs with no comments AND no flashcards would
@@ -586,6 +693,10 @@ export class CommentsColumn {
       const r = fcRangeMap.get(t.threadId);
       if (r) ranges.set(AI_PREFIX + t.threadId, r);
     }
+    for (const n of anchoredNotes) {
+      const r = fcRangeMap.get(n.noteId);
+      if (r) ranges.set(NOTE_PREFIX + n.noteId, r);
+    }
     this.lastRanges = ranges;
 
     // Build the ordered list of cards (comments + anchored flashcards),
@@ -593,7 +704,7 @@ export class CommentsColumn {
     // comments) sink to the end.
     interface Item {
       id: string;
-      kind: 'comment' | 'flashcard' | 'ai';
+      kind: 'comment' | 'flashcard' | 'ai' | 'note';
       cardId: string;
       sortKey: number;
     }
@@ -617,6 +728,15 @@ export class CommentsColumn {
         id: AI_PREFIX + t.threadId,
         kind: 'ai',
         cardId: t.threadId,
+        sortKey: r ? r.from : Number.MAX_SAFE_INTEGER,
+      });
+    }
+    for (const n of anchoredNotes) {
+      const r = fcRangeMap.get(n.noteId);
+      items.push({
+        id: NOTE_PREFIX + n.noteId,
+        kind: 'note',
+        cardId: n.noteId,
         sortKey: r ? r.from : Number.MAX_SAFE_INTEGER,
       });
     }
@@ -655,6 +775,12 @@ export class CommentsColumn {
           this.populateAiThread(el, it.cardId, isActive);
           this.cardSigs.set(it.id, sig);
         }
+      } else if (it.kind === 'note') {
+        const sig = 'n' + this.noteSignature(it.cardId, isActive);
+        if (this.cardSigs.get(it.id) !== sig) {
+          this.populateNote(el, it.cardId, isActive);
+          this.cardSigs.set(it.id, sig);
+        }
       } else {
         const sig = 'f' + this.flashcardSignature(it.cardId, isActive);
         if (this.cardSigs.get(it.id) !== sig) {
@@ -664,8 +790,8 @@ export class CommentsColumn {
       }
       this.content.appendChild(el); // flow order
     }
-    // Unanchored flashcards + AI threads → collapsible footer.
-    this.renderUnanchoredSection(unanchoredFc, unanchoredAi);
+    // Unanchored flashcards + AI threads + notes → collapsible footer.
+    this.renderUnanchoredSection(unanchoredFc, unanchoredAi, unanchoredNotes);
 
     // Keep the active card visible within the self-scrolling column.
     // `block:'nearest'` is a no-op when it's already in view, so this
@@ -889,8 +1015,12 @@ export class CommentsColumn {
    *  the bottom of the pane (flashcards whose anchor didn't resolve —
    *  a foreign edit broke them, or they're linked to the file but not
    *  yet grounded to text). Positioned by `layoutCards`. */
-  private renderUnanchoredSection(unanchored: CardAnchor[], unanchoredAi: AiThread[] = []): void {
-    const total = unanchored.length + unanchoredAi.length;
+  private renderUnanchoredSection(
+    unanchored: CardAnchor[],
+    unanchoredAi: AiThread[] = [],
+    unanchoredNotes: Note[] = [],
+  ): void {
+    const total = unanchored.length + unanchoredAi.length + unanchoredNotes.length;
     if (total === 0) {
       if (this.unanchoredEl) {
         this.unanchoredEl.remove();
@@ -918,7 +1048,8 @@ export class CommentsColumn {
       const map = flashcardRangeMap(v.state);
       const fc = learnStore.anchorsForDoc(did).filter((a) => !map.has(a.cardId));
       const ai = learnStore.aiThreadsForDoc(did).filter((t) => !map.has(t.threadId));
-      this.renderUnanchoredSection(fc, ai);
+      const notes = learnStore.notesForDoc(did).filter((n) => !map.has(n.noteId));
+      this.renderUnanchoredSection(fc, ai, notes);
       this.relayoutCards();
     });
     el.appendChild(header);
@@ -928,6 +1059,9 @@ export class CommentsColumn {
       }
       for (const t of unanchoredAi) {
         el.appendChild(this.renderUnanchoredAiRow(t));
+      }
+      for (const n of unanchoredNotes) {
+        el.appendChild(this.renderUnanchoredNoteRow(n));
       }
     }
     this.content.appendChild(el);
@@ -967,6 +1101,9 @@ export class CommentsColumn {
       return;
     }
     const descriptor = buildDescriptor(view.state.doc, sel.from, sel.to);
+    // Place the new range directly from the known selection, then persist
+    // the descriptor — reconcile sees the range already present (no walk).
+    this.placeLocalAnnotation(cardId, sel.from, sel.to, 'flashcard');
     learnStore.setAnchor(cardId, this.getDocId(), descriptor);
     showToast('Flashcard re-grounded.');
   }
@@ -1060,7 +1197,10 @@ export class CommentsColumn {
     this.activeThreadId = itemId;
     this.activeBy = 'click';
     this.refreshStickyDismissListener();
-    this.refreshFlashcardAnchors(); // resolve AI anchor → highlight + render
+    // The range was already placed (known position) before the store add,
+    // and the store-add reconcile rendered — just render for the active
+    // state, no doc-walk.
+    this.render();
     const r = this.lastRanges.get(itemId);
     if (r) this.scrollToRange(r);
     this.focusReplyForThread(itemId);
@@ -1109,7 +1249,7 @@ export class CommentsColumn {
     card.appendChild(this.buildAiConvertButton(threadId));
   }
 
-  private renderAiPreview(thread: AiThread): HTMLElement {
+  private renderAiPreview(thread: { comments: LocalComment[] }): HTMLElement {
     const block = document.createElement('div');
     block.className = 'pmd-comment-preview';
     const first = thread.comments[0]!;
@@ -1132,7 +1272,14 @@ export class CommentsColumn {
    *  replies. AI turns carry a purple avatar (via `pmd-comment-ai`); the
    *  card-level "AI" chip already marks the thread, so turns aren't
    *  chipped. No per-turn delete — the header ✕ removes the whole thread. */
-  private renderAiComment(c: LocalComment, isRoot: boolean): HTMLElement {
+  /** Render a local-thread turn (AI thread or note). When `onEdit` is
+   *  given (notes), an inline edit button is shown; AI threads omit it
+   *  (you don't edit a model conversation). */
+  private renderAiComment(
+    c: LocalComment,
+    isRoot: boolean,
+    onEdit?: (text: string) => void,
+  ): HTMLElement {
     const block = document.createElement('div');
     block.className = isRoot ? 'pmd-comment-root' : 'pmd-comment-reply';
     if (c.ai) block.classList.add('pmd-comment-ai');
@@ -1152,7 +1299,6 @@ export class CommentsColumn {
       date.textContent = formatDate(c.at);
       header.appendChild(date);
     }
-    block.appendChild(header);
     const body = document.createElement('div');
     body.className = 'pmd-comment-body';
     for (const line of c.text.split('\n')) {
@@ -1160,6 +1306,12 @@ export class CommentsColumn {
       p.textContent = line;
       body.appendChild(p);
     }
+    if (onEdit) {
+      header.appendChild(
+        this.buildEditButton(() => this.startInlineEdit(body, c.text, onEdit)),
+      );
+    }
+    block.appendChild(header);
     block.appendChild(body);
     return block;
   }
@@ -1447,6 +1599,7 @@ export class CommentsColumn {
       return;
     }
     const descriptor = buildDescriptor(view.state.doc, sel.from, sel.to);
+    this.placeLocalAnnotation(threadId, sel.from, sel.to, 'ai');
     learnStore.setAiThreadAnchor(threadId, descriptor);
     showToast('AI note re-grounded.');
   }
@@ -1481,6 +1634,215 @@ export class CommentsColumn {
     });
     actions.appendChild(rg);
     actions.appendChild(this.buildAiDeleteButton(thread.threadId));
+    row.appendChild(actions);
+    return row;
+  }
+
+  // ── notes (private comment threads) ────────────────────────────────
+  // Mirror the AI-thread card flow, minus the AI semantics: a note is a
+  // plain user-authored comment thread that lives in the LearnStore
+  // (never serialized into the doc unless exported), green-chipped.
+
+  /** Activate (expand + scroll to) a note card. Mirrors
+   *  `activateAiThread`. */
+  activateNote(noteId: string): void {
+    const itemId = NOTE_PREFIX + noteId;
+    this.activeThreadId = itemId;
+    this.activeBy = 'click';
+    this.refreshStickyDismissListener();
+    // Range already placed at creation (known position) — just render.
+    this.render();
+    const r = this.lastRanges.get(itemId);
+    if (r) this.scrollToRange(r);
+    this.focusReplyForThread(itemId);
+  }
+
+  /** Signature gating a note card's re-population: turns + active. The
+   *  empty (producer) state renders the same active or not, so it's
+   *  active-invariant — otherwise a stray cursor move recreates the
+   *  input and steals focus. */
+  private noteSignature(noteId: string, isActive: boolean): string {
+    const n = learnStore.getNote(noteId);
+    const empty = (n?.comments.length ?? 0) === 0;
+    return JSON.stringify({
+      a: empty ? 'empty' : isActive,
+      c: (n?.comments ?? []).map((c) => [c.author, c.text]),
+    });
+  }
+
+  /** Fill a note card from the store. No turns → header + "write a note"
+   *  input; collapsed → one-line preview; active → the thread + reply
+   *  box. Green via `pmd-note-card`. */
+  private populateNote(card: HTMLElement, noteId: string, isActive: boolean): void {
+    card.replaceChildren();
+    card.classList.add('pmd-note-card');
+    card.classList.toggle('pmd-comment-thread-active', isActive);
+    const note = learnStore.getNote(noteId);
+    if (!note) return; // vanished — next render drops it
+
+    if (note.comments.length === 0) {
+      card.appendChild(this.buildThreadHeader(makeCardTypeChip('note'), note.createdAt, () => this.deleteNote(noteId)));
+      card.appendChild(this.buildNoteInput(noteId, 'Write a note', 'Add'));
+      return;
+    }
+    if (!isActive) {
+      card.appendChild(this.buildThreadHeader(makeCardTypeChip('note'), note.createdAt));
+      card.appendChild(this.renderAiPreview(note));
+      return;
+    }
+    card.appendChild(this.buildThreadHeader(makeCardTypeChip('note'), note.createdAt, () => this.deleteNote(noteId)));
+    note.comments.forEach((c, i) =>
+      card.appendChild(
+        this.renderAiComment(c, i === 0, (text) => learnStore.editNoteComment(noteId, i, text)),
+      ),
+    );
+    card.appendChild(this.buildNoteInput(noteId, 'Reply…', 'Reply'));
+  }
+
+  /** Message / reply input for a note. Mirrors `buildAiInput` but routes
+   *  to `addNoteComment` (no model call). */
+  private buildNoteInput(noteId: string, placeholder: string, submitLabel: string): HTMLFormElement {
+    const itemId = NOTE_PREFIX + noteId;
+    const form = document.createElement('form');
+    form.className = 'pmd-comment-reply-form';
+    const ta = document.createElement('textarea');
+    ta.className = 'pmd-comment-reply-input';
+    ta.rows = 2;
+    ta.placeholder = placeholder;
+    if (this.activeReplyThreadId === itemId) ta.value = this.activeReplyText;
+    ta.addEventListener('focus', () => {
+      this.activeReplyThreadId = itemId;
+      this.activeReplyText = ta.value;
+    });
+    ta.addEventListener('input', () => {
+      if (this.activeReplyThreadId === itemId) this.activeReplyText = ta.value;
+    });
+    ta.addEventListener('blur', () => {
+      if (this.suppressBlurReset) return;
+      this.activeReplyThreadId = null;
+      this.activeReplyText = '';
+    });
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+    form.appendChild(ta);
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'submit';
+    submitBtn.className = 'pmd-comment-reply-submit';
+    submitBtn.title = submitLabel;
+    setIcon(submitBtn, 'send-cursor');
+    form.appendChild(submitBtn);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const t = ta.value.trim();
+      if (!t) return;
+      this.addNoteComment(noteId, t);
+    });
+    return form;
+  }
+
+  /** Append a user turn to a note (the store change re-renders), then
+   *  re-focus the reply box for continued typing. */
+  private addNoteComment(noteId: string, text: string): void {
+    this.suppressBlurReset = true;
+    this.activeReplyThreadId = null;
+    this.activeReplyText = '';
+    this.activeThreadId = NOTE_PREFIX + noteId;
+    this.activeBy = 'click';
+    learnStore.appendNoteComment(noteId, {
+      author: settings.get('commentAuthor'),
+      text,
+      at: new Date().toISOString(),
+    });
+    this.suppressBlurReset = false;
+    this.focusReplyForThread(NOTE_PREFIX + noteId);
+  }
+
+  private deleteNote(noteId: string): void {
+    if (this.activeThreadId === NOTE_PREFIX + noteId) {
+      this.activeThreadId = null;
+      this.activeBy = null;
+      this.refreshStickyDismissListener();
+    }
+    // Store removal fires the subscription → re-resolve + re-render.
+    learnStore.removeNote(noteId);
+  }
+
+  /** Shared two-click delete button for a note. */
+  private buildNoteDeleteButton(noteId: string): HTMLButtonElement {
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'pmd-flashcard-card-action pmd-flashcard-card-delete';
+    del.textContent = 'Delete';
+    let armed = false;
+    let timer: number | null = null;
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!armed) {
+        armed = true;
+        del.textContent = 'Delete?';
+        del.classList.add('is-armed');
+        timer = window.setTimeout(() => {
+          armed = false;
+          del.textContent = 'Delete';
+          del.classList.remove('is-armed');
+        }, 3000);
+        return;
+      }
+      if (timer !== null) window.clearTimeout(timer);
+      this.deleteNote(noteId);
+    });
+    return del;
+  }
+
+  /** Re-ground an unanchored note to the current editor selection. */
+  private regroundNote(noteId: string): void {
+    const view = this.getView();
+    if (!view) return;
+    const sel = view.state.selection;
+    if (sel.empty) {
+      showToast('Select text in the document, then click Re-ground.');
+      return;
+    }
+    const descriptor = buildDescriptor(view.state.doc, sel.from, sel.to);
+    this.placeLocalAnnotation(noteId, sel.from, sel.to, 'note');
+    learnStore.setNoteAnchor(noteId, descriptor);
+    showToast('Note re-grounded.');
+  }
+
+  private renderUnanchoredNoteRow(note: Note): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'pmd-comments-unanchored-row';
+    const front = document.createElement('div');
+    front.className = 'pmd-comments-unanchored-front';
+    const first = note.comments[0];
+    const body = (first?.text ?? '').replace(/\s+/g, ' ').trim();
+    front.textContent = (body.length > 80 ? `${body.slice(0, 80).trimEnd()}…` : body) || 'Note';
+    row.appendChild(front);
+    const was = document.createElement('div');
+    was.className = 'pmd-comments-unanchored-was';
+    if (note.anchor && note.anchor.quote) {
+      const q = note.anchor.quote.replace(/\s+/g, ' ').trim();
+      was.textContent = `was attached to: “${q.length > 70 ? q.slice(0, 70).trimEnd() + '…' : q}”`;
+    } else {
+      was.textContent = 'not yet grounded to text';
+    }
+    row.appendChild(was);
+    const actions = document.createElement('div');
+    actions.className = 'pmd-flashcard-card-actions';
+    const rg = document.createElement('button');
+    rg.type = 'button';
+    rg.className = 'pmd-flashcard-card-action';
+    rg.textContent = 'Re-ground';
+    rg.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.regroundNote(note.noteId);
+    });
+    actions.appendChild(rg);
+    actions.appendChild(this.buildNoteDeleteButton(note.noteId));
     row.appendChild(actions);
     return row;
   }
@@ -1661,6 +2023,79 @@ export class CommentsColumn {
     view.focus();
   }
 
+  /** A small pencil edit button for a comment header. */
+  private buildEditButton(onClick: () => void): HTMLButtonElement {
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'pmd-comment-edit';
+    edit.title = 'Edit';
+    setIcon(edit, 'edit');
+    edit.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onClick();
+    });
+    return edit;
+  }
+
+  /** Swap a rendered comment body for an inline edit form (textarea +
+   *  Save / Cancel). `commit(text)` persists the new text (which triggers
+   *  a re-render that replaces this form); Cancel / Esc restores the
+   *  original body untouched. Shared by human comments and notes. */
+  private startInlineEdit(
+    body: HTMLElement,
+    currentText: string,
+    commit: (text: string) => void,
+  ): void {
+    const form = document.createElement('form');
+    form.className = 'pmd-comment-edit-form';
+    // Clicks inside the editor shouldn't toggle/collapse the card.
+    form.addEventListener('click', (e) => e.stopPropagation());
+    const ta = document.createElement('textarea');
+    ta.className = 'pmd-comment-reply-input pmd-comment-edit-input';
+    ta.rows = Math.min(8, Math.max(2, currentText.split('\n').length));
+    ta.value = currentText;
+    form.appendChild(ta);
+    const actions = document.createElement('div');
+    actions.className = 'pmd-comment-edit-actions';
+    const save = document.createElement('button');
+    save.type = 'submit';
+    save.className = 'pmd-comment-edit-btn pmd-comment-edit-save';
+    save.textContent = 'Save';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'pmd-comment-edit-btn';
+    cancel.textContent = 'Cancel';
+    actions.append(save, cancel);
+    form.appendChild(actions);
+    body.replaceWith(form);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+    });
+    const restore = (): void => {
+      form.replaceWith(body);
+    };
+    cancel.addEventListener('click', (e) => {
+      e.stopPropagation();
+      restore();
+    });
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        restore();
+      } else if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = ta.value.trim();
+      if (!text) return;
+      commit(text);
+    });
+  }
+
   private renderComment(thread: Thread, comment: Comment, isRoot: boolean): HTMLElement {
     const block = document.createElement('div');
     block.className = isRoot ? 'pmd-comment-root' : 'pmd-comment-reply';
@@ -1687,6 +2122,24 @@ export class CommentsColumn {
       date.textContent = formatDate(comment.date);
       header.appendChild(date);
     }
+
+    const body = document.createElement('div');
+    body.className = 'pmd-comment-body';
+    for (const line of comment.text.split('\n')) {
+      const p = document.createElement('p');
+      p.textContent = line;
+      body.appendChild(p);
+    }
+
+    // Edit any comment in place (root or reply). Persists via the
+    // comments plugin's edit-text meta, keyed by the comment id.
+    header.appendChild(
+      this.buildEditButton(() =>
+        this.startInlineEdit(body, comment.text, (text) =>
+          this.commitRootText(thread.id, comment.id, text),
+        ),
+      ),
+    );
     // Thread-level delete lives in the card header now; only replies keep
     // a per-turn ✕ (to delete just that reply).
     if (!isRoot) {
@@ -1702,14 +2155,6 @@ export class CommentsColumn {
       header.appendChild(del);
     }
     block.appendChild(header);
-
-    const body = document.createElement('div');
-    body.className = 'pmd-comment-body';
-    for (const line of comment.text.split('\n')) {
-      const p = document.createElement('p');
-      p.textContent = line;
-      body.appendChild(p);
-    }
     block.appendChild(body);
     return block;
   }

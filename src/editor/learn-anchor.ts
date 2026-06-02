@@ -44,10 +44,18 @@ export interface ResolveResult {
   ambiguous: boolean;
 }
 
-interface Flat {
+export interface Flat {
   text: string;
   /** `pos[i]` = the ProseMirror position immediately before flat char i. */
   pos: number[];
+}
+
+/** Flatten a doc to a text view + char→PM-position map. Walking the whole
+ *  doc is O(doc), so callers that resolve many descriptors at once should
+ *  flatten ONCE and reuse via `resolveDescriptorIn`, rather than calling
+ *  `resolveDescriptor` (which flattens) per descriptor. */
+export function flattenDoc(doc: PMNode): Flat {
+  return flatten(doc);
 }
 
 function flatten(doc: PMNode): Flat {
@@ -114,8 +122,14 @@ function frontMatch(a: string, b: string): number {
  * nearest position to `approxPos`; ties set `ambiguous`.
  */
 export function resolveDescriptor(doc: PMNode, d: AnchorDescriptor): ResolveResult | null {
+  return resolveDescriptorIn(flatten(doc), d);
+}
+
+/** Resolve a descriptor against an ALREADY-flattened doc. Use this when
+ *  resolving several descriptors against the same doc so the O(doc)
+ *  flatten happens once, not per descriptor. */
+export function resolveDescriptorIn(flat: Flat, d: AnchorDescriptor): ResolveResult | null {
   if (d.quote === '') return null;
-  const flat = flatten(doc);
   const hits: number[] = [];
   for (let i = flat.text.indexOf(d.quote); i >= 0; i = flat.text.indexOf(d.quote, i + 1)) {
     hits.push(i);

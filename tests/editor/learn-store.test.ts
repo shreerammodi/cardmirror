@@ -148,6 +148,63 @@ describe('copyDocAnnotations (Save As fork)', () => {
   });
 });
 
+describe('notes (private comment threads)', () => {
+  const mkNote = (noteId: string, docId: string) => ({
+    noteId,
+    docId,
+    comments: [{ author: 'You', text: 'a note', at: NOW }],
+    anchor: desc('x'),
+    createdAt: NOW,
+  });
+
+  it('adds, reads per-doc, appends, re-anchors, and removes', () => {
+    const s = store();
+    s.addNote(mkNote('n1', 'docA'));
+    expect(s.notesForDoc('docA').map((n) => n.noteId)).toEqual(['n1']);
+    expect(s.notesForDoc('docB')).toEqual([]);
+    s.appendNoteComment('n1', { author: 'You', text: 'reply', at: NOW });
+    expect(s.getNote('n1')!.comments.map((c) => c.text)).toEqual(['a note', 'reply']);
+    s.editNoteComment('n1', 0, 'edited root');
+    s.editNoteComment('n1', 5, 'ignored'); // bad index → no-op
+    expect(s.getNote('n1')!.comments.map((c) => c.text)).toEqual(['edited root', 'reply']);
+    s.setNoteAnchor('n1', null);
+    expect(s.getNote('n1')!.anchor).toBeNull();
+    s.removeNote('n1');
+    expect(s.getNote('n1')).toBeUndefined();
+  });
+
+  it('round-trips notes through JSON', () => {
+    const s = store();
+    s.addNote(mkNote('n1', 'docA'));
+    const s2 = new LearnStore();
+    s2.loadJson(s.toJson());
+    expect(s2.notesForDoc('docA').map((n) => n.noteId)).toEqual(['n1']);
+    expect(s2.getNote('n1')!.comments[0]!.text).toBe('a note');
+  });
+
+  it('copies notes with fresh ids on Save As fork', () => {
+    const s = store();
+    s.addNote(mkNote('n1', 'docA'));
+    s.copyDocAnnotations('docA', 'docB');
+    const copied = s.notesForDoc('docB');
+    expect(copied).toHaveLength(1);
+    expect(copied[0]!.noteId).not.toBe('n1');
+    expect(copied[0]!.comments[0]!.text).toBe('a note');
+    // original retained
+    expect(s.notesForDoc('docA')).toHaveLength(1);
+  });
+
+  it('rekeys and deletes notes with the doc', () => {
+    const s = store();
+    s.addNote(mkNote('n1', 'session-uid'));
+    s.rekeyDoc('session-uid', 'realDoc');
+    expect(s.notesForDoc('realDoc')).toHaveLength(1);
+    expect(s.notesForDoc('session-uid')).toEqual([]);
+    s.forgetDoc('realDoc', 'delete');
+    expect(s.notesForDoc('realDoc')).toEqual([]);
+  });
+});
+
 describe('rekeyDoc', () => {
   it('moves annotations from a session id to the real docId', () => {
     const s = store();

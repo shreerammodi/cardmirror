@@ -159,7 +159,7 @@ export const RIBBON_GROUPS: RibbonGroup[] = [
   },
   {
     title: 'Comments',
-    commands: ['toggleCommentsVisible', 'addCommentToSelection'],
+    commands: ['toggleCommentsVisible', 'addCommentToSelection', 'addNoteToSelection'],
   },
   {
     title: 'Multi-pane workspace',

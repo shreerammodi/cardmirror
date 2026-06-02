@@ -217,6 +217,10 @@ button {
   --pmd-c-comment-thread-text: #6d28d9;
   --pmd-c-comment-thread-soft: rgba(139, 92, 246, 0.15);
   --pmd-c-comment-thread-tint: rgba(139, 92, 246, 0.06);
+  /* Private-note accents (green — distinct from comment gold / AI purple). */
+  --pmd-c-note: #16a34a;
+  --pmd-c-note-text: #15803d;
+  --pmd-c-note-soft: rgba(22, 163, 74, 0.15);
   --pmd-c-comment-thread-toast: rgba(139, 92, 246, 0.95);
   --pmd-c-comment-cite-bg: rgba(255, 215, 0, 0.12);
   --pmd-c-comment-cite-border: #c79a00;
@@ -405,6 +409,10 @@ button {
   --pmd-c-comment-thread-soft: rgba(167, 139, 250, 0.2);
   --pmd-c-comment-thread-tint: rgba(167, 139, 250, 0.08);
   --pmd-c-comment-thread-toast: rgba(167, 139, 250, 0.95);
+  /* Private-note accents (green) — brighter for dark surfaces. */
+  --pmd-c-note: #22c55e;
+  --pmd-c-note-text: #86efac;
+  --pmd-c-note-soft: rgba(34, 197, 94, 0.22);
   --pmd-c-comment-cite-bg: rgba(255, 215, 0, 0.18);
   --pmd-c-comment-cite-border: #e0bf3a;
   /* Light edge in dark theme (contrasts dark backgrounds + bright
@@ -1051,6 +1059,13 @@ body.pmd-host-browser #autosave-btn { display: none; }
    ribbon's height. */
 .ribbon-doc-ops-panel-2col {
   grid-template-columns: auto auto;
+}
+/* 3-column variant (comments group with the note button): keeps the
+   original 2×2 (toggle / add-comment on top, flashcard / AI below) in
+   columns 1–2 and adds the note button as a third column, top row —
+   rather than spilling into a third row. */
+.ribbon-doc-ops-panel-3col {
+  grid-template-columns: auto auto auto;
 }
 /* `#ribbon button` forces `display: inline-flex`, which defeats the UA
    `[hidden]` rule — restore it so the Ask-AI button can hide when AI is
@@ -5394,6 +5409,7 @@ body.pmd-comments-resize-active {
 .pmd-comment-thread { --pmd-card-accent: var(--pmd-c-comment-cite-border); }
 .pmd-comment-thread.pmd-flashcard-card { --pmd-card-accent: var(--pmd-c-accent); }
 .pmd-comment-thread.pmd-ai-card { --pmd-card-accent: var(--pmd-c-comment-thread); }
+.pmd-comment-thread.pmd-note-card { --pmd-card-accent: var(--pmd-c-note); }
 
 /* Card-level header: type chip on the left, then (pushed right by the
    spacer) the date and a thread-delete ✕. Used by comment + AI cards;
@@ -5435,6 +5451,10 @@ body.pmd-comments-resize-active {
 .pmd-card-type-chip.is-ai {
   background: var(--pmd-c-comment-thread-soft);
   color: var(--pmd-c-comment-thread-text);
+}
+.pmd-card-type-chip.is-note {
+  background: var(--pmd-c-note-soft);
+  color: var(--pmd-c-note-text);
 }
 
 /* Promoted "Convert to Flashcard" button — filled, like Reply, full
@@ -5723,6 +5743,52 @@ body.pmd-comments-resize-active {
 .pmd-comment-delete:hover {
   color: var(--pmd-c-comment-error);
 }
+/* Per-comment / per-reply inline edit. The pencil button sits in the
+   header next to the date / delete; clicking it swaps the body for a
+   textarea + Save / Cancel. */
+.pmd-comment-edit {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+  padding: 0 0.2rem;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+.pmd-comment-edit:hover {
+  color: var(--pmd-c-accent);
+}
+.pmd-comment-edit .pmd-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+.pmd-comment-edit-form {
+  margin-top: 0.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.pmd-comment-edit-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+.pmd-comment-edit-btn {
+  appearance: none;
+  font: inherit;
+  font-size: 0.72rem;
+  background: transparent;
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 5px;
+  padding: 0.15rem 0.55rem;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+}
+.pmd-comment-edit-btn.pmd-comment-edit-save {
+  background: var(--pmd-c-accent);
+  border-color: transparent;
+  color: var(--pmd-c-text-on-accent);
+}
 
 .pmd-comment-body p {
   margin: 0;
@@ -5799,6 +5865,15 @@ body:has(#comments-column:not([hidden])) :is(#editor, .pmd-pane-editor) .pmd-com
    mechanism; never serialized. */
 :is(#editor, .pmd-pane-editor) .pmd-ai-range {
   background-color: color-mix(in srgb, var(--pmd-c-comment-thread) 14%, transparent);
+  border-bottom: 2px solid var(--pmd-c-annotation-edge);
+  border-radius: 2px;
+  cursor: pointer;
+}
+/* Private-note highlight — green tint (matches the note accent), distinct
+   from flashcards (accent) and AI threads (purple). View-only; never
+   serialized unless the user opts into export. */
+:is(#editor, .pmd-pane-editor) .pmd-note-range {
+  background-color: color-mix(in srgb, var(--pmd-c-note) 14%, transparent);
   border-bottom: 2px solid var(--pmd-c-annotation-edge);
   border-radius: 2px;
   cursor: pointer;

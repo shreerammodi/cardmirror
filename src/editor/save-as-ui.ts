@@ -42,6 +42,12 @@ export interface SaveAsResult {
    *  text inside body paragraphs. Mutually exclusive with the three
    *  include-* options above. */
   readMode: boolean;
+  /** Bake the private note layer into the file as real comments. Off by
+   *  default — notes are private and normally never leave CardMirror. */
+  includeNotes: boolean;
+  /** Bake the private AI-thread layer into the file as real comments.
+   *  Off by default, same rationale as notes. */
+  includeAiThreads: boolean;
 }
 
 export interface OpenSaveAsOptions {
@@ -78,6 +84,8 @@ class SaveAsModal {
   private commentsBox!: HTMLInputElement;
   private analyticsBox!: HTMLInputElement;
   private undertagsBox!: HTMLInputElement;
+  private notesBox!: HTMLInputElement;
+  private aiThreadsBox!: HTMLInputElement;
   /** Radio inputs keyed by format id. */
   private formatRadios!: Record<SaveAsFormat, HTMLInputElement>;
   private settled = false;
@@ -151,6 +159,8 @@ class SaveAsModal {
         includeAnalytics: this.analyticsBox.checked,
         includeUndertags: this.undertagsBox.checked,
         readMode: false,
+        includeNotes: this.notesBox.checked,
+        includeAiThreads: this.aiThreadsBox.checked,
       });
     });
 
@@ -174,14 +184,28 @@ class SaveAsModal {
       this.buildPreset(
         'As-Is',
         'Includes everything in the document.',
-        { includeComments: true, includeAnalytics: true, includeUndertags: true, readMode: false },
+        {
+          includeComments: true,
+          includeAnalytics: true,
+          includeUndertags: true,
+          readMode: false,
+          includeNotes: false,
+          includeAiThreads: false,
+        },
       ),
     );
     presets.appendChild(
       this.buildPreset(
         'Send Doc',
         'Excludes analytics, undertags, and comments.',
-        { includeComments: false, includeAnalytics: false, includeUndertags: false, readMode: false },
+        {
+          includeComments: false,
+          includeAnalytics: false,
+          includeUndertags: false,
+          readMode: false,
+          includeNotes: false,
+          includeAiThreads: false,
+        },
         'SEND_',
       ),
     );
@@ -189,7 +213,14 @@ class SaveAsModal {
       this.buildPreset(
         'Read Doc',
         'Exports the read-mode view of the document.',
-        { includeComments: false, includeAnalytics: false, includeUndertags: false, readMode: true },
+        {
+          includeComments: false,
+          includeAnalytics: false,
+          includeUndertags: false,
+          readMode: true,
+          includeNotes: false,
+          includeAiThreads: false,
+        },
         'READ_',
       ),
     );
@@ -203,9 +234,16 @@ class SaveAsModal {
     this.commentsBox = this.buildCheckbox('Include comments', true);
     this.analyticsBox = this.buildCheckbox('Include analytics', true);
     this.undertagsBox = this.buildCheckbox('Include undertags', true);
+    // Private annotation layers — off by default (they normally never
+    // leave CardMirror). Checking them bakes the notes / AI threads into
+    // the saved file as real Word-style comments.
+    this.notesBox = this.buildCheckbox('Include private notes (as comments)', false);
+    this.aiThreadsBox = this.buildCheckbox('Include AI comments (as comments)', false);
     options.appendChild(this.commentsBox.parentElement!);
     options.appendChild(this.analyticsBox.parentElement!);
     options.appendChild(this.undertagsBox.parentElement!);
+    options.appendChild(this.notesBox.parentElement!);
+    options.appendChild(this.aiThreadsBox.parentElement!);
 
     const customSave = document.createElement('button');
     customSave.type = 'submit';
@@ -242,6 +280,8 @@ class SaveAsModal {
       includeAnalytics: boolean;
       includeUndertags: boolean;
       readMode: boolean;
+      includeNotes: boolean;
+      includeAiThreads: boolean;
     },
     prefix = '',
   ): HTMLElement {
@@ -355,6 +395,8 @@ class SaveAsModal {
       includeAnalytics: boolean;
       includeUndertags: boolean;
       readMode: boolean;
+      includeNotes: boolean;
+      includeAiThreads: boolean;
     },
     prefix = '',
   ): void {

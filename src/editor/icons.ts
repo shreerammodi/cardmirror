@@ -46,6 +46,8 @@ export type IconName =
   | 'timer'
   | 'link'
   | 'flashcard'
+  | 'note'
+  | 'edit'
   | 'ai';
 
 /** Create an icon span. Decorative by default (`aria-hidden`); pass a

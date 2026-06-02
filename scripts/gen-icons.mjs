@@ -62,6 +62,8 @@ const MAP = {
   timer: { svg: 'clock-stopwatch', glyph: '⏱' },
   link: { svg: 'link-01', glyph: '🔗' },
   flashcard: { svg: 'graduation-hat-02', glyph: '🎓' },
+  note: { svg: 'file-02', glyph: '📝' },
+  edit: { svg: 'edit-02', glyph: '✎' },
   ai: { svg: 'stars-02', glyph: '✨' },
 };
 

@@ -7,6 +7,65 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Notes — a private, threaded annotation (fourth comments-bar kind).** A
+  `Note` entity in `learn-store.ts` (`{ noteId, docId, comments:
+  LocalComment[], anchor, createdAt }`), parallel to `AiThread`: stored in
+  the LearnStore (never serialized into the doc → private), anchored by
+  `AnchorDescriptor` + a green decoration (`'note'` kind in
+  `learn-highlight-plugin.ts` → `.pmd-note-range`). Store methods
+  (`addNote` / `getNote` / `appendNoteComment` / `editNoteComment` /
+  `setNoteAnchor` / `removeNote` / `notesForDoc`) plus JSON (de)serialize
+  and the doc-lifecycle hooks (`copyDocAnnotations` fork-copies with fresh
+  ids, `rekeyDoc`, `forgetDoc`). The comments column (`comments-ui.ts`)
+  gets a `NOTE_PREFIX`, a green `'note'` chip, and a full render path
+  (merge/sort by doc position, `populateNote` reusing `renderAiComment`,
+  `buildNoteInput` / `addNoteComment`, `activateNote`, `deleteNote`,
+  unanchored row + `regroundNote`). Creation is a new ribbon command
+  `addNoteToSelection` (`ribbon-commands.ts`, default `Mod-Shift-n`,
+  Comments group) + a ribbon button (new `note` icon) wired in `index.ts`;
+  `threadIdAtCursor` maps the `'note'` range kind to `NOTE_PREFIX`.
+
+- **Inline edit for comments and notes.** A pencil edit button
+  (`buildEditButton`) on every human-comment turn (`renderComment`) and
+  note turn (`renderAiComment` gains an optional `onEdit`; AI threads omit
+  it). Clicking swaps the body for a textarea + Save/Cancel via a shared
+  `startInlineEdit`; human comments commit through the existing
+  `editCommentTextMeta`, notes through a new `editNoteComment(noteId,
+  index, text)`. New `edit` icon added to the `gen-icons.mjs` MAP
+  (`edit-02`); the note button's icon also comes from the MAP (`file-02`).
+
+- **Opt-in export of the private layer as comments.** Two new Save As
+  Custom-Save checkboxes (off by default) on `SaveAsResult` —
+  `includeNotes` / `includeAiThreads` (`save-as-ui.ts`). `serializeForSave`
+  (`index.ts`) gains `bakePrivateThreadsIntoDoc`: for each opted-in
+  note / AI thread it resolves the anchor against the export doc, mints a
+  `comment_range` mark + a real `Thread` (user turns → `human`, AI turns →
+  `ai`) via a temp `EditorState`, and hands the marked-up doc + threads to
+  the serializer. Baking the private layer forces a derived (non-identity-
+  adopting) save so the working doc keeps both its identity and its
+  private notes (no double-load on reopen).
+
+- **Performance: annotation creation no longer re-anchors the whole doc.**
+  `resolveDescriptor` flattens the entire document; the comments column
+  used to re-resolve EVERY flashcard / AI thread / note on EVERY
+  `learnStore` change (creation did it twice; each reply did it again).
+  Fixes:
+  - `learn-anchor.ts` exposes `flattenDoc` + `resolveDescriptorIn(flat,
+    d)` so a batch resolve flattens once, not per descriptor.
+  - `learn-highlight-plugin.ts` gains `upsert` / `remove` range metas
+    (`upsertFlashcardRangeTr` / `removeFlashcardRangeTr`) to set or drop a
+    single range by id at a KNOWN position — no walk.
+  - The store subscription now runs `reconcileAnchors` (incremental):
+    resolves a descriptor only for an annotation that's newly anchored
+    but absent from the plugin, prunes ranges for deleted ones, and
+    short-circuits to a plain render otherwise. Note / AI creation and
+    re-ground call `placeLocalAnnotation` to set the range from the live
+    selection BEFORE the store mutation, so the reconcile finds it already
+    present and never resolves. `activateNote` / `activateAiThread` render
+    instead of re-resolving. Full resolution (`refreshFlashcardAnchors`,
+    now also flatten-once) is reserved for doc load, column show, pane
+    switch, and edit-driven range drops.
+
 - **Save Send Doc command + shortcut.** A new bindable command
   `saveSendDoc` (`ribbon-commands.ts`, default `Mod-Alt-s`, File group,
   palette aliases "send doc" / "export send doc" / "send version") that

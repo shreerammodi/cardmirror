@@ -176,19 +176,22 @@
                   aria-pressed="true" title="Show / hide the navigation pane"
                   aria-label="Toggle nav pane"><span class="pmd-icon pmd-icon-nav-toggle" aria-hidden="true"></span></button>
         </div>
-        <div id="comments-ops-panel" class="ribbon-doc-ops-panel ribbon-doc-ops-panel-2col" role="group" aria-label="Comments">
-          <!-- 2×2 grid (row-major):
-                  comments-toggle   add-comment
+        <div id="comments-ops-panel" class="ribbon-doc-ops-panel ribbon-doc-ops-panel-3col" role="group" aria-label="Comments">
+          <!-- 2-row × 3-col grid (row-major):
+                  comments-toggle   add-comment   add-note
                   create-flashcard  ask-ai
-               Top row toggles the column / adds a comment to the
-               selection; bottom row makes a flashcard from the
-               selection / asks AI about it. The Ask-AI button is hidden
-               while AI features are disabled (Settings), so the bottom
-               row may show only the flashcard button. -->
+               Top row toggles the column / adds a comment / adds a
+               private note to the selection; bottom row makes a
+               flashcard from the selection / asks AI about it. The
+               note button forms a third column rather than a third
+               row. The Ask-AI button is hidden while AI features are
+               disabled (Settings). -->
           <button id="comments-toggle-btn" class="ribbon-doc-ops-btn" type="button"
                   aria-pressed="false" title="Show/hide comments" aria-label="Show or hide comments"><span class="pmd-icon pmd-icon-comments" aria-hidden="true"></span></button>
           <button id="comments-add-btn" class="ribbon-doc-ops-btn" type="button"
                   title="Add a comment on the selection" aria-label="Add comment"><span class="pmd-icon pmd-icon-plus" aria-hidden="true"></span></button>
+          <button id="add-note-btn" class="ribbon-doc-ops-btn" type="button"
+                  title="Add a private note on the selection" aria-label="Add note"><span class="pmd-icon pmd-icon-note" aria-hidden="true"></span></button>
           <button id="create-flashcard-btn" class="ribbon-doc-ops-btn" type="button"
                   title="Create flashcard from selection" aria-label="Create flashcard from selection"><span class="pmd-icon pmd-icon-flashcard" aria-hidden="true"></span></button>
           <button id="ask-ai-btn" class="ribbon-doc-ops-btn" type="button" hidden

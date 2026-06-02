@@ -3367,6 +3367,7 @@ export type RibbonCommandId =
   | 'toggleReadMode'
   | 'toggleCommentsVisible'
   | 'addCommentToSelection'
+  | 'addNoteToSelection'
   | 'aiAskAboutSelection'
   | 'aiCreateCite'
   | 'createFlashcard'
@@ -3503,6 +3504,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'toggleReadMode',
   'toggleCommentsVisible',
   'addCommentToSelection',
+  'addNoteToSelection',
   'aiAskAboutSelection',
   'aiCreateCite',
   'createFlashcard',
@@ -3615,6 +3617,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   toggleReadMode: 'Toggle Read Mode',
   toggleCommentsVisible: 'Show / Hide Comments',
   addCommentToSelection: 'Add Comment to Selection',
+  addNoteToSelection: 'Add Note to Selection',
   aiAskAboutSelection: 'Ask AI About Selection',
   aiCreateCite: 'Format Cite From Selection',
   createFlashcard: 'Create Flashcard From Selection',
@@ -3769,6 +3772,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   toggleReadMode: '',
   toggleCommentsVisible: '',
   addCommentToSelection: '',
+  addNoteToSelection: 'Mod-Shift-n',
   aiAskAboutSelection: 'Mod-Shift-q',
   aiCreateCite: 'Mod-Shift-x',
   createFlashcard: '',
@@ -3944,6 +3948,7 @@ export interface RibbonContext {
   openShortcutsReference: () => void;
   toggleCommentsVisible: () => void;
   addCommentToSelection: () => void;
+  addNoteToSelection: () => void;
   aiAskAboutSelection: () => void;
   aiCreateCite: () => void;
   createFlashcard: () => void;
@@ -4061,6 +4066,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   openShortcutsReference: () => {},
   toggleCommentsVisible: () => {},
   addCommentToSelection: () => {},
+  addNoteToSelection: () => {},
   aiAskAboutSelection: () => {},
   aiCreateCite: () => {},
   createFlashcard: () => {},
@@ -4209,6 +4215,13 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
         if (state.selection.empty) return false;
         if (!dispatch) return true;
         ctx.addCommentToSelection();
+        return true;
+      };
+    case 'addNoteToSelection':
+      return (state, dispatch) => {
+        if (state.selection.empty) return false;
+        if (!dispatch) return true;
+        ctx.addNoteToSelection();
         return true;
       };
     case 'aiAskAboutSelection':

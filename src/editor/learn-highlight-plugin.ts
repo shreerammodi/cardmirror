@@ -25,9 +25,9 @@ export interface FlashcardRange {
   from: number;
   to: number;
   /** Which annotation kind this range belongs to — picks the highlight
-   *  color (accent for flashcards, purple for AI threads). Defaults to
-   *  flashcard when absent. */
-  kind?: 'flashcard' | 'ai';
+   *  color (accent for flashcards, purple for AI threads, green for
+   *  notes). Defaults to flashcard when absent. */
+  kind?: 'flashcard' | 'ai' | 'note';
 }
 
 interface Range {
@@ -53,6 +53,8 @@ export const learnHighlightKey = new PluginKey<HighlightState>('learn-highlight'
 
 type Meta =
   | { type: 'set'; ranges: FlashcardRange[] }
+  | { type: 'upsert'; range: FlashcardRange }
+  | { type: 'remove'; cardId: string }
   | { type: 'active'; active: Range | null };
 
 function buildDecos(
@@ -64,7 +66,12 @@ function buildDecos(
     .filter((r) => r.to > r.from)
     .map((r) =>
       Decoration.inline(r.from, r.to, {
-        class: r.kind === 'ai' ? 'pmd-ai-range' : 'pmd-flashcard-range',
+        class:
+          r.kind === 'ai'
+            ? 'pmd-ai-range'
+            : r.kind === 'note'
+            ? 'pmd-note-range'
+            : 'pmd-flashcard-range',
         'data-card-id': r.cardId,
       }),
     );
@@ -93,6 +100,19 @@ export const learnHighlightPlugin = new Plugin<HighlightState>({
       const meta = tr.getMeta(learnHighlightKey) as Meta | undefined;
       if (meta?.type === 'set') {
         const ranges = meta.ranges.filter((r) => r.to > r.from).map((r) => ({ ...r }));
+        return { ...prev, ranges, decos: buildDecos(newState.doc, ranges, prev.active) };
+      }
+      if (meta?.type === 'upsert') {
+        // Add or replace a single range by cardId, leaving others (and
+        // their live-mapped positions) untouched. Used when an annotation
+        // is created / re-grounded at a KNOWN position — no doc walk.
+        const others = prev.ranges.filter((r) => r.cardId !== meta.range.cardId);
+        const ranges =
+          meta.range.to > meta.range.from ? [...others, { ...meta.range }] : others;
+        return { ...prev, ranges, decos: buildDecos(newState.doc, ranges, prev.active) };
+      }
+      if (meta?.type === 'remove') {
+        const ranges = prev.ranges.filter((r) => r.cardId !== meta.cardId);
         return { ...prev, ranges, decos: buildDecos(newState.doc, ranges, prev.active) };
       }
       if (meta?.type === 'active') {
@@ -163,6 +183,22 @@ export function setFlashcardRangesTr(
   ranges: FlashcardRange[],
 ): Transaction {
   return state.tr.setMeta(learnHighlightKey, { type: 'set', ranges }).setMeta('addToHistory', false);
+}
+
+/** Add or replace ONE resolved range by cardId, from a known position —
+ *  the create / re-ground fast path that skips descriptor resolution.
+ *  Doc-neutral + out of undo history. */
+export function upsertFlashcardRangeTr(
+  state: EditorState,
+  range: FlashcardRange,
+): Transaction {
+  return state.tr.setMeta(learnHighlightKey, { type: 'upsert', range }).setMeta('addToHistory', false);
+}
+
+/** Drop ONE resolved range by cardId (annotation deleted). Doc-neutral +
+ *  out of undo history. */
+export function removeFlashcardRangeTr(state: EditorState, cardId: string): Transaction {
+  return state.tr.setMeta(learnHighlightKey, { type: 'remove', cardId }).setMeta('addToHistory', false);
 }
 
 /** Emphasize the active annotation's range in the doc (or clear it with

@@ -16,7 +16,8 @@ import { Node as PMNode, type Mark, DOMSerializer } from 'prosemirror-model';
 import { schema, newHeadingId } from '../schema/index.js';
 import { fromDocxFull, toDocx, serializeNative, parseNative, readDocIdFromBytes, stampDocId } from '../index.js';
 import { transformForExport } from '../export/transform-for-export.js';
-import type { Thread } from './comments-plugin.js';
+import type { Thread, Comment } from './comments-plugin.js';
+import type { LocalComment } from './learn-store.js';
 import { NavigationPanel } from './nav-panel.js';
 import { mountTimerUI } from './timer-ui.js';
 import {
@@ -85,9 +86,9 @@ import {
 } from './settings.js';
 import { openSaveAs } from './save-as-ui.js';
 import { highlightColorLabel, shadingColorLabel } from './color-palette.js';
-import { commentsPlugin, commentsKey, loadThreads, getCommentsState, gcOrphanThreads } from './comments-plugin.js';
+import { commentsPlugin, commentsKey, loadThreads, getCommentsState, gcOrphanThreads, newCommentId } from './comments-plugin.js';
 import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
-import { CommentsColumn, addCommentToSelection, FC_PREFIX, AI_PREFIX } from './comments-ui.js';
+import { CommentsColumn, addCommentToSelection, FC_PREFIX, AI_PREFIX, NOTE_PREFIX } from './comments-ui.js';
 import { runAiCreateCite } from './ai/cite-creator.js';
 import { readModePlugin, PMD_READ_MODE_TOGGLE } from './read-mode-plugin.js';
 import { learnHighlightPlugin, flashcardRangeAt } from './learn-highlight-plugin.js';
@@ -527,6 +528,7 @@ getSpeechDocResolver().subscribe(() => refreshSpeechMarkBtn());
 const wordCountBtn = document.getElementById('word-count-btn') as HTMLButtonElement;
 const commentsToggleBtn = document.getElementById('comments-toggle-btn') as HTMLButtonElement | null;
 const commentsAddBtn = document.getElementById('comments-add-btn') as HTMLButtonElement | null;
+const addNoteBtn = document.getElementById('add-note-btn') as HTMLButtonElement | null;
 const createFlashcardBtn = document.getElementById('create-flashcard-btn') as HTMLButtonElement | null;
 const askAiBtn = document.getElementById('ask-ai-btn') as HTMLButtonElement | null;
 const commentsColumnEl = document.getElementById('comments-column') as HTMLElement | null;
@@ -881,6 +883,9 @@ const ribbonContext: RibbonContext = {
     const descriptor = buildDescriptor(view.state.doc, sel.from, sel.to);
     const docId = ensureActiveDocId();
     const threadId = crypto.randomUUID();
+    // Place the purple highlight directly from the known selection before
+    // the store add — the reconcile then skips the doc-walk re-anchor.
+    commentsColumn.placeLocalAnnotation(threadId, sel.from, sel.to, 'ai');
     learnStore.addAiThread({
       threadId,
       docId,
@@ -903,6 +908,47 @@ const ribbonContext: RibbonContext = {
       commentsToggleBtn?.setAttribute('aria-pressed', 'true');
     }
     commentsColumn.activateAiThread(threadId);
+  },
+  addNoteToSelection: () => {
+    if (!view || !commentsColumn) return;
+    const sel = view.state.selection;
+    if (sel.empty) {
+      showToast('Select text to add a note.');
+      return;
+    }
+    // Notes live in the local annotation layer (per-user, never
+    // serialized into the doc unless exported) — anchored by descriptor +
+    // a green highlight decoration, exactly like AI threads. Private by
+    // construction: no comment_range mark in the doc.
+    const descriptor = buildDescriptor(view.state.doc, sel.from, sel.to);
+    const docId = ensureActiveDocId();
+    const noteId = crypto.randomUUID();
+    // Set the green highlight directly from the known selection BEFORE the
+    // store add, so the reconcile it triggers finds the range already
+    // present and never walks the doc to re-anchor it.
+    commentsColumn.placeLocalAnnotation(noteId, sel.from, sel.to, 'note');
+    learnStore.addNote({
+      noteId,
+      docId,
+      comments: [],
+      anchor: descriptor,
+      createdAt: new Date().toISOString(),
+    });
+    // Register the doc (even unsaved) + stamp its id so the note
+    // re-associates on reload — same as the AI-thread / flashcard flows.
+    const f = activeFile();
+    learnStore.registerDoc({
+      docId,
+      path: typeof f.handle === 'string' ? f.handle : null,
+      name: f.filename ?? 'Untitled',
+      format: f.format,
+    });
+    void stampActiveFileDocId(docId);
+    if (commentsColumnEl?.hidden) {
+      commentsColumn.setVisible(true);
+      commentsToggleBtn?.setAttribute('aria-pressed', 'true');
+    }
+    commentsColumn.activateNote(noteId);
   },
   aiCreateCite: () => {
     if (!view) return;
@@ -1619,6 +1665,10 @@ if (askAiBtn) {
   askAiBtn.addEventListener('mousedown', (e) => e.preventDefault());
   askAiBtn.addEventListener('click', () => runRibbonCommandById('aiAskAboutSelection'));
 }
+if (addNoteBtn) {
+  addNoteBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  addNoteBtn.addEventListener('click', () => runRibbonCommandById('addNoteToSelection'));
+}
 
 /** Show the Ask-AI ribbon button only when AI features are enabled. */
 function applyAskAiButtonVisibility(enabled: boolean): void {
@@ -1663,7 +1713,10 @@ export function threadIdAtCursor(state: EditorState): string | null {
   // decoration, not a mark. Either selection endpoint inside a range
   // focuses it, mirroring the comment harvest checking $from and $to.
   const range = flashcardRangeAt(state, sel.from) ?? flashcardRangeAt(state, sel.to);
-  if (range) return (range.kind === 'ai' ? AI_PREFIX : FC_PREFIX) + range.cardId;
+  if (range) {
+    const prefix = range.kind === 'ai' ? AI_PREFIX : range.kind === 'note' ? NOTE_PREFIX : FC_PREFIX;
+    return prefix + range.cardId;
+  }
   return null;
 }
 
@@ -4552,9 +4605,62 @@ function updateWindowTitle(): void {
   }
 }
 
+/** 1–2 letter initials from a display name, for a baked-in comment's
+ *  margin badge. */
+function initialsForName(name: string): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return ((parts[0]![0] ?? '') + (parts[parts.length - 1]![0] ?? '')).toUpperCase();
+  }
+  return (parts[0]?.slice(0, 2) ?? '').toUpperCase();
+}
+
+/** Bake private LearnStore threads (notes and/or AI threads) into an
+ *  export doc as real `comment_range` marks + comment threads — the
+ *  opt-in "include notes / AI comments on export" path. Each entity's
+ *  anchor is resolved against `doc`; entities whose text didn't survive
+ *  the export transform, or that have no turns, are skipped. Returns the
+ *  marked-up doc plus the converted threads for the serializer. */
+function bakePrivateThreadsIntoDoc(
+  doc: PMNode,
+  opts: { includeNotes: boolean; includeAiThreads: boolean },
+): { doc: PMNode; threads: Thread[] } {
+  const docId = activeDocIdentity().docId;
+  if (!docId) return { doc, threads: [] };
+  const markType = schema.marks['comment_range'];
+  if (!markType) return { doc, threads: [] };
+  const sources: { anchor: AnchorDescriptor | null; comments: LocalComment[] }[] = [];
+  if (opts.includeAiThreads) sources.push(...learnStore.aiThreadsForDoc(docId));
+  if (opts.includeNotes) sources.push(...learnStore.notesForDoc(docId));
+  if (sources.length === 0) return { doc, threads: [] };
+  let state = EditorState.create({ doc, schema });
+  const threads: Thread[] = [];
+  for (const src of sources) {
+    if (!src.anchor || src.comments.length === 0) continue;
+    const r = resolveDescriptor(state.doc, src.anchor);
+    if (!r) continue; // text didn't survive the transform / unresolvable
+    const rootId = newCommentId();
+    const comments: Comment[] = src.comments.map((c, i) => ({
+      id: i === 0 ? rootId : newCommentId(),
+      author: c.author || 'You',
+      initials: initialsForName(c.author),
+      date: c.at,
+      text: c.text,
+      kind: c.ai ? 'ai' : 'human',
+      parentId: i === 0 ? null : rootId,
+    }));
+    threads.push({ id: rootId, comments });
+    state = state.apply(
+      state.tr.addMark(r.from, r.to, markType.create({ threadId: rootId })),
+    );
+  }
+  return { doc: state.doc, threads };
+}
+
 /** Serialize the active doc into bytes in the given format. Shared
  *  by the Save and Save-As flows. The `opts` arg controls export-
- *  time filtering (read mode, drop analytics / undertags / comments). */
+ *  time filtering (read mode, drop analytics / undertags / comments)
+ *  and the opt-in baking of private notes / AI threads into comments. */
 async function serializeForSave(
   format: 'cmir' | 'docx',
   opts: {
@@ -4562,26 +4668,45 @@ async function serializeForSave(
     includeAnalytics: boolean;
     includeUndertags: boolean;
     readMode: boolean;
+    /** Bake private notes into the file as real comments (opt-in). */
+    includeNotes?: boolean;
+    /** Bake AI threads into the file as real comments (opt-in). */
+    includeAiThreads?: boolean;
   },
   /** Stable doc identity to embed (`.cmir` field / `.docx` docProps).
    *  Omitted for derived/lossy exports, which stay clean (no identity). */
   docId?: string,
 ): Promise<Uint8Array> {
   const docToExport = view ? view.state.doc : currentDoc;
-  const exportDocNode = transformForExport(docToExport, {
+  let exportDocNode = transformForExport(docToExport, {
     includeComments: opts.includeComments,
     includeAnalytics: opts.includeAnalytics,
     includeUndertags: opts.includeUndertags,
     readMode: opts.readMode,
   });
   if (view) gcOrphanThreads(view);
-  const threads = opts.includeComments && view
-    ? Array.from(getCommentsState(view.state).threads.values())
-    : undefined;
-  if (format === 'cmir') {
-    return serializeNative(exportDocNode, { ...(threads ? { threads } : {}), ...(docId ? { docId } : {}) });
+  const baseThreads =
+    opts.includeComments && view
+      ? Array.from(getCommentsState(view.state).threads.values())
+      : [];
+  // Opt-in: convert the private annotation layer (notes / AI threads)
+  // into real comments baked onto the export doc. Never touches the
+  // working doc — this is a snapshot.
+  const extraThreads: Thread[] = [];
+  if (opts.includeNotes || opts.includeAiThreads) {
+    const baked = bakePrivateThreadsIntoDoc(exportDocNode, {
+      includeNotes: !!opts.includeNotes,
+      includeAiThreads: !!opts.includeAiThreads,
+    });
+    exportDocNode = baked.doc;
+    extraThreads.push(...baked.threads);
   }
-  return toDocx(exportDocNode, { ...(threads ? { threads } : {}), ...(docId ? { docId } : {}) });
+  const allThreads = [...baseThreads, ...extraThreads];
+  const threadsOpt = allThreads.length > 0 ? { threads: allThreads } : {};
+  if (format === 'cmir') {
+    return serializeNative(exportDocNode, { ...threadsOpt, ...(docId ? { docId } : {}) });
+  }
+  return toDocx(exportDocNode, { ...threadsOpt, ...(docId ? { docId } : {}) });
 }
 
 /**
@@ -4609,11 +4734,17 @@ export async function runSaveAsFlow(): Promise<boolean> {
   // its own identity (otherwise it would think it's named e.g.
   // SEND_X and the duplicate-open guard would block reopening that
   // export), its dirty state, and its recovery journal.
+  // Baking the private layer (notes / AI threads) into the file is a
+  // one-way snapshot, so it's a derived export too — the working doc
+  // keeps its own identity AND its private layer (otherwise reopening
+  // would double-load the notes as both comments and re-anchored notes).
   const isFullSave =
     choice.includeComments &&
     choice.includeAnalytics &&
     choice.includeUndertags &&
-    !choice.readMode;
+    !choice.readMode &&
+    !choice.includeNotes &&
+    !choice.includeAiThreads;
   try {
     // A full Save As is a distinct logical doc → fork a new docId (the
     // original file keeps its own). Derived/lossy exports get no docId
@@ -4626,6 +4757,8 @@ export async function runSaveAsFlow(): Promise<boolean> {
         includeAnalytics: choice.includeAnalytics,
         includeUndertags: choice.includeUndertags,
         readMode: choice.readMode,
+        includeNotes: choice.includeNotes,
+        includeAiThreads: choice.includeAiThreads,
       },
       forkDocId,
     );
