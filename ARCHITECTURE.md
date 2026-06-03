@@ -510,8 +510,63 @@ Flashcards (and, later, Ask-AI threads) are a **per-user annotation layer
 that never enters the document.** This is the load-bearing decision: a
 debater shares `.docx` freely, so anything written into the file body or
 its comment XML would leak private study material. The layer lives only
-on the user's machine. Full spec:
-`reference-docs/mnemonic-medium/SPEC-learn-system.md`.
+on the user's machine.
+
+### Why this design (the evidence)
+
+The shape of the feature follows the research on spaced repetition and
+the "mnemonic medium" — principally Andy Matuschak and Michael Nielsen's
+[Quantum Country](https://quantum.country), Nielsen's
+[Augmenting Long-term Memory](https://augmentingcognition.com/ltm.html),
+Matuschak's [Orbit](https://withorbit.com) and his
+[evergreen notes](https://notes.andymatuschak.org). Debate evidence fits
+that work's central claim well: spaced repetition pays for its overhead
+most clearly on *platform knowledge* — foundational, largely declarative
+material you build everything else on — and a debater's cards are exactly
+that.
+
+The strongest influence is **situated practice**. The recurring critique
+of conventional systems (Anki, Quizlet) in this literature is that review
+is disconnected from the work you actually care about, which starves the
+emotional connection that keeps people reviewing at all; the mnemonic
+medium's answer is to interleave prompts into the reading itself.
+CardMirror takes that one step further into the editor — cards anchor to
+the real evidence text and render beside it in the comments column, so
+practice stays inside the file the debater already works in instead of a
+separate app. The interleaving principle is well supported; the specific
+beside-the-text placement is our extension of it.
+
+Two interaction choices come from the same source. Deciding to remember
+something should be a **lightweight, near-costless gesture**, so a card
+is one action on a selection. And readers should **control their own
+prompts** rather than inherit a fixed set — part of why the layer is
+personal and local, not baked into the shared file.
+
+**Scheduling** is deliberately simple: a binary remembered/forgotten
+ladder in the style of Orbit, with forgotten cards retried later in the
+same session. Quantum Country's data found in-session retry measurably
+improves early accuracy; we adopt it on that empirical basis, noting the
+literature itself flags that its fit with the classic spacing effect is
+unsettled.
+
+**Card types and AI drafting** follow the evidence's caveats rather than
+its enthusiasms. We offer question-and-answer and cloze cards but lean
+toward Q&A: the [prompt-writing literature](https://andymatuschak.org/prompts)
+argues cloze tends toward shallow pattern-matching and weaker
+understanding, while granting it's efficient and far better than no card
+at all. And because writing good prompts is genuinely hard and
+time-consuming — the main reason people stop — AI drafting matters:
+current models produce usable prompts for declarative material when given
+surrounding context and explicit guidance, but regress to surface-level
+questions on more conceptual material, so AI output is a starting point
+the user edits, not a finished card.
+
+One honest gap: this literature is about long-term understanding and
+retention, not competitive recall under time pressure. The
+platform-knowledge and declarative-material fit is well grounded; the
+"recall in a round" framing is our own extrapolation to debate.
+
+### How it works
 
 - **Storage.** `LearnStore` is a host-agnostic, unit-testable model with
   persistence injected (a whole-blob KV: a JSON file on desktop,
