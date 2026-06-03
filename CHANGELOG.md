@@ -103,6 +103,13 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Live selection word count works in multi-pane mode.** With the
+  "live selection word count" setting on, selecting text in a pane now
+  immediately updates that pane's footer to the selection's word count
+  and read time, the same as single-pane — previously it only refreshed
+  after the next edit, so it looked permanently off. With the setting
+  off, panes show the whole-doc count regardless of any selection.
+
 - **Dropzone pill no longer briefly overlaps the reader count in
   multi-pane mode.** On a fresh multi-pane boot the floating dropzone
   pill could land on top of a pane's word-count / read-time readout

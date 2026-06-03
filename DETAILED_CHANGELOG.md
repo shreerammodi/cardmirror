@@ -23,6 +23,22 @@ in each release, see `CHANGELOG.md`.
   it otherwise sat in the corner below the nav rail and was redundant
   with the per-pane buttons.
 
+- **Live selection word count had no effect in multi-pane mode**
+  (`multi-pane-shell.ts`). Two gaps vs. single-pane: (1) the per-pane
+  `dispatchTransaction` called `slot.refreshWordCount()` only inside
+  `if (tx.docChanged)`, so selection-only transactions never refreshed
+  the footer — the "Sel:" readout only appeared after the next edit,
+  looking permanently off. Added an `else if` mirroring single-pane's
+  `index.ts` gate (`liveSelectionWordCount` on, selection changed, and a
+  range on either side so empty→empty cursor moves do nothing). (2)
+  `Slot.refreshWordCount` computed `hasSel = !sel.empty` WITHOUT checking
+  the setting, so when it did run with a selection it showed the
+  selection count regardless of the toggle; now gated on
+  `settings.get('liveSelectionWordCount') && !sel.empty` like single-pane
+  `refreshWordCount`. The settings-toggle path was already covered — the
+  shell's settings subscriber refreshes every slot's word count on any
+  change.
+
 - **Dropzone pill stranded over the pane footer on multi-pane boot**
   (`index.ts`, `style.css`). The floating dropzone pill anchors to the
   leftmost VISIBLE pane body via `positionDropzone`, but multi-pane has

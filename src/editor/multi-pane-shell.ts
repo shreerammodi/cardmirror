@@ -846,7 +846,11 @@ class Slot {
       return;
     }
     const sel = rec.view.state.selection;
-    const hasSel = !sel.empty;
+    // Selection-aware readout is opt-in (`liveSelectionWordCount`),
+    // matching single-pane: when off, always show the whole-doc count
+    // regardless of any selection (the Σ button covers selection counts
+    // on demand).
+    const hasSel = settings.get('liveSelectionWordCount') && !sel.empty;
     const words = hasSel
       ? countReadAloudWords(rec.view.state.doc, sel.from, sel.to)
       : countReadAloudWords(rec.view.state.doc);
@@ -2253,6 +2257,19 @@ function buildDocRecord(
           record.navPanel.update(view.state.doc);
           slot.refreshWordCount();
         }, 200);
+      }
+      // Selection-only changes refresh just this pane's word-count
+      // readout so the read time reflects the selection immediately,
+      // mirroring single-pane. Opt-in (`liveSelectionWordCount`): when
+      // off there's nothing to update. Gated on the selection actually
+      // changing AND a range on either side, so plain cursor moves
+      // (empty → empty) do no work.
+      else if (
+        settings.get('liveSelectionWordCount') &&
+        !prevState.selection.eq(next.selection) &&
+        (!prevState.selection.empty || !next.selection.empty)
+      ) {
+        slot.refreshWordCount();
       }
       // Cheap O(1) chrome refresh — keeps the font-size chip in
       // sync as the cursor moves. `setActiveView`'s call to
