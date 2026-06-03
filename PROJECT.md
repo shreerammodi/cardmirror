@@ -52,10 +52,12 @@ multi-doc workspace · command-palette file search and find/replace ·
 spaced-repetition flashcards · AI cite/alt-text/table/comment features ·
 autosave and crash recovery · desktop auto-update.
 
-**Planned** (rationale in `ARCHITECTURE.md`): the Verbatim cleanup
-ribbon family (AutoNumberTags, ReformatAllCites, ConvertToDefaultStyles,
-…) · a persistent corpus-wide search index · transclusion · real-time
-collaboration · numbered/bulleted lists · per-type display-spacing.
+**Planned** (rationale in `ARCHITECTURE.md`): Verbatim Flow integration ·
+a persistent corpus-wide search index · transclusion · real-time
+collaboration · numbered/bulleted lists · per-type display-spacing. The
+remaining Verbatim cleanup macros (AutoNumberTags, ReformatAllCites,
+ConvertToDefaultStyles, …) aren't planned, though several cleanup
+commands already ship.
 
 **Out of scope:** section/page layout, footnotes, revision-ID metadata,
 non-heading bookmarks, localization. The importer drops these; the

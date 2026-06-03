@@ -442,9 +442,12 @@ user-facing source of truth. The notable design points:
 - Shipped alongside: **F12** clear-to-Normal, **Mod-8** shrink,
   **Alt-F8** copy-previous-cite, plus table and image insertion.
 
-**Planned: the cleanup family** — AutoNumberTags, DeNumberTags,
-ReformatAllCites, FixFakeTags, ConvertToDefaultStyles, and the rest. They
-map directly to schema transforms; registry slots are reserved.
+**The cleanup family.** A few of Verbatim's cleanup commands are shipped —
+Convert Analytics to Tags, Convert Cited Analytics to Tags, Fix
+Formatting Gaps, Remove Hyperlinks, and Select Similar Formatting. The
+rest (AutoNumberTags, DeNumberTags, ReformatAllCites, FixFakeTags,
+ConvertToDefaultStyles, …) map cleanly to schema transforms but aren't
+planned right now.
 
 ## 14. Images and AI
 
@@ -597,7 +600,8 @@ platform-knowledge and declarative-material fit is well grounded; the
 
 ### Planned
 
-- **Verbatim cleanup ribbon family** (§13) — registry slots reserved.
+- **Verbatim Flow integration** — CardMirror's take on Verbatim's
+  Excel-based flowing tool.
 - **Corpus-wide search index** (§11) — the persistent on-disk layer above
   the shipped on-demand file search.
 - **Transclusion.** A `transclusion_ref` node `{source_path,
