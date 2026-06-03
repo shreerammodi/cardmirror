@@ -54,6 +54,7 @@ import { NavigationPanel } from './nav-panel.js';
 import { EditorDragSurface } from './drag-editor-surface.js';
 import { dragController, rewriteHeadingIds } from './drag-controller.js';
 import { countReadAloudWords, formatReadTime, formatNumber } from './word-count.js';
+import { openWordCount } from './word-count-ui.js';
 import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
 import { getSpeechDocResolver } from './speech-doc-registry.js';
 import { sendToSpeech as runSendToSpeech } from './speech-doc-send.js';
@@ -515,9 +516,27 @@ class Slot {
     this.bodyEl.className = 'pmd-pane-body';
     this.paneEl.appendChild(this.bodyEl);
 
-    // Footer (word count + open file button).
+    // Footer (word-count button + word count + open file button).
     const footer = document.createElement('div');
     footer.className = 'pmd-pane-footer';
+    // Σ button — opens the Word Count Selection modal scoped to this
+    // pane's visible doc (mirrors the shared status-bar button that's
+    // hidden in multi-doc mode).
+    const wcBtn = document.createElement('button');
+    wcBtn.type = 'button';
+    wcBtn.className = 'pmd-pane-wc-btn';
+    wcBtn.title = 'Word Count Selection';
+    wcBtn.setAttribute('aria-label', 'Word count selection summary');
+    wcBtn.textContent = 'Σ';
+    wcBtn.addEventListener('mousedown', (e) => e.preventDefault());
+    wcBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rec = this.visible;
+      if (!rec) return;
+      this.shell.focusSlot(this);
+      openWordCount(rec.view);
+    });
+    footer.appendChild(wcBtn);
     this.wcEl = document.createElement('span');
     this.wcEl.className = 'pmd-pane-wc';
     this.wcEl.textContent = '—';

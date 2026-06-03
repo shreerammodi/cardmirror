@@ -8276,6 +8276,24 @@ body.pmd-multi-doc #word-count-display {
   font-size: 0.72rem;
   min-height: 22px;
 }
+.pmd-pane-wc-btn {
+  flex: 0 0 auto;
+  font-family: inherit;
+  background: var(--pmd-c-bg);
+  border: 1px solid var(--pmd-c-border);
+  border-radius: 3px;
+  cursor: pointer;
+  width: 1.05rem;
+  height: 1.05rem;
+  padding: 0;
+  font-size: 0.72rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pmd-c-text);
+}
+.pmd-pane-wc-btn:hover { background: var(--pmd-c-hover); }
 .pmd-pane-wc {
   flex: 1 1 auto;
   white-space: nowrap;

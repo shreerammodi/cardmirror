@@ -79,6 +79,12 @@ see `DETAILED_CHANGELOG.md`.
   Editing toggle, "Extract Undertag: wrap in quotes" (off by default),
   controls whether the excerpt is wrapped in quotes.
 
+- **Word Count Selection button in every multi-pane pane.** The Σ button
+  that opens the Word Count Selection summary, previously only in
+  single-pane view, now appears in each pane's footer in multi-pane mode.
+  Each one counts the document — and selection — in the pane it sits next
+  to.
+
 ### Changed
 
 - **Paragraph navigation lands on cleaner spots.** With a selection,

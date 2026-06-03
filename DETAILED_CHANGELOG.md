@@ -7,6 +7,18 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Word Count Selection button per pane in multi-pane mode**
+  (`multi-pane-shell.ts`). The single-pane status bar's Σ button
+  (`#word-count-btn`, hidden in multi-doc mode) had no equivalent in the
+  pane footers. Each `Slot` footer now builds a `.pmd-pane-wc-btn` before
+  the `.pmd-pane-wc` readout; its click focuses the slot
+  (`shell.focusSlot`) and calls `openWordCount(this.visible.view)` —
+  scoping the modal to that pane's own visible doc and selection rather
+  than the module-level single-pane `view`. `mousedown` is
+  preventDefault'd and the click `stopPropagation`'d like the sibling
+  open-file button; it no-ops when the slot is empty. Styled in
+  `style.css` like `.status-bar-btn`, scaled to the footer.
+
 - **Version / "About this install" in the command palette.** A synthetic
   settings result in `searchSettingsSource` (`quick-card-search-ui.ts`),
   prepended when the query prefix-matches "version" / "about" / "about
