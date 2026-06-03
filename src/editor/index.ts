@@ -3340,8 +3340,19 @@ function makeStarterDoc(): PMNode {
     ),
     blank(),
 
-    // Section 6: Settings
-    n['hat']!.create({ id: newHeadingId() }, schema.text('6. Make it yours')),
+    // Section 6: Learn
+    n['hat']!.create({ id: newHeadingId() }, schema.text('6. Study your evidence')),
+    paraText(
+      'CardMirror can turn evidence into spaced-repetition flashcards. They live only on your machine — they never travel with a .docx you share. Select some text and use Create Flashcard to anchor a question-and-answer or cloze card to it; anchored cards show up in the comments column beside the text they came from.',
+    ),
+    blank(),
+    paraText(
+      'The Home screen\'s Learn section runs your due reviews. With AI features on, CardMirror can draft cards for you too.',
+    ),
+    blank(),
+
+    // Section 7: Settings
+    n['hat']!.create({ id: newHeadingId() }, schema.text('7. Make it yours')),
     paraText(
       'Click ⚙ for Settings and 📖 for the full keyboard reference any time.',
     ),
