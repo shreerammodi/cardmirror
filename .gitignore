@@ -55,6 +55,3 @@ release/
 # other binary attachments referenced from the wishlist.
 WISHLIST.md
 WISHLIST.assets/
-
-# Working note on the documentation revamp — not part of the docs.
-DOCS-FRAMEWORK.md

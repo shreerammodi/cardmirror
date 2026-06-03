@@ -9,6 +9,11 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **A user manual.** A complete guide to the editor — installing, cutting
+  and formatting, the workspace, read mode, flashcards, AI, settings, and
+  shortcuts — now lives at `cardmirror-manual.md`, written in the plain,
+  task-first style of Verbatim's own manual.
+
 - **Notes — a private, threaded annotation.** A fourth kind of comments-bar
   entity, alongside comments, AI notes, and flashcards. Add one with the
   new green **note button** in the comments cluster (its own third column)
