@@ -392,12 +392,12 @@ export interface Settings {
   includeSpeechDocPocket: boolean;
   /** Whether to show the cite preview on hover in the nav pane. */
   showCitePreview: boolean;
-  /** Browser-level spellcheck on the editor surface. Off by default
-   *  because on large debate docs the dictionary tokenization +
-   *  underline overlay is a visible per-keystroke cost; debate
-   *  evidence (technical jargon, author names) also produces mostly
-   *  false-positive squiggles. Users who prefer the safety net can
-   *  flip it on. */
+  /** Spellcheck the editor (custom viewport-scoped checker — see
+   *  `viewport-spellcheck.ts`). Underlines misspellings in the visible
+   *  document, including text in opened files (not just what you type);
+   *  right-click a flagged word for suggestions, Add to Dictionary, or
+   *  Ignore. Off by default because debate evidence (author names,
+   *  jargon) produces many false positives. */
   editorSpellcheck: boolean;
   /** Whether autosave is on. When true, doc-changing edits schedule
    *  a background write-back to the file's existing on-disk
@@ -1178,7 +1178,7 @@ export const SETTING_METADATA: SettingMeta[] = [
     key: 'editorSpellcheck',
     label: 'Editor spellcheck',
     description:
-      "Show browser spell-check red underlines under typed text. Off by default — on large docs the dictionary lookups + underline overlay add visible per-keystroke cost, and debate evidence (technical jargon, author names, citations) generates a lot of false-positive squiggles.",
+      "Underline misspellings in the visible part of the document — including text in files you've opened, not just words you're typing. Right-click a flagged word for suggestions, Add to Dictionary, or Ignore. Off by default: debate evidence (author names, jargon, citations) generates a lot of false-positive squiggles.",
     kind: 'toggle',
     category: 'general',
   },

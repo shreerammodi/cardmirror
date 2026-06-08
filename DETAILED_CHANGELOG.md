@@ -34,10 +34,16 @@ in each release, see `CHANGELOG.md`.
     now always `false`; the prior native-engine wiring
     (`setupSpellChecker`, `webPreferences.spellcheck`, the
     `editor-spellcheck.ts` focus-bounce) is removed.
-  - *Not yet done* (follow-ups): right-click suggestions +
-    add-to-dictionary / ignore (needed for debate evidence, which flags
-    many proper nouns and jargon), and a Web Worker for the dictionary
-    build to remove its one-time main-thread cost.
+  - *Right-click menu.* A `contextmenu` handler on a flagged word (falls
+    through otherwise, so links/images/default menus still win) shows up
+    to 7 `nspell.suggest` results (click to replace), **Add to
+    Dictionary** (persisted to `localStorage['pmd-user-dictionary']`,
+    re-applied via `nspell.add` on load — so it also drops from
+    suggestions), and **Ignore** (session-only suppression). Word
+    verdicts are memoized; the cache is invalidated on add. Menu reuses
+    the `.pmd-nav-context-menu` styling.
+  - *Not yet done*: a Web Worker for the one-time dictionary build (the
+    user accepted the ~67ms hitch for now).
 - **Suppress the auto-update-in-progress messaging on macOS**
   (`apps/desktop/src/main.ts`, `src/editor/settings-ui.ts`). Unsigned
   macOS builds can't self-install via Squirrel.Mac, so the auto-updater

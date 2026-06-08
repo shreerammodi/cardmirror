@@ -16,13 +16,43 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Decoration, DecorationSet, type EditorView } from 'prosemirror-view';
 import { settings } from './settings.js';
+import { showToast } from './toast.js';
 
 const key = new PluginKey<DecorationSet>('viewportSpellcheck');
+
+/** Words the user added to their personal dictionary — persisted and
+ *  global, applied to nspell so they're also dropped from suggestions. */
+const USER_DICT_KEY = 'pmd-user-dictionary';
+const userDict: Set<string> = loadUserDict();
+/** Words the user chose to ignore this session — suppressed but not
+ *  "learned" (not persisted, not added to nspell). */
+const ignored = new Set<string>();
+
+function loadUserDict(): Set<string> {
+  try {
+    const raw = localStorage.getItem(USER_DICT_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr.filter((x): x is string => typeof x === 'string'));
+    }
+  } catch {
+    /* ignore corrupt store */
+  }
+  return new Set();
+}
+function persistUserDict(): void {
+  try {
+    localStorage.setItem(USER_DICT_KEY, JSON.stringify([...userDict]));
+  } catch {
+    /* localStorage full / disabled */
+  }
+}
 
 /** Memoized lookups — debate text repeats words heavily, so a cache
  *  makes the second+ occurrence of every word free. */
 const verdictCache = new Map<string, boolean>();
 function isCorrect(w: string): boolean {
+  if (ignored.has(w)) return true;
   let v = verdictCache.get(w);
   if (v === undefined) {
     v = spell!.correct(w);
@@ -32,7 +62,12 @@ function isCorrect(w: string): boolean {
 }
 
 /** Lazily-built nspell instance, shared across views. */
-let spell: { correct(w: string): boolean } | null = null;
+interface Speller {
+  correct(w: string): boolean;
+  suggest(w: string): string[];
+  add(w: string): unknown;
+}
+let spell: Speller | null = null;
 let building = false;
 async function ensureSpell(onReady: () => void): Promise<void> {
   if (spell || building) return;
@@ -43,7 +78,9 @@ async function ensureSpell(onReady: () => void): Promise<void> {
       import('./dict/en.aff?raw'),
       import('./dict/en.dic?raw'),
     ]);
-    spell = nspell(aff.default, dic.default);
+    const s = nspell(aff.default, dic.default);
+    for (const w of userDict) s.add(w); // teach it the user's words
+    spell = s;
   } finally {
     building = false;
   }
@@ -105,6 +142,28 @@ export function viewportSpellcheckPlugin(): Plugin {
       decorations(state) {
         return key.getState(state);
       },
+      handleDOMEvents: {
+        // Right-click on a flagged word → suggestions + dictionary
+        // actions. Falls through (returns false) for clicks that aren't
+        // on a misspelling, so links/images/default menus still win.
+        contextmenu(view, event) {
+          if (!spell || !settings.get('editorSpellcheck')) return false;
+          const set = key.getState(view.state);
+          if (!set) return false;
+          const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          if (!coords) return false;
+          const pos = coords.pos;
+          const hit = set
+            .find(Math.max(0, pos - 1), pos + 1)
+            .find((d) => d.from <= pos && pos <= d.to);
+          if (!hit) return false;
+          const word = view.state.doc.textBetween(hit.from, hit.to);
+          if (!word) return false;
+          event.preventDefault();
+          showSpellMenu(event.clientX, event.clientY, view, hit.from, hit.to, word);
+          return true;
+        },
+      },
     },
     view(view) {
       let timer = 0;
@@ -164,4 +223,121 @@ export function viewportSpellcheckPlugin(): Plugin {
       };
     },
   });
+}
+
+// ─── Right-click menu: suggestions + dictionary / ignore ─────────────
+
+/** Re-run the visible-range check and push fresh decorations. Used
+ *  after a dictionary / ignore change (which doesn't touch the doc, so
+ *  the normal edit-driven recompute wouldn't fire). */
+function recheck(view: EditorView): void {
+  view.dispatch(view.state.tr.setMeta(key, computeDecos(view)).setMeta('addToHistory', false));
+}
+
+function replaceWord(view: EditorView, from: number, to: number, replacement: string): void {
+  view.dispatch(view.state.tr.insertText(replacement, from, to));
+  view.focus();
+}
+
+function addToDictionary(view: EditorView, word: string): void {
+  userDict.add(word);
+  persistUserDict();
+  spell?.add(word);
+  verdictCache.delete(word);
+  recheck(view);
+  showToast(`Added “${word}” to dictionary.`);
+}
+
+function ignoreWord(view: EditorView, word: string): void {
+  ignored.add(word);
+  recheck(view);
+}
+
+interface SpellMenuItem {
+  label: string;
+  separatorBefore?: boolean;
+  disabled?: boolean;
+  action?: () => void;
+}
+
+let openSpellMenuEl: HTMLElement | null = null;
+
+function showSpellMenu(
+  x: number,
+  y: number,
+  view: EditorView,
+  from: number,
+  to: number,
+  word: string,
+): void {
+  closeSpellMenu();
+
+  const suggestions = (spell?.suggest(word) ?? []).slice(0, 7);
+  const items: SpellMenuItem[] = [];
+  if (suggestions.length === 0) {
+    items.push({ label: 'No suggestions', disabled: true });
+  } else {
+    for (const s of suggestions) {
+      items.push({ label: s, action: () => replaceWord(view, from, to, s) });
+    }
+  }
+  items.push({
+    label: 'Add to Dictionary',
+    separatorBefore: true,
+    action: () => addToDictionary(view, word),
+  });
+  items.push({ label: 'Ignore', action: () => ignoreWord(view, word) });
+
+  const menu = document.createElement('div');
+  menu.className = 'pmd-nav-context-menu';
+  for (const item of items) {
+    if (item.separatorBefore) {
+      const sep = document.createElement('div');
+      sep.className = 'pmd-nav-context-separator';
+      menu.appendChild(sep);
+    }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pmd-nav-context-item';
+    btn.textContent = item.label;
+    if (item.disabled) {
+      btn.disabled = true;
+      btn.classList.add('pmd-nav-context-item-disabled');
+    }
+    btn.addEventListener('click', () => {
+      if (item.disabled || !item.action) return;
+      closeSpellMenu();
+      item.action();
+    });
+    menu.appendChild(btn);
+  }
+
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  const maxX = window.innerWidth - rect.width - 4;
+  const maxY = window.innerHeight - rect.height - 4;
+  menu.style.left = `${Math.min(x, Math.max(0, maxX))}px`;
+  menu.style.top = `${Math.min(y, Math.max(0, maxY))}px`;
+
+  openSpellMenuEl = menu;
+  setTimeout(() => {
+    window.addEventListener('mousedown', maybeCloseSpellMenu, { capture: true });
+    window.addEventListener('keydown', maybeCloseSpellMenu, { capture: true });
+  });
+}
+
+function closeSpellMenu(): void {
+  if (!openSpellMenuEl) return;
+  openSpellMenuEl.remove();
+  openSpellMenuEl = null;
+  window.removeEventListener('mousedown', maybeCloseSpellMenu, { capture: true });
+  window.removeEventListener('keydown', maybeCloseSpellMenu, { capture: true });
+}
+
+function maybeCloseSpellMenu(e: MouseEvent | KeyboardEvent): void {
+  if (e instanceof KeyboardEvent) {
+    if (e.key === 'Escape') closeSpellMenu();
+    return;
+  }
+  if (openSpellMenuEl && !openSpellMenuEl.contains(e.target as Node)) closeSpellMenu();
 }

@@ -24,8 +24,11 @@ see `DETAILED_CHANGELOG.md`.
   even with the setting on. Spellcheck now underlines misspellings in the
   visible part of the document — including text in files you've opened,
   not just words you're currently typing — and works on every platform
-  (the old browser checker didn't render on Linux). It's still off by
-  default; turn it on under Settings → Editing.
+  (the old browser checker didn't render on Linux). **Right-click a
+  flagged word** for spelling suggestions, **Add to Dictionary** (your
+  personal dictionary persists across documents and sessions), or
+  **Ignore**. It's still off by default; turn it on under Settings →
+  Editing.
 
 ### Changed
 
