@@ -7,6 +7,38 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **macOS cross-window bugs fixed: Finder-open duplicate guard + the
+  multi-window three-pane toggle storm** (`apps/desktop/src/main.ts`,
+  `src/editor/settings.ts`, `src/editor/index.ts`). Both were pinned down
+  from the temporary `cross-window-debug.log` probe.
+  - *Duplicate-open guard.* The OS-open path (`openExternalFile` — macOS
+    `open-file`, Windows/Linux argv) spawned a window and registered the
+    path WITHOUT the dedup check the in-app Open dialog runs through
+    `host:open-path-check`, so a Finder double-click of an already-open
+    file opened a second copy — and closing either copy then released the
+    shared `openPathOwners` claim, orphaning the other. Not a path-
+    canonicalization hole (the probe's `pathForensics` were clean: empty
+    `nearMisses`, matching NFC/NFD, no realpath divergence) — a missing
+    call site. Fix: a shared `focusExistingOwner(p, excludeWinId?)`
+    helper focuses the owning window (pruning stale entries);
+    `openExternalFile` calls it before spawning, and `host:open-path-
+    check` now delegates to it.
+  - *Three-pane toggle.* `multiDocWorkspace` is a synced (non-transient)
+    setting, so toggling it in one window fired the `storage` event in
+    every OTHER window, and each ran `handleModeSwitch` independently —
+    two overlapping close rounds whose senders were each other's
+    targets, so both windows closed and none survived to host the new
+    layout (the backgrounded window also took ~9 s to answer its
+    please-close, which read as "nothing happened" and prompted the
+    second toggle). Fix: `notify()` passes a `{ remote }` origin flag to
+    subscribers (true when the change arrived via the storage event); the
+    mode-switch subscriber ignores remote changes, so only the
+    initiating window drives the switch. A `modeSwitchInProgress`
+    re-entrancy guard in `host:journal-and-close-other-windows` is the
+    backstop.
+  The temporary instrumentation stays in this build so the next capture
+  can confirm the fix; it'll be removed once verified.
+
 ## 0.1.0-alpha.9 — 2026-06-03
 
 - **Autosave toggle persists per document across close + reopen**

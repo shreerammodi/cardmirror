@@ -7,6 +7,19 @@ see `DETAILED_CHANGELOG.md`.
 
 ## Unreleased
 
+### Fixed
+
+- **Opening an already-open file from Finder no longer makes a second
+  copy.** Double-clicking a file in Finder (or "Open with… CardMirror")
+  now jumps to the window that already has it open — the same thing the
+  in-app Open dialog has always done.
+
+- **Toggling the three-pane workspace no longer closes all your
+  windows.** With more than one window open, flipping the three-pane
+  setting now reliably reloads into the new layout with your documents
+  intact, instead of occasionally closing every window and reopening
+  none.
+
 ## 0.1.0-alpha.9 — 2026-06-03
 
 ### Added

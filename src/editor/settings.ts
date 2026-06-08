@@ -1590,7 +1590,17 @@ export const SETTING_METADATA: SettingMeta[] = [
   },
 ];
 
-type Listener = (s: Readonly<Settings>) => void;
+/** Origin info handed to settings subscribers. `remote` is true when
+ *  the change arrived from ANOTHER window via the cross-window storage
+ *  event, rather than a `set()` in this window. Subscribers that drive
+ *  window-level side effects — notably the `multiDocWorkspace` mode
+ *  switch, which closes the other windows and reloads — must act on
+ *  LOCAL changes only; otherwise every window runs the switch at once
+ *  and they close each other, leaving nothing open. */
+export interface SettingsChangeMeta {
+  remote: boolean;
+}
+type Listener = (s: Readonly<Settings>, meta: SettingsChangeMeta) => void;
 
 export class SettingsStore {
   private values: Settings;
@@ -1624,7 +1634,7 @@ export class SettingsStore {
           )[key];
         }
         this.values = incoming;
-        this.notify();
+        this.notify(true);
       });
     }
   }
@@ -1728,9 +1738,10 @@ export class SettingsStore {
     }
   }
 
-  private notify(): void {
+  private notify(remote = false): void {
     const snapshot = { ...this.values };
-    for (const listener of this.listeners) listener(snapshot);
+    const meta: SettingsChangeMeta = { remote };
+    for (const listener of this.listeners) listener(snapshot, meta);
   }
 }
 

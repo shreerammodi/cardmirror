@@ -250,6 +250,12 @@ async function openExternalFile(filePath: string): Promise<void> {
   const format: 'cmir' | 'docx' | null =
     ext === '.cmir' ? 'cmir' : ext === '.docx' ? 'docx' : null;
   if (!format) return;
+  // Duplicate-open guard for the OS-open path. The in-app Open dialog
+  // gets this via `host:open-path-check`; Finder / Dock / "Open with…"
+  // double-clicks arrive here and must run the same check, or a file
+  // already open in another window opens a second, conflicting copy
+  // (whichever copy closes first then releases the shared claim).
+  if (focusExistingOwner(filePath)) return;
   const target = pickMultiPaneTarget();
   if (target) {
     // Hand off to the existing workspace — it reads the path and shows
@@ -987,8 +993,23 @@ const MODE_SWITCH_CLOSE_TIMEOUT_MS = 10000;
 // renderer took to wake, journal, and ask to close. TEMPORARY probe.
 const modeSwitchAskedAt = new Map<number, number>();
 
+// True while a mode switch is closing the other windows. Backstop
+// against two concurrent rounds: if two windows each initiated, each
+// would treat the OTHER's surviving host as a window to close, so they
+// would close each other and leave nothing open. The renderer now
+// gates the switch to the initiating window only (remote settings
+// changes don't trigger it); this guard catches anything that slips
+// past.
+let modeSwitchInProgress = false;
+
 ipcMain.handle('host:journal-and-close-other-windows', async (event) => {
   const sender = BrowserWindow.fromWebContents(event.sender);
+  if (modeSwitchInProgress) {
+    xlog('modeswitch-ignored-reentrant', { sender: sender?.id ?? -1 });
+    return;
+  }
+  modeSwitchInProgress = true;
+  try {
   const others = BrowserWindow.getAllWindows().filter(
     (w) => w !== sender && !w.isDestroyed(),
   );
@@ -1040,6 +1061,9 @@ ipcMain.handle('host:journal-and-close-other-windows', async (event) => {
     ),
   );
   xlog('modeswitch-end', { sender: sender?.id ?? -1 });
+  } finally {
+    modeSwitchInProgress = false;
+  }
 });
 
 ipcMain.handle('host:close-self', async (event) => {
@@ -1101,6 +1125,28 @@ const windowOpenPaths = new Map<number, Set<string>>(); // windowId → canonica
  *  always returns the same casing for a given file). */
 function canonicalOpenPath(p: string): string {
   return path.resolve(p);
+}
+
+/** If a live window already owns `p`, focus (and un-minimize) it and
+ *  return true. A stale entry (owner window gone) is cleaned up and
+ *  the function returns false. Shared by the renderer-driven pre-open
+ *  check (`host:open-path-check`) and the OS-open path
+ *  (`openExternalFile`) so Finder / Dock / "Open with…" double-clicks
+ *  get the SAME duplicate-open guard the in-app Open dialog does.
+ *  `excludeWinId` lets a caller treat "already owned by me" as "free." */
+function focusExistingOwner(p: string, excludeWinId?: number): boolean {
+  const norm = canonicalOpenPath(p);
+  const ownerId = openPathOwners.get(norm);
+  if (ownerId === undefined || ownerId === excludeWinId) return false;
+  const ownerWin = BrowserWindow.fromId(ownerId);
+  if (!ownerWin || ownerWin.isDestroyed()) {
+    openPathOwners.delete(norm);
+    windowOpenPaths.get(ownerId)?.delete(norm);
+    return false;
+  }
+  if (ownerWin.isMinimized()) ownerWin.restore();
+  ownerWin.focus();
+  return true;
 }
 
 /** Broadcast the current speech state to every window's renderer.
@@ -1385,18 +1431,10 @@ ipcMain.handle('host:open-path-check', async (event, p: string) => {
     nearMisses,
     ...pathForensics(p),
   });
-  if (ownerId === undefined || ownerId === win.id) return { takenByOther: false };
-  const ownerWin = BrowserWindow.fromId(ownerId);
-  if (!ownerWin || ownerWin.isDestroyed()) {
-    // Stale entry — window died without releasing. Clean up so
-    // the next caller can register fresh.
-    openPathOwners.delete(norm);
-    windowOpenPaths.get(ownerId)?.delete(norm);
-    return { takenByOther: false };
-  }
-  if (ownerWin.isMinimized()) ownerWin.restore();
-  ownerWin.focus();
-  return { takenByOther: true };
+  // Focus the owning window (and clean up a stale entry) via the same
+  // helper the OS-open path uses; `win.id` is excluded so "already
+  // owned by me" reads as free.
+  return { takenByOther: focusExistingOwner(p, win.id) };
 });
 
 // "Show in context" cross-window focus: if another window owns `p`,

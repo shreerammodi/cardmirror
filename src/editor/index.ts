@@ -5836,8 +5836,15 @@ async function mountFromSpawnPayload(
 // reload the page, and let the startup-recovery flow silently
 // reopen them in the new layout. On cancel: revert the setting.
 let modeSwitchInFlight = false;
-settings.subscribe((s) => {
+settings.subscribe((s, meta) => {
   if (modeSwitchInFlight) return;
+  // A `multiDocWorkspace` toggle in ANOTHER window reaches us through
+  // the cross-window storage-event sync. Only the window the user
+  // actually toggled in may drive the switch (close the other windows
+  // and reload) — if every window ran it, each would try to be the
+  // surviving host and close all the others, leaving nothing open. We
+  // still absorb the new value; the initiating window will close us.
+  if (meta.remote) return;
   if (s.multiDocWorkspace === BOOT_MULTI_DOC_WORKSPACE) return;
   void handleModeSwitch(s.multiDocWorkspace);
 });
