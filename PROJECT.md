@@ -50,7 +50,8 @@ project's dominant correctness criterion and is tested against real
 the F-key formatting commands · cards, analytics, tables, and images ·
 read mode · send-to-speech · drag-and-drop reordering · the three-slot
 multi-doc workspace · command-palette file search and find/replace ·
-spaced-repetition flashcards · AI cite/alt-text/table/comment features ·
+spaced-repetition flashcards · AI cite/alt-text/table/comment features
+(comments, notes, and ask-AI work on images too) · editor spellcheck ·
 autosave and crash recovery · desktop auto-update.
 
 **Planned** (rationale in `ARCHITECTURE.md`): Verbatim Flow integration ·

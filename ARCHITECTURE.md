@@ -167,9 +167,10 @@ Two subtleties carry real weight for round-trip:
 
 ### Comments
 
-Each commented range carries `comment_range(threadId)`; thread data
-(author / date / text / `kind` / `parentId`) lives in plugin state keyed
-by threadId. Round-trips to `<w:commentRangeStart/End>` plus
+Each commented range carries `comment_range(threadId)` — on text or on an
+image (an inline atom, which carries the mark on the node itself); thread
+data (author / date / text / `kind` / `parentId`) lives in plugin state
+keyed by threadId. Round-trips to `<w:commentRangeStart/End>` plus
 `word/comments.xml` and `commentsExtended.xml`. AI comments are
 identified by an `AI`-suffixed author so the signal survives docx
 round-trip (Word strips the `kind` field).
@@ -497,8 +498,12 @@ The desktop edition is the production surface for rounds:
   kill and offers crash recovery on next launch.
 - **No surprise updates.** Auto-update is off by default; updates are a
   deliberate manual action.
-- **Spell-check off by default** — continuous background spell-check is a
-  real perf cost on the largest docs (200k+ words). Opt-in.
+- **Spell-check off by default** — a custom viewport-scoped checker
+  (nspell over a bundled dictionary; only the on-screen text is checked,
+  re-run after scroll/edit settles, so cost is bounded regardless of doc
+  size). Off by default because debate evidence — author names, jargon,
+  citations — trips a lot of false positives; opt-in, with right-click
+  suggestions / add-to-dictionary / ignore.
 
 ## 17. Learn (spaced repetition)
 
@@ -578,9 +583,12 @@ platform-knowledge and declarative-material fit is well grounded; the
   the text reference in one copy never touches the schedule.
 - **Anchoring.** A Hypothesis-style descriptor (exact quote + context
   window + approximate position) re-resolves against an edited document,
-  disambiguating duplicates by context then nearest position. An anchor
-  that can't resolve becomes "unanchored" and is re-groundable — and a
-  broken anchor never affects the card's schedule or file association.
+  disambiguating duplicates by context then nearest position. Images join
+  the same scheme: each flattens to a sentinel (object-replacement char +
+  a content fingerprint), so an image — or a selection mixing text and
+  images — anchors by content exactly like text. An anchor that can't
+  resolve becomes "unanchored" and is re-groundable — and a broken anchor
+  never affects the card's schedule or file association.
 - **Scheduling.** A pure binary interval ladder (no ease factor;
   FSRS-ready fields reserved), graded Orbit-style — a forgotten card
   relearns and is retried later in the same session.

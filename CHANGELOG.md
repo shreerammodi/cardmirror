@@ -38,7 +38,7 @@ see `DETAILED_CHANGELOG.md`.
   flagged word** for spelling suggestions, **Add to Dictionary** (your
   personal dictionary persists across documents and sessions), or
   **Ignore**. It's still off by default; turn it on under Settings →
-  Editing.
+  General.
 
 ### Changed
 

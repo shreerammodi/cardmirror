@@ -450,6 +450,16 @@ create an invalid structure don't light up, and bad drops are refused):
 In the [multi-doc workspace](#7-the-multi-doc-workspace), dragging across
 panes copies the content into the other document.
 
+### Spellcheck
+
+Off by default — debate evidence (author names, jargon, citations) trips a
+lot of false positives. Turn it on under **Settings → General → Editor
+spellcheck**. Misspellings in the visible part of the document get a red
+underline, including text in files you've opened — not just words you're
+typing. **Right-click** a flagged word for spelling suggestions, **Add to
+Dictionary** (your personal dictionary persists across documents and
+sessions), or **Ignore** (for this session).
+
 ---
 
 ## 5. Finding things
@@ -667,6 +677,11 @@ holds four kinds of entity, each pinned beside the text it refers to:
 - **Edit in place** — every comment, reply, and note has a pencil button;
   Enter saves, Esc cancels.
 - Click a note's or comment's colored text to jump to its card.
+- **Annotate a picture, too.** Comments, notes, and Ask AI all work on a
+  selected image — or on a span of text that includes images, not just
+  plain text. They re-anchor by content when the document changes, the
+  same as text annotations, and a comment on an image is preserved when
+  you save to Word.
 
 **Privacy.** Private notes, AI notes, and flashcards live in your local
 layer and **do not** get written into the `.docx`/`.cmir` you share — so
@@ -753,7 +768,7 @@ you're offline.
 | Feature | How to run it | What it does |
 |---------|---------------|--------------|
 | **Format Cite** | Mod-Shift-X on a selection | Turns a pasted citation or URL into a properly styled cite, with the cite mark on the author and date. |
-| **Ask AI about selection** | Mod-Shift-Q on a selection | Asks Claude a question about the selected text (with the surrounding card as context); the answer lands as an AI note. Type **@AI** in a note thread to ask a follow-up. |
+| **Ask AI about selection** | Mod-Shift-Q on a selection | Asks Claude a question about the selection — including any images in it (up to five pictures are sent to the model), with the surrounding card as context; the answer lands as an AI note. Works on a selected image on its own, too ("what does this chart show?"). Type **@AI** in a note thread to ask a follow-up. |
 | **Generate alt text** | Right-click an image | Writes an alt-text description and inserts it under the image; offers to keep or regenerate if the image already has alt text. |
 | **Generate table from image** | Right-click an image | Extracts a real, editable table from a picture of one. |
 | **Draft a flashcard** | From Create Flashcard | Drafts a question/answer or cloze from the selection. |
