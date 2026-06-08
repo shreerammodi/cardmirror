@@ -516,7 +516,12 @@ export const deleteAtTagEnd: Command = (state, dispatch) => {
  *     from the body side. Same cross-type folding (analytic in a
  *     card's cite-slot → card_body when merging into an
  *     analytic_unit).
- *   - If the head is non-empty: no-op, swallow the event.
+ *   - If the head is non-empty and the body is EMPTY: the user is just
+ *     removing a blank line below the tag — there's nothing to collide,
+ *     so delete the empty paragraph and put the cursor at the end of the
+ *     tag.
+ *   - If the head is non-empty and the body has content: no-op, swallow
+ *     the event (don't merge body text into the heading).
  *
  * Bodies that aren't the first (cursor at start of body2 in
  * `[tag, body1, body2]`) fall through — default `joinBackward`
@@ -556,7 +561,21 @@ export const backspaceAtFirstBodyStart: Command = (state, dispatch) => {
   if (performEmptyHeadMerge(state, dispatch, container, containerFrom, containerTo, -1)) {
     return true;
   }
-  // Non-empty head — refuse default joinBackward.
+  // Empty body right below the head: there's no content to collide into
+  // the tag, so the user is just trying to delete the blank line. Remove
+  // the empty paragraph and drop the cursor at the end of the head. (The
+  // collision rule below only makes sense when the body has content.)
+  if (cursorChild.content.size === 0) {
+    if (!dispatch) return true;
+    const bodyFrom = $from.before(childDepth);
+    let tr = state.tr.delete(bodyFrom, bodyFrom + cursorChild.nodeSize);
+    // `bodyFrom - 1` is the last position inside the head (just before
+    // its close token) — i.e., the end of the tag's content.
+    tr = tr.setSelection(TextSelection.create(tr.doc, bodyFrom - 1));
+    dispatch(tr.scrollIntoView());
+    return true;
+  }
+  // Non-empty head, non-empty body — refuse default joinBackward.
   return true;
 };
 

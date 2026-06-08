@@ -993,4 +993,42 @@ describe('backspaceAtFirstBodyStart', () => {
     card.forEach((c) => types.push(c.type.name));
     expect(types).toEqual(['tag', 'card_body', 'card_body']);
   });
+
+  it('empty first body + non-empty tag: deletes the blank line, cursor to end of tag', () => {
+    const doc = makeDoc([
+      schema.nodes['card']!.createChecked(null, [
+        tag('TheTag'),
+        schema.nodes['card_body']!.create(null, []), // empty paragraph below the tag
+      ]),
+    ]);
+    const state = stateWithCursor(doc, startOfFirstBody(doc));
+    const next = apply(state, backspaceAtFirstBodyStart);
+    expect(next).not.toBe(null);
+    const card = next!.doc.child(0);
+    expect(card.childCount).toBe(1); // just the tag remains
+    expect(card.firstChild!.type.name).toBe('tag');
+    expect(card.firstChild!.textContent).toBe('TheTag');
+    const sel = next!.selection;
+    expect(sel.$from.parent.type.name).toBe('tag');
+    expect(sel.$from.parentOffset).toBe('TheTag'.length); // cursor at end of tag
+  });
+
+  it('empty first body with another body after: removes only the blank line', () => {
+    const doc = makeDoc([
+      schema.nodes['card']!.createChecked(null, [
+        tag('TheTag'),
+        schema.nodes['card_body']!.create(null, []), // empty first body
+        schema.nodes['card_body']!.create(null, schema.text('keep me')),
+      ]),
+    ]);
+    const state = stateWithCursor(doc, startOfFirstBody(doc));
+    const next = apply(state, backspaceAtFirstBodyStart);
+    expect(next).not.toBe(null);
+    const card = next!.doc.child(0);
+    const types: string[] = [];
+    card.forEach((c) => types.push(c.type.name));
+    expect(types).toEqual(['tag', 'card_body']);
+    expect(card.child(1).textContent).toBe('keep me');
+    expect(next!.selection.$from.parent.type.name).toBe('tag');
+  });
 });

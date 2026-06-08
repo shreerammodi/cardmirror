@@ -7,6 +7,15 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Backspace on an empty first-body slot deletes the blank line**
+  (`src/editor/tag-keymap.ts`). `backspaceAtFirstBodyStart` swallowed
+  Backspace at the start of a card/analytic_unit's first body whenever
+  the head was non-empty (the anti-collision rule). Added an exception:
+  when that body is itself empty (`content.size === 0`) there's nothing
+  to collide, so delete the empty paragraph and place the cursor at the
+  end of the head. Non-empty bodies still no-op. (`card`/`analytic_unit`
+  content is `head (…)*`, so dropping the only body is schema-valid.)
+
 - **`selectCurrentHeading` default-bound to `Alt-a`** (`ribbon-commands.ts`
   `DEFAULT_RIBBON_KEYS`). The command existed but shipped unbound (`''`);
   no conflict with existing defaults. User-rebindable via

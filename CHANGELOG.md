@@ -53,6 +53,12 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Changed
 
+- **Backspace removes a blank line directly below a tag.** An empty
+  paragraph right under a tag or analytic used to swallow Backspace
+  (to protect the heading from absorbing body text); now, since there's
+  nothing to merge, it just deletes the blank line and puts the cursor at
+  the end of the tag. A line with text is still protected.
+
 - **Select Current Heading now has a default shortcut: Alt-A.** The
   command (select the current heading and everything under it) was
   previously unbound; rebind it like any other under Settings → Keyboard

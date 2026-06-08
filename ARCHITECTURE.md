@@ -375,7 +375,7 @@ the classifier needn't special-case that container.
 ### Tag / analytic boundary rules
 
 Pocket/Hat/Block use ProseMirror's defaults. Tag and analytic override
-Backspace, Delete, and Enter (`tag-boundary.ts`, wired ahead of
+Backspace, Delete, and Enter (`tag-keymap.ts`, wired ahead of
 `baseKeymap`). A paragraph counts as **blank** if its trimmed text is
 empty.
 
@@ -396,6 +396,9 @@ empty.
 - **First/last body slot** — Backspace at the start of a card's first
   body, or Delete at the end of its last body, mirror the empty-head
   merge rules above rather than letting Word silently destroy structure.
+  At the first body slot, an **empty** body is deleted outright (a blank
+  line below the tag has nothing to collide, so Backspace removes it and
+  drops the cursor at the tag's end); a non-empty body still no-ops.
 
 ## 13. Ribbon commands
 

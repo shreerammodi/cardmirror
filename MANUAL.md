@@ -422,6 +422,9 @@ deliberately rather than the way they would in Word:
 - **Backspace at the start of a tag** removes a blank line above it;
   otherwise it does nothing (it won't merge body text up into the
   heading).
+- **Backspace on an empty line directly below a tag** deletes that blank
+  line (it used to do nothing). A line *with* text is still left alone,
+  so you can't accidentally merge body text into the heading.
 - **Delete at the end of a tag** merges with the next tag if there is
   one; otherwise nothing.
 - **Enter** at the end of a tag starts a card body; in the middle splits
