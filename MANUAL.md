@@ -45,9 +45,11 @@ These are the things CardMirror does that Verbatim can't, or does as a
 first-class native feature rather than a macro. Each gets full coverage in
 the section linked.
 
-- **[First-class Analytic and Undertag styles](#cards-analytics-and-undertags)**
-  — analytics and undertags are real structural styles the editor
-  understands, not just paragraph formatting.
+- **[Built-in Analytic and Undertag styles](#cards-analytics-and-undertags)**
+  — both ship as first-class structural styles with their own shortcuts and
+  structure-aware handling (read mode, send-to-speech, Extract Undertag).
+  Verbatim doesn't ship them; you'd have to roll your own Word styles, which
+  it wouldn't treat as structure.
 - **[Highlight and shading as independent tracks](#colors-highlight-background-and-font-color)**
   — highlight and background shading are separate, coexisting colors, each
   with its own apply / standardize / convert functions that leave the other
