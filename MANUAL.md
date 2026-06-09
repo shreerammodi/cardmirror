@@ -41,35 +41,65 @@ for the parts that aren't.
 <a id="new-in-cardmirror"></a>
 ### New in CardMirror
 
-These are the things CardMirror does that Verbatim can't. Each gets full
-coverage in the section linked.
+These are the things CardMirror does that Verbatim can't, or does as a
+first-class native feature rather than a macro. Each gets full coverage in
+the section linked.
 
-- **[A real multi-doc workspace](#7-the-multi-doc-workspace)** — three
-  editable panes side by side, each with its own outline and history, and
-  drag-copy between them.
-- **[Read mode that locks the keyboard](#8-reading-and-delivering-a-speech)**
-  — a non-destructive reading view at the podium that stray keystrokes
-  can't edit.
-- **[Spaced-repetition flashcards](#10-learn-spaced-repetition-flashcards)**
-  — study your own evidence; cards live on your machine and never travel
-  with a shared file.
-- **[AI features](#11-ai-features)** — format a cite, repair OCR/PDF
-  extraction errors, ask a question about a selection, or generate alt text
-  and tables from an image.
-- **[Translate a selection](#11-ai-features)** — to the clipboard, with a
-  keyless backend that works even without AI features set up.
-- **[Private notes](#9-comments-and-notes)** — a personal annotation that,
-  like flashcards, stays out of the file you share unless you opt in.
+- **[First-class Analytic and Undertag styles](#cards-analytics-and-undertags)**
+  — analytics and undertags are real structural styles the editor
+  understands, not just paragraph formatting.
+- **[Highlight and shading as independent tracks](#colors-highlight-background-and-font-color)**
+  — highlight and background shading are separate, coexisting colors, each
+  with its own apply / standardize / convert functions that leave the other
+  untouched.
+- **[Acronym variants](#colors-highlight-background-and-font-color)** —
+  emphasize or highlight just the source letters of an acronym (the **U**
+  and **S** in United States) in one keystroke.
+- **[Shrink protections and Condense with warning](#shrink-mod-8)** —
+  Shrink can keep omission notes, warning markers, and your own custom
+  strings at normal size while everything else shrinks.
+- **[Create Reference](#citations)** — copy a formatted reference for the
+  current document to the clipboard, built in.
+- **[Extract Undertag](#document-and-card-cleanup)** — pull a phrase out of
+  a card into a new undertag beneath the tag, leaving the original in place.
+- **[Editing at card boundaries](#editing-at-card-boundaries)** — deliberate
+  behavior for what backspace, delete, and merging do at the edges of a
+  card, tag, or analytic, so the structure stays intact.
+- **[Structure-aware Find](#5-finding-things)** — find results group by
+  structural type by default (with a flag to order by position instead).
+- **[A command palette](#5-finding-things)** that searches your files,
+  your Quick Cards, the dropzone, and your settings from one box.
 - **[Cross-window Quick Cards](#6-quick-cards)** — a tagged snippet
   library with a search palette, available from any window.
 - **[Drag-to-reorder everywhere](#4-editing-structure)** — pick up a card
   or a whole heading and drop it, in the outline or on the page, with
   drop targets that refuse invalid moves.
-- **[Themes and accessibility](#14-appearance-and-accessibility)** — dark
-  mode, dyslexia-friendly fonts, and per-style color overrides that never
-  touch the file.
-- **[A command palette](#5-finding-things)** that searches your files,
-  your Quick Cards, and your settings from one box.
+- **[A real multi-doc workspace](#7-the-multi-doc-workspace)** — three
+  editable panes side by side, each with its own outline and history, and
+  drag-copy between them.
+- **[Read mode that locks the keyboard](#8-reading-and-delivering-a-speech)**
+  — a non-destructive reading view at the podium that stray keystrokes
+  can't edit, with a reading-position marker for stopping mid-card.
+- **[Read-time word counts](#read-time-estimates)** — the status bar shows
+  how long the visible (or selected) text takes to read, per reader, not
+  just a raw word count.
+- **[Send-to-speech with a dropzone](#send-to-speech-and-the-dropzone)** —
+  send cards and headings into a speech doc, with a holding shelf for
+  staging evidence before you place it.
+- **[Spaced-repetition flashcards](#10-learn-spaced-repetition-flashcards)**
+  — study your own evidence; cards live on your machine and never travel
+  with a shared file.
+- **[Private notes](#9-comments-and-notes)** — a personal annotation that,
+  like flashcards, stays out of the file you share unless you opt in.
+- **[AI features](#11-ai-features)** — format a cite, repair OCR/PDF
+  extraction errors, ask a question about a selection, or generate alt text
+  and tables from an image.
+- **[Translate a selection](#11-ai-features)** — to the clipboard, with a
+  keyless backend that works even without AI features set up.
+- **[Display customizations and accessibility](#14-appearance-and-accessibility)**
+  — themes, dyslexia-friendly fonts, per-style colors, and color overrides
+  that change how styles look on your screen without altering the document
+  or its style definitions.
 
 ---
 
