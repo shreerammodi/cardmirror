@@ -426,8 +426,8 @@ deliberately rather than the way they would in Word:
   otherwise it does nothing (it won't merge body text up into the
   heading).
 - **Backspace on an empty line directly below a tag** deletes that blank
-  line (it used to do nothing). A line *with* text is still left alone,
-  so you can't accidentally merge body text into the heading.
+  line. A line *with* text is left alone, so you can't accidentally merge
+  body text into the heading.
 - **Delete at the end of a tag** merges with the next tag if there is
   one; otherwise nothing.
 - **Enter** at the end of a tag starts a card body; in the middle splits
@@ -465,6 +465,10 @@ underline, including text in files you've opened — not just words you're
 typing. **Right-click** a flagged word for spelling suggestions, **Add to
 Dictionary** (your personal dictionary persists across documents and
 sessions), or **Ignore** (for this session).
+
+Leaving spellcheck on slightly degrades editor performance, so if you
+notice typing or scrolling feeling less responsive on a large file, turning
+it off may help.
 
 ---
 
@@ -603,12 +607,17 @@ two improvements:
   Analytics, and highlighted text** stay visible. Loose paragraphs,
   undertags, and un-highlighted body text disappear.
 - It **locks the keyboard**, so a stray key or trackpad twitch at the
-  podium can't edit your file. The one editing action it allows is
-  dropping a **reading-position marker** — visible colored text like
-  "Marked 7:32" at your cursor, matching Verbatim's red-text convention —
-  for when you stop mid-card.
+  podium can't edit your file. The one editing action it allows is dropping
+  a **reading-position marker** — red text like "Marked 7:32" at your
+  cursor (Verbatim's red-text convention), for when you stop mid-card. In
+  read mode it's deliberately effortless: **Space, Enter, or Mod-Shift-D**
+  all drop one; triggering it again on a marker removes it. (Red text stays
+  visible in read mode, so the marker shows.)
 
-Press the eye again or **Esc** to exit. In the
+You can also drop a marker while editing — **Mod-Shift-D** works any time
+(Space and Enter only stand in for it inside read mode).
+
+Press the eye again to exit. In the
 [multi-doc workspace](#7-the-multi-doc-workspace), read mode is
 per-pane, so one slot can be a reading surface while another stays
 editable.
@@ -667,6 +676,10 @@ or in one keystroke with **Save Send Doc (Mod-Alt-S)**.
 
 Toggle the **comments column** on the right with the Comments button. It
 holds four kinds of entity, each pinned beside the text it refers to:
+
+Keeping the comments column open slightly degrades editor performance
+(its cards reposition as you scroll and edit). If a large file feels
+sluggish, hiding it may help.
 
 | Entity | Travels in the shared file? | What it's for |
 |--------|-----------------------------|----------------|
@@ -883,6 +896,11 @@ you launch.
 Auto-check on launch is off by default — turn it on in Settings → General.
 Linux users who installed via the AUR update with `yay -Syu`.
 
+**On macOS, automatic updating doesn't work** — CardMirror can tell you a
+new version is available, but it can't install it for you. Download the
+latest `.dmg` from the releases page and replace the app manually each
+time.
+
 ---
 
 ## 13. Settings reference
@@ -966,10 +984,10 @@ How things look. None of these change the file — only your view (see
 
 - **Theme** — light, dark, or follow the system.
 - **Apply theme to the document area** — off by default, so dark mode
-  darkens only the chrome and the document stays paper-like; on darkens
+  darkens only the interface and the document stays paper-like; on darkens
   the document too.
 - **Icon style** — modern line icons (default) or classic glyphs;
-  chrome only.
+  interface only.
 - **Show doc name in ribbon** — show the active filename as a pill in the
   ribbon's center, handy when the title bar is hidden. Off by default;
   hidden in multi-pane (each pane shows its own chip).
@@ -1075,7 +1093,7 @@ remove one, **↺** to restore its default. A few window-level shortcuts
 - **Shading override colors** — the colors used for the above.
 - **Color overrides** — override any interface color (and document text);
   your picks win over the built-in themes and presets.
-- **Interface font** — the font for the app's chrome (ribbon, dialogs,
+- **Interface font** — the font for the app's interface (ribbon, dialogs,
   navigation, comments), separate from the body font; includes
   dyslexia-friendly options.
 
@@ -1161,6 +1179,7 @@ these to extend the selection.
 | Mod-Shift-X | Format cite from selection |
 | Mod-Shift-R | Repair OCR/PDF text in selection |
 | Mod-Shift-T | Translate selection (to clipboard) |
+| Mod-Shift-D | Toggle a reading-position marker (Space / Enter also work in read mode) |
 
 ### Files and view
 | Shortcut | Action |

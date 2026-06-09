@@ -285,12 +285,17 @@ It does three things:
   using `display:none`. Nothing is destructive; ProseMirror still renders
   everything.
 - **Locks out editing input** so a stray keystroke or trackpad twitch at
-  the podium can't change the doc. Only navigation and a small allowlist
-  work.
+  the podium can't change the doc. The editor stays `editable` (so the
+  caret is placeable) but a `filterTransaction` rejects every doc change
+  except the marker edit and its bounded undo/redo; selection and meta-only
+  transactions pass.
 - **Allows reading-position markers** — the one editing-shaped operation
-  it permits. A keystroke inserts visible colored text ("Marked 7:32") at
-  the cursor, matching Verbatim's red-text convention. It's just styled
-  text, so it survives the return to edit mode and round-trips trivially.
+  it permits. Space, Enter, or the bound shortcut insert visible colored
+  text ("Marked 7:32") at the cursor, matching Verbatim's red-text
+  convention; triggering it on an existing marker removes it (toggle). It's
+  just styled text, so it survives the return to edit mode and round-trips
+  trivially. Each marker is its own undo step, and read-mode undo/redo is
+  bounded to markers placed since entry — it can't reach prior edits.
 
 ### Read-aloud predicate
 

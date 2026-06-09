@@ -181,6 +181,10 @@ export const RIBBON_GROUPS: RibbonGroup[] = [
     commands: ['aiAskAboutSelection', 'aiCreateCite', 'translate', 'repairText'],
   },
   {
+    title: 'Reading',
+    commands: ['toggleReadingMarker'],
+  },
+  {
     title: 'Learn',
     commands: ['createFlashcard', 'manageFlashcards'],
   },

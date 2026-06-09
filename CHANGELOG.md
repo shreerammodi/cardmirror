@@ -9,6 +9,16 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Reading-position marker.** Press **Mod-Shift-D** (rebindable) to drop a
+  red `Marked h:mm` note at the cursor — Verbatim's red-text convention for
+  finding your place when you stop mid-card. Triggering it again while the
+  cursor is on a marker removes it. It works any time, but shines in read
+  mode: there the keyboard is otherwise locked, so **Space**, **Enter**, or
+  the bound shortcut all drop (or clear) a marker, and **undo/redo** is
+  bounded to just the markers you've placed — it won't reach back into edits
+  from before you entered read mode. The marker is plain red text, so it
+  saves to Word like any other colored run.
+
 - **Repair Text (AI).** Select messy OCR / PDF-extracted text and press
   **Mod-Shift-R** to clean up extraction errors — dropped ligatures
   (`signicant` → significant), `rn`/`m` confusions, mid-word hyphenation

@@ -7,6 +7,33 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Reading-position marker** (`src/editor/reading-marker.ts`, read-mode
+  wiring in `src/editor/read-mode-plugin.ts`, ribbon `toggleReadingMarker`).
+  Inserts a red text run `Marked h:mm` (the `font_color` mark at `FF0000`,
+  Verbatim's red-text convention) at the cursor and places the caret after
+  it; the inclusive red mark is stripped from stored marks so it doesn't
+  bleed into the next typing. Toggling: `readingMarkerRunAt` detects when
+  the cursor sits on (or at either edge of) an existing red run — expanded
+  over adjacent marker text nodes — and the command deletes it instead of
+  inserting. Round-trips to Word as a normal colored run.
+  - **Own undo step.** Both the insert and delete paths call
+    `closeHistory(tr)` so each marker is isolated in history — never grouped
+    (PM's `newGroupDelay` / adjacency) with a nearby edit, which would make
+    undoing the marker also revert that edit.
+  - **Read-mode integration.** Read mode now keeps the editor `editable`
+    (caret placeable) and blocks edits via `filterTransaction`, which lets
+    through only transactions flagged `READING_MARKER_META` or
+    `READ_MODE_UNDO_META`. A `handleDOMEvents.keydown` handler (fires even
+    though keymaps don't, under `editable: false` historically — now under
+    the filter) maps bare Space/Enter to the toggle. The plugin's
+    `isReadKept` keeps red marker text visible in read mode.
+  - **Undo bounded to markers.** On read-mode entry the plugin snapshots
+    `baseUndoDepth`; `readModeAwareUndo` (Mod-Z) only undoes while the depth
+    exceeds it, so undo can't reach edits made before read mode.
+    `readModeAwareRedo` (Mod-Y / Mod-Shift-Z) is gated on a `dirtied` flag
+    set by a marker edit, so redo only re-applies undone markers. Both tag
+    their transactions `READ_MODE_UNDO_META` to pass the filter.
+
 - **Slanted caret for pending italic** (`src/editor/italic-caret-plugin.ts`).
   Browsers can't slant the native caret, so when a collapsed cursor's
   effective marks (`storedMarks ?? $from.marks()`) include `italic`, the

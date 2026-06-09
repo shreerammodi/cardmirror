@@ -37,6 +37,7 @@ import { Fragment, type Mark, type MarkType, type Node as PMNode, type ResolvedP
 import { Selection, TextSelection, type Command, type EditorState, type Transaction } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
 import { toggleMark } from 'prosemirror-commands';
+import { toggleReadingMarkerCommand } from './reading-marker.js';
 import { schema } from '../schema/index.js';
 import { newHeadingId } from '../schema/ids.js';
 import {
@@ -3457,6 +3458,7 @@ export type RibbonCommandId =
   | 'applyCite'
   | 'applyUnderline'
   | 'toggleUnderlineTyping'
+  | 'toggleReadingMarker'
   | 'applyEmphasis'
   | 'emphasizeAcronym'
   | 'applyHighlight'
@@ -3599,6 +3601,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'applyCite',
   'applyUnderline',
   'toggleUnderlineTyping',
+  'toggleReadingMarker',
   'applyEmphasis',
   'emphasizeAcronym',
   'applyHighlight',
@@ -3717,6 +3720,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   applyCite: 'Apply Cite Style',
   applyUnderline: 'Toggle Underline',
   toggleUnderlineTyping: 'Underline (toggle while typing)',
+  toggleReadingMarker: 'Reading-position marker (toggle)',
   applyEmphasis: 'Apply Emphasis Style',
   emphasizeAcronym: 'Emphasize Acronym',
   applyHighlight: 'Toggle Highlight',
@@ -3875,6 +3879,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   applyCite: 'F8',
   applyUnderline: ['F9'],
   toggleUnderlineTyping: 'Mod-u',
+  toggleReadingMarker: 'Mod-Shift-d',
   applyEmphasis: 'F10',
   emphasizeAcronym: 'Alt-F10',
   applyHighlight: 'F11',
@@ -4272,6 +4277,7 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
     case 'applyCite': return applyCite();
     case 'applyUnderline': return applyUnderline(ctx.clearFormattingOnNamedStyleToggleOff);
     case 'toggleUnderlineTyping': return toggleUnderlineTyping(ctx.clearFormattingOnNamedStyleToggleOff);
+    case 'toggleReadingMarker': return toggleReadingMarkerCommand;
     case 'applyEmphasis': return applyEmphasis();
     case 'emphasizeAcronym': return emphasizeAcronym();
     case 'applyHighlight': return applyHighlight(ctx.highlightColor);

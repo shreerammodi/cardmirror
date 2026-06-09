@@ -10,7 +10,7 @@
 import { EditorState, Plugin, Selection, TextSelection } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { keymap } from 'prosemirror-keymap';
-import { history, undo, redo } from 'prosemirror-history';
+import { history } from 'prosemirror-history';
 import { baseKeymap } from 'prosemirror-commands';
 import { Node as PMNode, type Mark, DOMSerializer } from 'prosemirror-model';
 import { schema, newHeadingId } from '../schema/index.js';
@@ -95,7 +95,12 @@ import { CommentsColumn, addCommentToSelection, FC_PREFIX, AI_PREFIX, NOTE_PREFI
 import { runAiCreateCite } from './ai/cite-creator.js';
 import { runTranslate } from './translate.js';
 import { runRepairText } from './ai/repair-text.js';
-import { readModePlugin, PMD_READ_MODE_TOGGLE } from './read-mode-plugin.js';
+import {
+  readModePlugin,
+  PMD_READ_MODE_TOGGLE,
+  readModeAwareUndo,
+  readModeAwareRedo,
+} from './read-mode-plugin.js';
 import { learnHighlightPlugin, flashcardRangeAt } from './learn-highlight-plugin.js';
 import { repairHighlightPlugin } from './repair-highlight-plugin.js';
 import { italicCaretPlugin } from './italic-caret-plugin.js';
@@ -3210,7 +3215,10 @@ function applyReadMode(on: boolean): void {
   );
   if (!multiDocActive) refreshReadModeBtn();
   if (view) {
-    view.setProps({ editable: () => !on });
+    // Read mode keeps the editor EDITABLE so the caret stays placeable
+    // (for dropping a reading-position marker); edits are blocked by the
+    // read-mode plugin's filterTransaction instead.
+    view.setProps({ editable: () => true });
     // Send the new state to the read-mode plugin so it (re)builds
     // its text-hiding decoration set. The meta value IS the
     // desired on/off state — the plugin stores it as its own
@@ -3235,7 +3243,9 @@ export function applyReadModeToTarget(
 ): void {
   hostEl.classList.toggle('pmd-read-mode', on);
   hostEl.classList.toggle('pmd-rm-no-emphasis-borders', on && hideEmphasisBorders);
-  targetView.setProps({ editable: () => !on });
+  // Stay editable so the caret is placeable; edits are blocked by the
+  // read-mode plugin's filterTransaction.
+  targetView.setProps({ editable: () => true });
   targetView.dispatch(targetView.state.tr.setMeta(PMD_READ_MODE_TOGGLE, on));
 }
 
@@ -3463,7 +3473,7 @@ function makeNewDocBody(): PMNode {
 export function buildEditorPlugins(): Plugin[] {
   const plugins: Plugin[] = [
     history(),
-    keymap({ 'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo }),
+    keymap({ 'Mod-z': readModeAwareUndo, 'Mod-y': readModeAwareRedo, 'Mod-Shift-z': readModeAwareRedo }),
     // Tag/analytic boundary editing rules (ARCHITECTURE.md §14.3).
     // These run before baseKeymap so they get first crack at
     // Backspace / Delete / Enter when the cursor is in a tag.
