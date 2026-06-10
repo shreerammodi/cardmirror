@@ -723,6 +723,11 @@ function parseRPr(rPr: XmlNode): ParsedRPr {
   // also present in this rPr (order between rStyle and w:u is not
   // guaranteed by OOXML).
   let sawDirectU = false;
+  // <w:i/> is deferred for the same reason: on an undertag run it's the
+  // exporter's parity encoding (the undertag style implies italic
+  // display), not user formatting — importing it as an italic mark
+  // would grow marks on every round-trip.
+  let sawItalic = false;
 
   for (const prop of props) {
     const tag = Object.keys(prop).find((k) => k !== ':@');
@@ -747,7 +752,7 @@ function parseRPr(rPr: XmlNode): ParsedRPr {
       }
       case 'w:i': {
         if (a['w:val'] !== '0' && a['w:val'] !== 'false') {
-          marks.push(schema.marks['italic']!.create());
+          sawItalic = true;
         }
         break;
       }
@@ -833,6 +838,14 @@ function parseRPr(rPr: XmlNode): ParsedRPr {
     // (tag / analytic / pocket / hat / block / undertag) keep
     // underline_direct.
     marks.push(schema.marks['underline_direct']!.create());
+  }
+  if (sawItalic && !marks.some((m) => m.type.name === 'undertag_mark')) {
+    // <w:i/> on an undertag run is swallowed as parity encoding. A
+    // genuine user italic on undertag text is indistinguishable in the
+    // XML (the exporter emits identical runs for both) and renders
+    // identically (the style already displays italic), so this loses
+    // nothing visible — the same accepted trade as underline above.
+    marks.push(schema.marks['italic']!.create());
   }
 
   return { marks };

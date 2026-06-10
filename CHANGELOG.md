@@ -7,6 +7,14 @@ see `DETAILED_CHANGELOG.md`.
 
 ## Unreleased
 
+### Fixed
+
+- **Saving no longer adds italics to undertag text.** Exported files
+  mark undertag runs italic so they display correctly in Word; reopening
+  such a file turned that display hint into real italic formatting on
+  every undertag, every save. Undertags now come back exactly as you
+  wrote them.
+
 ### Added
 
 - **Voice control (alpha, desktop only).** Press **Ctrl-Shift-V** to start a

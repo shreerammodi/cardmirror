@@ -7,6 +7,21 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Undertag italic round-trip fixed** (`src/import/importer.ts`,
+  `parseRPr`). The exporter dual-encodes `undertag_mark` as
+  rStyle="UndertagChar" + `<w:i/>` (the style implies italic display in
+  Word — same parity precedent as underline's `<w:u/>`), but the
+  importer mapped `w:i` → italic unconditionally, so one save/open
+  cycle added a real italic mark to every undertag run. `w:i` is now
+  deferred to the end of the rPr scan (OOXML guarantees no order
+  between rStyle and run properties, the same reason `w:u` defers) and
+  swallowed when `undertag_mark` is present. Consequence, accepted: a
+  *user-applied* italic on undertag text is lost on round-trip — the
+  exporter emits byte-identical runs for undertag and undertag+italic,
+  so no inverse can distinguish them, and rendering is identical either
+  way (the style already displays italic). This mirrors underline's
+  long-standing dual-encoding trade.
+
 ## 0.1.0-alpha.10 — 2026-06-08
 
 - **Reading-position marker** (`src/editor/reading-marker.ts`, read-mode
