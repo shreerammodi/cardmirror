@@ -238,6 +238,35 @@ function reducedMotion(): boolean {
   }
 }
 
+/** Fold the variants the model routinely fails to echo verbatim:
+ *  smart quotes/dashes → ASCII, NBSP → space, and the invisible-ish
+ *  glyphs (pilcrow, soft hyphen, zero-width chars) dropped. Used by the
+ *  skip diagnostic to classify WHY a find missed. */
+export function normalizeForDiagnosis(s: string): string {
+  return s
+    .replace(/[‘’‚]/g, "'")
+    .replace(/[“”„]/g, '"')
+    .replace(/[—–‒]/g, '--')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\u00B6\u00AD\u200B\u200C\u200D\uFEFF]/g, '');
+}
+
+/** Console diagnosis for unplaced fixes — classifies each miss so live
+ *  failures on real documents are attributable: 'normalization' (a
+ *  smart-quote/dash/pilcrow echo problem — a tolerant locator would
+ *  have placed it) vs 'no-match' (the model invented or mangled text). */
+function logUnplaced(flat: FlatSelection, notFound: RepairFix[], overlapped: RepairFix[]): void {
+  if (notFound.length === 0 && overlapped.length === 0) return;
+  const normHay = normalizeForDiagnosis(flat.text);
+  for (const f of notFound) {
+    const kind = normHay.includes(normalizeForDiagnosis(f.find)) ? 'normalization' : 'no-match';
+    console.warn(`[repair] could not place (${kind}): find=${JSON.stringify(f.find)}`);
+  }
+  for (const f of overlapped) {
+    console.warn(`[repair] could not place (overlapped): find=${JSON.stringify(f.find)}`);
+  }
+}
+
 /** Ask the model for fixes over `[from, to)` and locate them. No edits. */
 async function fetchFixes(
   view: EditorView,
@@ -255,7 +284,8 @@ async function fetchFixes(
     temperature: 0,
   });
   const fixes = parseRepairResponse(reply.text);
-  const { located, skipped } = locateFixes(flat, fixes);
+  const { located, skipped, notFound, overlapped } = locateFixes(flat, fixes);
+  logUnplaced(flat, notFound, overlapped);
   return { fixesReturned: fixes.length, located, skipped };
 }
 

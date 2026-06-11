@@ -60,6 +60,97 @@ describe('flattenSelection', () => {
   });
 });
 
+// ---- "could not place suggested fixes" repro (2026-06-10) ----
+//
+// Live runs on formatted cards frequently skip fixes. These tests
+// reproduce the failure classes with the real pipeline. Marks
+// themselves are INNOCENT (first test); the failures are inline
+// pilcrow glyphs and smart punctuation the model fails to echo
+// verbatim, overlapping context windows, and a flatten bug with
+// shared node references. Tests assert CURRENT behavior — the
+// failing classes are pinned as skips until the locator is fixed.
+
+const mk = (name: string, attrs?: Record<string, unknown>) => schema.marks[name]!.create(attrs);
+const run = (text: string, ...marks: ReturnType<typeof mk>[]) => schema.text(text, marks);
+
+/** A realistic condensed cut card body: 8pt cite-marked connective
+ *  text, underlined/highlighted fragments, an inline pilcrow, and
+ *  smart punctuation — the shape imported formatted cards take. */
+function formattedBody() {
+  return schema.nodes['card_body']!.create(null, [
+    run('Much of ', mk('cite_mark'), mk('font_size', { halfPoints: 16 })),
+    run('the critique—which I’ve brought', mk('underline_mark')),
+    run('¶', mk('pilcrow_marker')),
+    run('to “Occupy” London', mk('underline_mark'), mk('highlight', { color: 'yellow' })),
+    run(' suggests thisis a problern', mk('cite_mark'), mk('font_size', { halfPoints: 16 })),
+  ]);
+}
+
+describe('placement on formatted cards (failure repro)', () => {
+  it('marks do NOT break placement: a verbatim find spanning many styled runs places', () => {
+    const doc = makeDoc(card(tag('TAG'), formattedBody()));
+    const flat = flattenSelection(doc, 0, doc.content.size);
+    // The flat text is mark-transparent — styled runs join seamlessly.
+    expect(flat.text).toBe(
+      'TAG\nMuch of the critique—which I’ve brought¶to “Occupy” London suggests thisis a problern',
+    );
+    const { located, skipped } = locateFixes(flat, [
+      { find: 'thisis a problern', replace: 'this is a problem' },
+    ]);
+    expect(located.length).toBe(1);
+    expect(skipped).toBe(0);
+  });
+
+  it('FAILS: model omits the inline pilcrow from its find (condensed cards)', () => {
+    const doc = makeDoc(card(tag('TAG'), formattedBody()));
+    const flat = flattenSelection(doc, 0, doc.content.size);
+    // The doc has "brought¶to"; a model reading the ¶ as noise echoes
+    // "broughtto" — verbatim search misses.
+    const { located, skipped } = locateFixes(flat, [
+      { find: 'broughtto', replace: 'brought to' },
+    ]);
+    expect(located.length).toBe(0); // pinned current behavior
+    expect(skipped).toBe(1);
+  });
+
+  it('FAILS: model normalizes smart punctuation in its find', () => {
+    const doc = makeDoc(card(tag('TAG'), formattedBody()));
+    const flat = flattenSelection(doc, 0, doc.content.size);
+    const { located, skipped, notFound } = locateFixes(flat, [
+      // doc has — and ’ ; model echoes -- and '
+      { find: "critique--which I've brought", replace: "critique—which I've brought it" },
+      // doc has “ ” ; model echoes " "
+      { find: 'to "Occupy" London', replace: 'to "Occupy" London town' },
+    ]);
+    expect(located.length).toBe(0); // pinned current behavior
+    expect(skipped).toBe(2);
+    expect(notFound.length).toBe(2);
+  });
+
+  it('FAILS: overlapping context windows drop the second fix', () => {
+    const doc = makeDoc(card(tag('TAG'), formattedBody()));
+    const flat = flattenSelection(doc, 0, doc.content.size);
+    const { located, skipped, overlapped } = locateFixes(flat, [
+      { find: 'suggests thisis a', replace: 'suggests this is a' },
+      { find: 'thisis a problern', replace: 'thisis a problem' },
+    ]);
+    expect(located.length).toBe(1); // pinned current behavior
+    expect(skipped).toBe(1);
+    expect(overlapped.length).toBe(1);
+  });
+
+  it('FAILS: shared node references suppress the block-boundary newline', () => {
+    // ProseMirror copy/paste reuses node objects — a duplicated
+    // paragraph appears twice as the SAME node, so the parent-identity
+    // boundary check misses and two blocks flatten run-together. The
+    // model then sees (and "fixes") phantom joined words at boundaries.
+    const shared = para('same text.');
+    const doc = makeDoc(shared, shared, para('tail'));
+    const flat = flattenSelection(doc, 0, doc.content.size);
+    expect(flat.text).toBe('same text.same text.\ntail'); // pinned: missing \n
+  });
+});
+
 describe('repair application', () => {
   it('fixes a run-together word within one block', () => {
     const doc = makeDoc(card(tag('TAG'), cardBody('the catsat on it')));
