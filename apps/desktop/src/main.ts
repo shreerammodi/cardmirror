@@ -320,6 +320,20 @@ function createWindow(initialDoc?: InitialDocPayload): BrowserWindow {
     },
   });
 
+  // Mirror tagged renderer console lines to the main-process stdout —
+  // renderer console output is otherwise only visible in DevTools,
+  // which makes diagnostics like the repair-skip log unreadable from
+  // a terminal dev session. Tagged-only: full forwarding would spam.
+  win.webContents.on('console-message', (...args: unknown[]) => {
+    // Electron emits (event, level, message, line, sourceId) in the
+    // legacy signature and (event{level,message,...}) in the new one.
+    const fromEvent = (args[0] as { message?: unknown })?.message;
+    const msg = typeof fromEvent === 'string' ? fromEvent : args[2];
+    if (typeof msg === 'string' && /^\[(repair|cardmirror)\]/.test(msg)) {
+      console.log(`[renderer] ${msg}`);
+    }
+  });
+
   // Stash the initial doc (if any) BEFORE loading the renderer so
   // the renderer's `host:get-initial-doc` call at boot finds it.
   if (initialDoc) {
