@@ -45,7 +45,8 @@ see `DETAILED_CHANGELOG.md`.
   phone too: tap **Repair**, tap a card or heading to set the scope,
   and run Repair Text or Repair Formatting on its body text (tags
   and cites stay out of scope), or **Repair Cite** to re-run the AI
-  cite formatter on the tapped card's citation — with the same
+  cite formatter on the tapped card's citation (or, for a card with
+  no cite paragraph yet, on the first body paragraph under the tag) — with the same
   thinking/Clod progress indicator, fixes, flashes, and single undo
   step as on desktop (and a pointer to Settings if no API key is set
   up on the device; the Clod toggle is in mobile Settings too).

@@ -607,7 +607,11 @@ function runRepairOnUnit(command: 'repairText' | 'repairFormatting'): void {
 }
 
 /** Repair cite: select the tapped card's cite paragraph and run the
- *  AI cite creator on it (the Mod-Shift-X command). */
+ *  AI cite creator on it (the Mod-Shift-X command). A card with no
+ *  cite paragraph falls back to the first non-undertag paragraph
+ *  beneath the tag — imported/OCR'd cards often carry their citation
+ *  as plain body text, which is exactly what the cite creator is
+ *  for. */
 function runRepairCite(): void {
   const view = getActiveView();
   if (!view || !currentUnit || repairBusy) return;
@@ -616,19 +620,30 @@ function runRepairCite(): void {
     return;
   }
   let cite: { from: number; to: number } | null = null;
+  let fallback: { from: number; to: number } | null = null;
   view.state.doc.nodesBetween(currentUnit.from, currentUnit.to, (node, pos) => {
     if (cite) return false;
-    if (node.type.name === 'cite_paragraph') {
+    const t = node.type.name;
+    if (t === 'cite_paragraph') {
       cite = { from: pos + 1, to: pos + node.nodeSize - 1 };
       return false;
     }
+    if (!fallback && node.isTextblock && t !== 'tag' && t !== 'undertag') {
+      fallback = { from: pos + 1, to: pos + node.nodeSize - 1 };
+    }
     return true;
   });
-  if (!cite) {
-    showToast('This card has no cite paragraph');
+  const target = cite ?? fallback;
+  if (!target) {
+    showToast('This card has nothing to make a cite from');
     return;
   }
-  fireRepair(view, (cite as { from: number }).from, (cite as { to: number }).to, 'aiCreateCite');
+  fireRepair(
+    view,
+    (target as { from: number }).from,
+    (target as { to: number }).to,
+    'aiCreateCite',
+  );
 }
 
 /** Select the scope, bring it on-screen (the in-flight thinking/Clod

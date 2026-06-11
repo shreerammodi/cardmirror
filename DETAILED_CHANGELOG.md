@@ -91,8 +91,10 @@ in each release, see `CHANGELOG.md`.
   Repair Text / Repair Formatting — scoped to the unit's BODY blocks
   only (first card_body/paragraph through the last; tags and cites
   never enter the scope) — plus Repair Cite, which selects the
-  tapped card's `cite_paragraph` and fires the AI cite creator (the
-  Mod-Shift-X command). The buttons set a text selection and fire
+  tapped card's `cite_paragraph` — or, when the card has none, the
+  first non-undertag paragraph beneath the tag (imported cards often
+  carry their citation as plain body text) — and fires the AI cite
+  creator (the Mod-Shift-X command). The buttons set a text selection and fire
   the existing ribbon commands — the repair flows read
   `state.selection` and can't tell a tap-made scope from a
   keyboard-made one, so the thinking/Clod progress pill (Clod
