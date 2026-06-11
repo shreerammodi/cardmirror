@@ -240,6 +240,13 @@ interface DocRecord {
    *  the slot's body when this record becomes / stops being visible. */
   editorEl: HTMLElement;
   navPanel: NavigationPanel;
+  /** The slot this record currently lives in — maintained by
+   *  `Slot.push`. The record's dispatchTransaction refreshes THIS
+   *  slot's chrome (word count); the slot captured at build time goes
+   *  stale the moment `sendDocToSlotN` moves the record, which left
+   *  e.g. a moved speech doc's footer count frozen until something
+   *  else refreshed it. */
+  owner: Slot;
   /** Root element holding `navPanel`'s output. Mounted into / detached
    *  from the slot's nav section when visibility changes. */
   navEl: HTMLElement;
@@ -647,6 +654,7 @@ class Slot {
     // switcher forced a re-mount.
     this.detachVisible();
     this.stack.push(record);
+    record.owner = this; // keep the dispatch closure pointed at the live slot
     this.visibleIndex = this.stack.length - 1;
     this.mountVisible();
     // Visibility is owned by the shell: when expand mode is active,
@@ -2251,7 +2259,11 @@ function buildDocRecord(
         record.heavyUpdateTimer = scheduleIdle(() => {
           record.heavyUpdateTimer = null;
           record.navPanel.update(view.state.doc);
-          slot.refreshWordCount();
+          // record.owner, not the build-time `slot` — the record may
+          // have moved panes since (sendDocToSlotN), and refreshing
+          // the old slot left this pane's count stale (live finding:
+          // send-to-speech never updated a moved speech doc's count).
+          record.owner.refreshWordCount();
         }, 200);
       }
       // Selection-only changes refresh just this pane's word-count
@@ -2265,7 +2277,7 @@ function buildDocRecord(
         !prevState.selection.eq(next.selection) &&
         (!prevState.selection.empty || !next.selection.empty)
       ) {
-        slot.refreshWordCount();
+        record.owner.refreshWordCount();
       }
       // Cheap O(1) chrome refresh — keeps the font-size chip in
       // sync as the cursor moves. `setActiveView`'s call to
@@ -2300,6 +2312,8 @@ function buildDocRecord(
     navPanel,
     navEl,
     dragSurface,
+    owner: slot, // re-pointed by Slot.push on every move
+
     heavyUpdateTimer: null,
     journalTimer: null,
     // New docs always start with read mode OFF. The user toggles

@@ -7,7 +7,25 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
-- **Smart Shrink** (`src/editor/ribbon-commands.ts` `smartShrinkText`;
+- **Multi-pane word-count staleness after a pane move fixed**
+  (`src/editor/multi-pane-shell.ts`). Full trace of the live counter,
+  both modes: single-pane refreshes from (a) the heavy debounced flush
+  on doc changes, (b) the selection-only branch under
+  `liveSelectionWordCount`, (c) the settings subscriber, (d) initial
+  mount/setActiveView. Multi-pane mirrors all four — but its (a) and
+  (b) live in the per-record `dispatchTransaction`, which closed over
+  the SLOT captured at `buildDocRecord` time. `sendVisibleToSlotByIndex`
+  (the Send Doc to Slot commands) moves records between slots via
+  `releaseVisible` + `push`, leaving that closure pointed at the old
+  slot: every doc-changed flush and selection refresh then updated the
+  WRONG pane's footer (a visual no-op there, masking the bug), so a
+  moved speech doc's count froze — the reported symptom: Send to
+  Speech in multi-pane didn't update the count until something else
+  (any settings write → refresh-all, or a stack switch → mountVisible)
+  repainted it. DocRecord now carries an `owner: Slot` backref that
+  `Slot.push` re-points on every move, and both dispatch-path refresh
+  sites use `record.owner` instead of the captured slot. Settings-
+  change and mount paths were already parity-correct. (`src/editor/ribbon-commands.ts` `smartShrinkText`;
   ribbon `smartShrink`, Mod-Alt-8, grouped beside Shrink/Regrow).
   One-shot per-paragraph shrink depth: a block with no
   underline_mark / underline_direct / emphasis_mark anywhere goes

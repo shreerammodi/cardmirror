@@ -16,6 +16,15 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Pane word counts update live after Send to Speech in multi-pane.**
+  A document that had been moved between panes (Send Doc to Slot)
+  kept refreshing its OLD pane's word count — so sending cards to a
+  moved speech doc never updated its footer until something else
+  forced a refresh. Each pane's count now follows the document
+  wherever it lives, for edits, sends, and live selection counts
+  alike — matching single-pane behavior under every word-count
+  setting.
+
 - **Repair Text now places far more of its fixes on imported cards.**
   The model frequently echoes straight quotes and apostrophes where
   the document has curly ones, and the exact-match placement quietly
