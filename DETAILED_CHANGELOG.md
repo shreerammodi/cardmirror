@@ -31,7 +31,14 @@ in each release, see `CHANGELOG.md`.
   only an edit middle crossing a boundary is rejected — joining or
   splitting blocks from a non-verbatim match is too ambiguous.
   Middle-only edits can be pure deletions, so both apply sites guard
-  the empty-replace case (insertText('') throws). (2) The reply cap rises
+  the empty-replace case (insertText('') throws). VERBATIM matches
+  also reduce to their middles before overlap resolution — fixes whose
+  context windows overlap now coexist when their actual edits are
+  disjoint (live: a detected "self- help" fix was dropped under
+  another fix's context), with identical zero-width insertions at the
+  same point deduped (the model sometimes lists one correction under
+  two windows; applying both would double the inserted text). (2) The
+  reply cap rises
   4096→16K with stop_reason checked — a truncated fix list previously
   surfaced as an opaque "not valid JSON" error; now it's an actionable
   "repair a smaller region". (3) Every outcome logs a [repair]-tagged

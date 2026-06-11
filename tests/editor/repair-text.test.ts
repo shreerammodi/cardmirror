@@ -192,16 +192,33 @@ describe('placement on formatted cards (failure repro)', () => {
     expect(skipped).toBe(1);
   });
 
-  it('FAILS: overlapping context windows drop the second fix', () => {
+  it('overlapping context windows coexist when their actual EDITS are disjoint', () => {
+    // Both fixes' finds overlap, but the corrections (insert a space;
+    // rn→m) touch different spots — matches reduce to their middles
+    // before overlap resolution, so both place (live finding
+    // 2026-06-10: a detected "self- help" fix was dropped this way).
     const doc = makeDoc(card(tag('TAG'), formattedBody()));
-    const flat = flattenSelection(doc, 0, doc.content.size);
-    const { located, skipped, overlapped } = locateFixes(flat, [
+    const { next, applied, skipped } = repair(doc, [
       { find: 'suggests thisis a', replace: 'suggests this is a' },
       { find: 'thisis a problern', replace: 'thisis a problem' },
     ]);
-    expect(located.length).toBe(1); // pinned current behavior
+    expect(applied).toBe(2);
+    expect(skipped).toBe(0);
+    expect(bodyTexts(next.doc).join('\n')).toContain('suggests this is a problem');
+  });
+
+  it('duplicate insertions at the same point dedupe (one space, not two)', () => {
+    // The model sometimes lists the SAME correction under two context
+    // windows. Both reduce to an identical zero-width insertion —
+    // applying both would yield "this  is".
+    const doc = makeDoc(card(tag('TAG'), formattedBody()));
+    const { next, applied, skipped } = repair(doc, [
+      { find: 'suggests thisis', replace: 'suggests this is' },
+      { find: 'thisis a problern', replace: 'this is a problern' },
+    ]);
+    expect(applied).toBe(1);
     expect(skipped).toBe(1);
-    expect(overlapped.length).toBe(1);
+    expect(bodyTexts(next.doc).join('\n')).toContain('suggests this is a problern');
   });
 
   it('FAILS: shared node references suppress the block-boundary newline', () => {

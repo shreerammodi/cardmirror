@@ -282,23 +282,41 @@ export function locateFixes(
       }
       continue;
     }
-    const from = flat.pos[idx]!;
-    const to = endPos(flat, idx + fix.find.length);
-    cursor = idx + fix.find.length;
-    matched.push({ from, to, replace: fix.replace, fix });
+    // Reduce the verbatim match to its differing MIDDLE — the actual
+    // correction. The agreeing context never needs editing, and using
+    // edit-sized ranges lets fixes with overlapping context windows
+    // coexist (live finding 2026-06-10: a detected "self- help" fix
+    // was dropped because another fix's context covered it).
+    let p = 0;
+    const fLen = fix.find.length;
+    const rLen = fix.replace.length;
+    while (p < fLen && p < rLen && fix.find[p] === fix.replace[p]) p++;
+    let s = 0;
+    while (s < fLen - p && s < rLen - p && fix.find[fLen - 1 - s] === fix.replace[rLen - 1 - s]) s++;
+    const fromFlat = idx + p;
+    const toFlat = idx + fLen - s;
+    const from = fromFlat < flat.pos.length ? flat.pos[fromFlat]! : endPos(flat, fromFlat);
+    const to = endPos(flat, toFlat);
+    cursor = idx + fLen;
+    matched.push({ from, to, replace: fix.replace.slice(p, rLen - s), fix });
   }
   // Drop overlaps (keep earlier), then order high→low for safe application.
   matched.sort((a, b) => a.from - b.from);
   const located: LocatedFix[] = [];
   const overlapped: RepairFix[] = [];
   let lastTo = -1;
+  let lastInsertAt = -1;
   for (const m of matched) {
-    if (m.from < lastTo) {
+    // Overlap, or a duplicate insertion at the same point (the model
+    // sometimes lists one correction under two context windows —
+    // applying both would double the inserted text).
+    if (m.from < lastTo || (m.from === m.to && m.from === lastInsertAt)) {
       overlapped.push(m.fix);
       continue;
     }
     located.push({ from: m.from, to: m.to, replace: m.replace });
     lastTo = m.to;
+    if (m.from === m.to) lastInsertAt = m.from;
   }
   return { located, skipped: notFound.length + overlapped.length, notFound, overlapped };
 }
