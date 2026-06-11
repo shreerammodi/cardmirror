@@ -20,14 +20,18 @@ in each release, see `CHANGELOG.md`.
   flattenSelection block-boundary miss when duplicated blocks share a
   node object (copy/paste reuses nodes). Fixes: (1) when the verbatim
   search misses, a folded-space fallback retries — curly quotes/dashes
-  → ASCII, NBSP → space, soft-hyphen/zero-widths dropped (pilcrow
-  deliberately NOT folded: it's meaningful content and a folded match
-  spanning one would delete it) — and the replacement is REBUILT so
-  the document keeps its original punctuation: the agreeing
-  prefix/suffix of find→replace come from the original text and only
-  the differing middle is spliced from the model's replace. Fallback
-  matches spanning a block boundary are rejected (the rebuilt text
-  would re-insert the newline literally). (2) The reply cap rises
+  → ASCII, ligatures (ﬀ ﬁ ﬂ ﬃ ﬄ) expanded, NBSP/tab/newline → space,
+  soft-hyphen/zero-widths dropped (pilcrow deliberately NOT folded:
+  it's meaningful content and a folded match spanning one would delete
+  it) — and ONLY the differing middle of find→replace (the actual
+  correction) is applied. The agreeing prefix/suffix are never edited,
+  so the document keeps its punctuation and ligatures there, and the
+  context may legitimately span a block boundary (a second live run
+  showed the model writing a space where the doc has a newline);
+  only an edit middle crossing a boundary is rejected — joining or
+  splitting blocks from a non-verbatim match is too ambiguous.
+  Middle-only edits can be pure deletions, so both apply sites guard
+  the empty-replace case (insertText('') throws). (2) The reply cap rises
   4096→16K with stop_reason checked — a truncated fix list previously
   surfaced as an opaque "not valid JSON" error; now it's an actionable
   "repair a smaller region". (3) Every outcome logs a [repair]-tagged

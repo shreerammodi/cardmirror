@@ -137,6 +137,49 @@ describe('placement on formatted cards (failure repro)', () => {
     expect(bodyTexts(next.doc).join('\n')).toContain('which I’ve bought');
   });
 
+  it('ligature in the context places: model echoes "fl" for the doc\'s ﬂ', () => {
+    // Live case 2026-06-10: find "re sis tance float" missed because
+    // the doc has the ﬂ ligature in "ﬂoat". The fold expands ligatures;
+    // the edit (middle) only covers the spacing fix, so the ligature
+    // itself is untouched.
+    const doc = makeDoc(card(tag('TAG'), cardBody('encounters re sis tance ﬂoat dynamics')));
+    const { next, applied } = repair(doc, [
+      { find: 're sis tance float', replace: 'resistance float' },
+    ]);
+    expect(applied).toBe(1);
+    expect(bodyTexts(next.doc).join('\n')).toContain('resistance ﬂoat dynamics');
+  });
+
+  it('context spanning a block boundary places when the edit itself does not', () => {
+    // Live case 2026-06-10: find "re sis tance\" literature" — the doc
+    // has the newline between the quote and "literature"; the model
+    // wrote a space. The agreeing context may cross the boundary; only
+    // the edit middle must stay within one block.
+    const doc = makeDoc(
+      para('discussed in much of the re sis tance'),
+      para('literature today'),
+    );
+    const { next, applied } = repair(doc, [
+      { find: 'the re sis tance literature', replace: 'the resistance literature' },
+    ]);
+    expect(applied).toBe(1);
+    const texts = bodyTexts(next.doc);
+    expect(texts).toEqual(['discussed in much of the resistance', 'literature today']);
+  });
+
+  it('rejects a folded match whose EDIT crosses the block boundary', () => {
+    // The model omitted the newline from a hyphenation fix — the edit
+    // middle itself spans the boundary, so the intent (join blocks?) is
+    // ambiguous; refuse rather than guess.
+    const doc = makeDoc(para('word re-'), para('search more'));
+    const flat = flattenSelection(doc, 0, doc.content.size);
+    const { located, skipped } = locateFixes(flat, [
+      { find: 're- search', replace: 'research' },
+    ]);
+    expect(located.length).toBe(0);
+    expect(skipped).toBe(1);
+  });
+
   it('FAILS (documented limitation): "--" echoed for an em-dash still cannot place', () => {
     // The fold is per-character (— → "-"); a two-character "--" echo
     // doesn't match. Not seen in live logs; revisit if it shows up.

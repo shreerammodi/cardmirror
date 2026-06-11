@@ -151,11 +151,13 @@ export interface LocatedFix {
 }
 
 /** Fold the characters the model routinely fails to echo verbatim,
- *  keeping a map from each folded char back to its raw index. Curly
- *  quotes/dashes → ASCII (1:1), NBSP → space, soft hyphen and
- *  zero-width characters dropped. The pilcrow glyph is deliberately
- *  NOT folded — it's meaningful condensed-card content, and a folded
- *  match spanning one would silently delete it. */
+ *  keeping a map from each folded char back to its raw index (a
+ *  multi-char fold like a ligature maps every output char to the same
+ *  raw index). Curly quotes/dashes -> ASCII, ligatures expanded, NBSP /
+ *  tab / newline -> space, soft hyphen and zero-width characters
+ *  dropped. The pilcrow glyph is deliberately NOT folded: it is
+ *  meaningful condensed-card content, and a folded match spanning one
+ *  would silently delete it. */
 function foldWithMap(s: string): { norm: string; map: number[] } {
   let norm = '';
   const map: number[] = [];
@@ -165,22 +167,28 @@ function foldWithMap(s: string): { norm: string; map: number[] } {
     if (ch === '‘' || ch === '’' || ch === '‚') out = "'";
     else if (ch === '“' || ch === '”' || ch === '„') out = '"';
     else if (ch === '—' || ch === '–' || ch === '‒') out = '-';
-    else if (ch === '\u00A0') out = ' ';
+    else if (ch === '\u00A0' || ch === '\t' || ch === '\n') out = ' ';
+    else if (ch === 'ﬀ') out = 'ff';
+    else if (ch === 'ﬁ') out = 'fi';
+    else if (ch === 'ﬂ') out = 'fl';
+    else if (ch === 'ﬃ') out = 'ffi';
+    else if (ch === 'ﬄ') out = 'ffl';
     else if (ch === '\u00AD' || ch === '\u200B' || ch === '\u200C' || ch === '\u200D' || ch === '\uFEFF') out = '';
     else out = ch;
-    if (out) {
-      norm += out;
-      map.push(i);
-    }
+    norm += out;
+    for (let k = 0; k < out.length; k++) map.push(i);
   }
   return { norm, map };
 }
 
 /** Fallback placement when the verbatim search misses: match in folded
- *  space, then rebuild the replacement so the DOCUMENT'S punctuation
- *  survives — only the model's actual edit (the differing middle of
- *  find→replace) is spliced in; the agreeing prefix/suffix come from
- *  the original text, curly quotes and all. */
+ *  space, then apply ONLY the differing middle of find->replace -- the
+ *  actual correction. The agreeing prefix/suffix are never edited, so
+ *  the document keeps its punctuation and ligatures there, and the
+ *  CONTEXT may even span a block boundary (models often write a space
+ *  where the doc has a newline). Rejected only when the edit itself
+ *  would cross a block boundary -- joining or splitting blocks from a
+ *  non-verbatim match is too risky. */
 function locateNormalized(
   flat: FlatSelection,
   hay: { norm: string; map: number[] },
@@ -198,14 +206,9 @@ function locateNormalized(
     if (idx < 0) idx = i; // remember the global-first as fallback
   }
   if (idx < 0) return null;
-  const flatStart = hay.map[idx]!;
   const flatEnd = hay.map[idx + nf.norm.length - 1]! + 1;
-  // A folded match spanning a block boundary can't be applied safely
-  // (the rebuilt replacement would re-insert the newline as a literal).
-  if (flat.text.slice(flatStart, flatEnd).includes('\n')) return null;
 
-  // Agreeing prefix/suffix between folded find and folded replace —
-  // those regions keep the ORIGINAL document characters.
+  // Agreeing prefix/suffix between folded find and folded replace.
   let p = 0;
   while (p < nf.norm.length && p < nr.norm.length && nf.norm[p] === nr.norm[p]) p++;
   let s = 0;
@@ -214,18 +217,34 @@ function locateNormalized(
     s < nr.norm.length - p &&
     nf.norm[nf.norm.length - 1 - s] === nr.norm[nr.norm.length - 1 - s]
   ) s++;
-  const prefixEndFlat = p > 0 ? hay.map[idx + p - 1]! + 1 : flatStart;
-  const suffixStartFlat = s > 0 ? hay.map[idx + nf.norm.length - s]! : flatEnd;
+  // Don't split a multi-char fold (ligature) at either boundary -- back
+  // the boundary off until it sits between whole raw characters.
+  while (
+    p > 0 &&
+    ((p < nf.norm.length && hay.map[idx + p - 1] === hay.map[idx + p]) ||
+      (p < nr.norm.length && nr.map[p - 1] === nr.map[p]))
+  ) p--;
+  while (
+    s > 0 &&
+    ((s < nf.norm.length &&
+      hay.map[idx + nf.norm.length - s - 1] === hay.map[idx + nf.norm.length - s]) ||
+      (s < nr.norm.length && nr.map[nr.norm.length - s - 1] === nr.map[nr.norm.length - s]))
+  ) s--;
+
+  // The edit region (flat space): everything between the agreeing ends.
+  const midStartFlat = p > 0 ? hay.map[idx + p - 1]! + 1 : hay.map[idx]!;
+  const midEndFlat = s > 0 ? hay.map[idx + nf.norm.length - s]! : flatEnd;
+  if (midStartFlat > midEndFlat) return null; // degenerate alignment
+  if (flat.text.slice(midStartFlat, midEndFlat).includes('\n')) return null;
+
   const midStartRaw = p < nr.norm.length ? nr.map[p]! : fix.replace.length;
   const midEndRaw = s > 0 ? nr.map[nr.norm.length - s]! : fix.replace.length;
-  const replace =
-    flat.text.slice(flatStart, prefixEndFlat) +
-    fix.replace.slice(midStartRaw, midEndRaw) +
-    flat.text.slice(suffixStartFlat, flatEnd);
+  const replace = fix.replace.slice(midStartRaw, midEndRaw);
+  if (!replace && midStartFlat === midEndFlat) return null; // no-op after folding
 
   return {
-    from: flat.pos[flatStart]!,
-    to: endPos(flat, flatEnd),
+    from: flat.pos[midStartFlat] ?? endPos(flat, midStartFlat),
+    to: endPos(flat, midEndFlat),
     replace,
     cursorFlat: flatEnd,
   };
@@ -291,10 +310,12 @@ export function buildRepairTransaction(
 ): { tr: Transaction; ranges: { from: number; to: number }[] } {
   const tr = state.tr;
   // Apply high→low using ORIGINAL positions (non-overlapping, so lower
-  // edits are unaffected by higher ones).
+  // edits are unaffected by higher ones). A middle-only edit can be a
+  // pure deletion — insertText('') would throw on the empty text node.
   for (let i = located.length - 1; i >= 0; i--) {
     const l = located[i]!;
-    tr.insertText(l.replace, l.from, l.to);
+    if (l.replace) tr.insertText(l.replace, l.from, l.to);
+    else if (l.to > l.from) tr.delete(l.from, l.to);
   }
   // Map each original start through the completed mapping to find where the
   // replacement landed; its end is start + replace length.
@@ -422,7 +443,12 @@ async function applyPass(
   let t = selTo;
   for (let i = 0; i < queue.length; i++) {
     const fix = queue[i]!;
-    let tr = view.state.tr.insertText(fix.replace, fix.from, fix.to);
+    if (!fix.replace && fix.to <= fix.from) continue; // nothing to do
+    // A middle-only edit can be a pure deletion — insertText('') would
+    // throw on the empty text node.
+    let tr = fix.replace
+      ? view.state.tr.insertText(fix.replace, fix.from, fix.to)
+      : view.state.tr.delete(fix.from, fix.to);
     if (animate) tr = withRepairFlash(tr, { from: fix.from, to: fix.from + fix.replace.length });
     tr = tr.setMeta('addToHistory', false);
     view.dispatch(animate ? tr.scrollIntoView() : tr);

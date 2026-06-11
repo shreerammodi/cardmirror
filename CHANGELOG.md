@@ -14,9 +14,11 @@ see `DETAILED_CHANGELOG.md`.
   the document has curly ones, and the exact-match placement quietly
   skipped every such fix — on a real card, over half the suggested
   repairs. A fallback matcher now tolerates those echo slips (smart
-  quotes/dashes, non-breaking spaces, invisible characters) while
+  quotes/dashes, ligatures like ﬂ, non-breaking spaces, tabs, invisible
+  characters, and context that crosses a paragraph break) while
   preserving the document's original punctuation — only the actual
-  correction is spliced in. Long fix lists also no longer fail with a
+  correction is applied, never the surrounding context. Long fix lists
+  also no longer fail with a
   cryptic JSON error: the response limit is raised, and genuinely
   oversized lists ask you to repair a smaller region instead.
 
