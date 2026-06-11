@@ -836,6 +836,13 @@ function getOperatingRangesForFormatting(
 ): { ranges: { from: number; to: number }[]; fromShadow: boolean } {
   const op = getOperatingRanges(state);
   if (op.ranges.length === 0) return op;
+  // Layer 3 exists to un-do word-unit absorption in USER selections
+  // (double-click pulls one trailing space onto the edge). Shadow
+  // ranges come from text-RUN boundaries — nothing was absorbed, and
+  // trimming each of N matched runs left N formatted trailing spaces
+  // behind (the burgum-18 cite-debris case: Select Similar → F12
+  // cleaned everything except 55 run-final spaces).
+  if (op.fromShadow) return op;
   return {
     ranges: trimRangesForFormatting(state.doc, op.ranges),
     fromShadow: op.fromShadow,

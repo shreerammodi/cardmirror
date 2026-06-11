@@ -20,7 +20,7 @@ import {
   getSimilarSelectionState,
   type EffectivePtResolver,
 } from '../../src/editor/similar-selection-plugin.js';
-import { applyHighlight } from '../../src/editor/ribbon-commands.js';
+import { applyHighlight, clearToNormal } from '../../src/editor/ribbon-commands.js';
 
 /**
  * Test-side effective-pt resolver. Mirrors the production
@@ -253,6 +253,46 @@ describe('computeSimilarMatches', () => {
     const matches = computeSimilarMatches(doc, cursorPos, null, effectivePt);
     const found = textAtRanges(doc, matches).sort();
     expect(found).toEqual(['Bare 11pt', 'Explicit 11pt']);
+  });
+
+  it('Select Similar → F12 clears matched runs INCLUDING their trailing spaces', () => {
+    // The burgum-18 flow: un-underlined cut text imported as 8pt
+    // cite-marked runs whose boundary spaces live inside the runs.
+    // The Layer-3 trailing-space trim (built for double-click
+    // absorption) used to shave one space per matched run, leaving N
+    // formatted spaces that kept the paragraph classified as a cite
+    // line. Shadow ranges are run-exact — no trim.
+    const cite = () => schema.marks['cite_mark']!.create();
+    const under = () => schema.marks['underline_mark']!.create();
+    const body = schema.nodes['card_body']!.create(null, [
+      schema.text('Much of ', [cite(), fs(16)]),
+      schema.text('the critique', [under()]),
+      schema.text(' to Occupy particularly ', [cite(), fs(16)]),
+      schema.text('around fetishism', [under()]),
+    ]);
+    const doc = docOf(card(tag('T'), body));
+    const state = EditorState.create({
+      doc,
+      schema,
+      plugins: [buildSimilarSelectionPlugin(effectivePt)],
+    });
+    const cursor = findTextStart(state.doc, 'Much of');
+    const positioned = state.apply(
+      state.tr.setSelection(TextSelection.create(state.doc, cursor)),
+    );
+    let withShadow: EditorState | null = null;
+    selectSimilar(effectivePt)(positioned, (tr) => { withShadow = positioned.apply(tr); });
+    expect(getSimilarSelectionState(withShadow!).matches.length).toBe(2);
+
+    let cleared: EditorState | null = null;
+    clearToNormal()(withShadow!, (tr) => { cleared = withShadow!.apply(tr); });
+    expect(cleared).not.toBeNull();
+    let citeRuns = 0;
+    cleared!.doc.descendants((n) => {
+      if (n.isText && n.marks.some((m) => m.type.name === 'cite_mark')) citeRuns++;
+      return true;
+    });
+    expect(citeRuns).toBe(0);
   });
 
   it('whitespace-only runs match on marks alone, ignoring size (cut-doc 8pt spaces)', () => {

@@ -7,31 +7,37 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
-- **Cite classification ignores whitespace-only cite runs; Select
-  Similar size-matching exempts whitespace** (`src/import/importer.ts`
-  `hasCiteMark`, `src/editor/cite-classifier-plugin.ts`,
-  `src/editor/similar-selection-plugin.ts` `computeSimilarMatches`,
-  `src/editor/ribbon-commands.ts` `sizeCycleCommand`). Real-doc case
-  (burgum 18): a card body imported with 55 single-space runs carrying
-  `cite_mark` + 8pt `font_size` — Verbatim's shrunk-space cutting
-  convention keeps whatever character style the cut left on inter-word
-  spaces. Consequences chained: the importer's content-based
+- **Cite-debris cleanup: shadow ranges skip the Layer-3 trim;
+  classification ignores whitespace-only cite runs**
+  (`src/editor/ribbon-commands.ts` `getOperatingRangesForFormatting` +
+  `sizeCycleCommand`, `src/import/importer.ts` `hasCiteMark`,
+  `src/editor/cite-classifier-plugin.ts`,
+  `src/editor/similar-selection-plugin.ts` `computeSimilarMatches`).
+  Real-doc case (burgum 18): a card body imported with its entire
+  un-underlined text as 8pt runs carrying `cite_mark` — the original
+  cut's condensed un-underlined text, cite-styled in the source docx,
+  boundary spaces inside the runs. The failure chain: content-based
   classification (any cite_mark → cite_paragraph) typed the body as a
-  cite line; shrink's scope only collects card_body/paragraph, so F11
-  silently no-opped; and Select Similar Formatting couldn't clean the
-  debris because its fingerprint requires effective-pt equality — the
-  8pt spaces never matched the 13pt sampled text, so F12 left them,
-  and the live classifier (same any-cite_mark rule) kept re-affirming
-  cite_paragraph. Fixes: (1) both `hasCiteMark` sites skip
-  whitespace-only text runs — a paragraph whose only cite-marked
-  content is spaces is body text with styling debris; (2)
-  whitespace-only runs match Select Similar fingerprints on marks
-  alone, size ignored (size is invisible on a space, and sampling one
-  deliberately is not a real flow); (3) shrink with the cursor in a
-  cite_paragraph shows a toast naming the actual blocker instead of
-  silently returning false. Existing .cmir files with debris reclassify
-  on the first edit that touches the paragraph (the classifier is
-  transaction-scoped).
+  cite line; shrink's scope only collects card_body/paragraph, so it
+  silently no-opped; and the natural cleanup — Select Similar on the
+  un-underlined text, then F12 — ALMOST worked: the matches were
+  correct, but `getOperatingRangesForFormatting` applied the Layer-3
+  trailing-space trim (built to undo double-click word-unit
+  absorption, one selection at a time) to EACH of the ~55 matched run
+  ranges, shaving one space per run. Those 55 still-cite-marked spaces
+  kept the live classifier re-affirming cite_paragraph, so the
+  paragraph stayed unshrinkable with no visible formatting left.
+  Fixes: (1) shadow-selection ranges skip the Layer-3 trim — they're
+  text-run-exact, nothing was absorbed; (2) both `hasCiteMark` sites
+  skip whitespace-only runs, so space-only cite debris can't classify
+  a paragraph (root cause — the doc now imports as card_body in the
+  first place; the inverse suite pins it); (3) whitespace-only runs
+  match Select Similar fingerprints on marks alone, size ignored —
+  relevant when re-sampling already-cleaned text whose size no longer
+  matches the debris; (4) shrink with the cursor in a cite_paragraph
+  shows a toast naming the blocker instead of silently returning
+  false. Existing .cmir files with debris reclassify on the first edit
+  that touches the paragraph (the classifier is transaction-scoped).
 
 - **Structural command with a selection inside a same-type head fixed**
   (`src/editor/ribbon-commands.ts` `applyStructuralToSelection` /
