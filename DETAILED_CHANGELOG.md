@@ -7,6 +7,16 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Repair Text: batch apply per pass** (`src/editor/ai/repair-text.ts`
+  `applyPass`). The animated one-at-a-time walk (110ms cadence,
+  per-fix flash + scroll) is replaced by one transaction per pass via
+  `buildRepairTransaction`, with `setRepairFlashes` blinking every
+  replacement range at once — the same presentation as Repair
+  Formatting; the two passes read as two blinks. The walk's
+  reduced-motion fallback became dead code and is removed (the batch
+  path is what it collapsed to). Edits stay off-history with the
+  single-undo collapse at the end, unchanged.
+
 - **Repair Formatting (AI)** (new `src/editor/ai/repair-formatting.ts`;
   ribbon `repairFormatting`, Mod-Alt-R; wired in `index.ts` /
   `ribbon-groups.ts`). Normalizes imported body text to Verbatim's

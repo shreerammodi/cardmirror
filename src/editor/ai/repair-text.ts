@@ -25,11 +25,7 @@ import { settings } from '../settings.js';
 import { callAnthropic, AnthropicError } from './anthropic.js';
 import { showToast } from '../toast.js';
 import { ThinkingTooltip } from './thinking-tooltip.js';
-import {
-  withRepairFlash,
-  setRepairFlashes,
-  clearRepairFlashes,
-} from '../repair-highlight-plugin.js';
+import { setRepairFlashes, clearRepairFlashes } from '../repair-highlight-plugin.js';
 
 export const DEFAULT_REPAIR_PROMPT = `You are a specialized text repair tool. Your task is to identify and fix common OCR and PDF text-extraction errors while preserving the original meaning and content exactly.
 
@@ -543,28 +539,11 @@ export function buildRepairTransaction(
 
 // --------------------------- command ----------------------------
 
-/** Milliseconds between successive replacements in the animated apply —
- *  the "watch it repair" cadence. */
-const STEP_MS = 110;
-/** How long a flash lingers after the last edit before the layer clears
- *  (matches the CSS keyframe length). */
+/** How long the batch flash lingers before the layer clears (matches
+ *  the CSS keyframe length). */
 const FLASH_MS = 1400;
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-
-/** True when motion should be suppressed (user setting or OS preference).
- *  The animated apply collapses to an instant batch + static highlight. */
-function reducedMotion(): boolean {
-  if (typeof document === 'undefined') return false;
-  const m = document.documentElement.getAttribute('data-motion');
-  if (m === 'reduce') return true;
-  if (m === 'normal') return false;
-  try {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  } catch {
-    return false;
-  }
-}
 
 /** Fold the variants the model routinely fails to echo verbatim:
  *  smart quotes/dashes → ASCII, NBSP → space, and the invisible-ish
@@ -640,46 +619,23 @@ function showTooltipAt(view: EditorView, tip: ThinkingTooltip, pos: number): voi
   }
 }
 
-/** Apply a pass's located fixes, ONE transaction at a time. When animating,
- *  each replacement lands with a brief delay, flashes orange, and scrolls
- *  into view. Every edit is kept OFF the undo history
- *  (`addToHistory: false`) — the whole operation is recorded as a single
- *  undo item later, in `collapseToSingleUndo`. Remaining fixes and the
- *  tracked selection bounds are remapped after each edit. Returns the
- *  selection bounds mapped through all edits. */
-async function applyPass(
+/** Apply a pass's located fixes in ONE transaction, flashing every
+ *  replacement at once — matching Repair Formatting's batch behavior
+ *  (the per-fix walk was retired 2026-06-10 by request; the two passes
+ *  read as two blinks). Kept OFF the undo history; `collapseToSingleUndo`
+ *  records the whole repair as one step at the end. Returns the
+ *  selection bounds mapped through the pass. */
+function applyPass(
   view: EditorView,
   located: readonly LocatedFix[],
   selFrom: number,
   selTo: number,
-  animate: boolean,
-): Promise<{ selFrom: number; selTo: number }> {
-  const queue = located.map((l) => ({ ...l }));
-  let f = selFrom;
-  let t = selTo;
-  for (let i = 0; i < queue.length; i++) {
-    const fix = queue[i]!;
-    if (!fix.replace && fix.to <= fix.from) continue; // nothing to do
-    // A middle-only edit can be a pure deletion — insertText('') would
-    // throw on the empty text node.
-    let tr = fix.replace
-      ? view.state.tr.insertText(fix.replace, fix.from, fix.to)
-      : view.state.tr.delete(fix.from, fix.to);
-    if (animate) tr = withRepairFlash(tr, { from: fix.from, to: fix.from + fix.replace.length });
-    tr = tr.setMeta('addToHistory', false);
-    view.dispatch(animate ? tr.scrollIntoView() : tr);
-    for (let j = i + 1; j < queue.length; j++) {
-      queue[j] = {
-        from: tr.mapping.map(queue[j]!.from, -1),
-        to: tr.mapping.map(queue[j]!.to, 1),
-        replace: queue[j]!.replace,
-      };
-    }
-    f = tr.mapping.map(f, -1);
-    t = tr.mapping.map(t, 1);
-    if (animate && i < queue.length - 1) await delay(STEP_MS);
-  }
-  return { selFrom: f, selTo: t };
+): { selFrom: number; selTo: number } {
+  const { tr, ranges } = buildRepairTransaction(view.state, located);
+  tr.setMeta('addToHistory', false);
+  view.dispatch(tr);
+  setRepairFlashes(view, ranges);
+  return { selFrom: tr.mapping.map(selFrom, -1), selTo: tr.mapping.map(selTo, 1) };
 }
 
 /** Collapse the off-history edits made since `startDoc` into a SINGLE undo
@@ -713,10 +669,10 @@ function collapseToSingleUndo(
 
 /** Entry point — fires on the `repairText` ribbon command. Runs up to two
  *  passes (the model occasionally skips a token on a single read; a second
- *  pass over the result catches it), applying each pass's fixes one at a
- *  time so the corrections animate in, then collapsing the whole thing into
- *  a single undo step. The second pass is skipped when the first found
- *  nothing (clean text). */
+ *  pass over the result catches it). Each pass applies in one batch with a
+ *  single flash over every replacement; the whole repair collapses into a
+ *  single undo step at the end. The second pass is skipped when the first
+ *  found nothing (clean text). */
 export function runRepairText(view: EditorView): void {
   if (!settings.get('aiFeaturesEnabled')) {
     showToast('AI features are disabled — enable them in Settings.');
@@ -743,7 +699,6 @@ export function runRepairText(view: EditorView): void {
   const origSelTo = sel.to;
   let selFrom = origSelFrom;
   let selTo = origSelTo;
-  const animate = !reducedMotion();
   // One tooltip, anchored where it spawns (the selection start) and left
   // there for the whole operation — it does NOT chase the highlights.
   const tooltip = new ThinkingTooltip();
@@ -756,7 +711,7 @@ export function runRepairText(view: EditorView): void {
       const p1 = await fetchFixes(view, apiKey, selFrom, selTo);
       let skipped = p1.skipped;
       if (p1.located.length) {
-        const r = await applyPass(view, p1.located, selFrom, selTo, animate);
+        const r = applyPass(view, p1.located, selFrom, selTo);
         selFrom = r.selFrom;
         selTo = r.selTo;
         applied += p1.located.length;
@@ -767,7 +722,7 @@ export function runRepairText(view: EditorView): void {
         const p2 = await fetchFixes(view, apiKey, selFrom, selTo);
         skipped += p2.skipped;
         if (p2.located.length) {
-          const r = await applyPass(view, p2.located, selFrom, selTo, animate);
+          const r = applyPass(view, p2.located, selFrom, selTo);
           selFrom = r.selFrom;
           selTo = r.selTo;
           applied += p2.located.length;
@@ -781,15 +736,11 @@ export function runRepairText(view: EditorView): void {
         return;
       }
 
-      // Let the walk's flashes finish, then fold every edit into one undo.
-      if (animate) await delay(STEP_MS + 200);
+      // Let the final batch flash play out, then fold every edit into
+      // one undo item.
+      await delay(FLASH_MS + 200);
       clearRepairFlashes(view);
-      const region = collapseToSingleUndo(view, startDoc, origSelFrom, origSelTo);
-      if (!animate) {
-        // No walk happened — confirm the repair with one static highlight.
-        setRepairFlashes(view, [region]);
-        setTimeout(() => clearRepairFlashes(view), FLASH_MS + 200);
-      }
+      collapseToSingleUndo(view, startDoc, origSelFrom, origSelTo);
 
       showToast(
         `Repaired ${applied} ${applied === 1 ? 'spot' : 'spots'}` +

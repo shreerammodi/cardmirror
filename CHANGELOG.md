@@ -7,6 +7,13 @@ see `DETAILED_CHANGELOG.md`.
 
 ## Unreleased
 
+### Changed
+
+- **Repair Text applies each pass in one step.** Corrections used to
+  land one at a time in an animated walk; they now apply all at once
+  with a single orange flash over every replacement, matching Repair
+  Formatting. The two passes read as two blinks. Still one undo step.
+
 ### Fixed
 
 - **Repair Text now places far more of its fixes on imported cards.**
