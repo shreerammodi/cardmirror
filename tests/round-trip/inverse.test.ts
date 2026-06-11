@@ -178,6 +178,27 @@ describe('inverse round-trip — editor-authored structure', () => {
   });
 });
 
+describe('inverse round-trip — classification', () => {
+  it('a card_body with cite-styled whitespace debris stays a card_body', async () => {
+    // Cut docs carry the cite character style on shrunk inter-word
+    // spaces deep into body text. Classification ignores whitespace-only
+    // cite runs (importer hasCiteMark), so the body must come back a
+    // card_body — not promote to cite_paragraph (burgum 18 regression).
+    const doc = docOf(
+      schema.nodes['card']!.create(null, [
+        schema.nodes['tag']!.create({ id: newHeadingId() }, schema.text('Tag')),
+        schema.nodes['cite_paragraph']!.create(null, marked('Author 24', m('cite_mark'))),
+        schema.nodes['card_body']!.create(null, [
+          marked('underlined warrant', m('underline_mark')),
+          marked(' ', m('cite_mark'), m('font_size', { halfPoints: 16 })),
+          schema.text('plain continuation'),
+        ]),
+      ]),
+    );
+    await expectInverse(doc, 'cite-debris body');
+  });
+});
+
 describe('inverse round-trip — documented exceptions', () => {
   it('user italic on an undertag run is swallowed into the style', async () => {
     // The exporter emits <w:i/> on every undertag run (the style

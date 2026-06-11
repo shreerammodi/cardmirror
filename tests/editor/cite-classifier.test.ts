@@ -130,6 +130,32 @@ describe('cite classifier plugin', () => {
     expect(card.child(1).type.name).toBe('cite_paragraph');
   });
 
+  // Cut docs carry the cite character style on shrunk inter-word
+  // SPACES deep into body text — debris, not a cite line. A real case
+  // (burgum 18, 2026-06-10) had 55 cite-marked 8pt spaces keeping a
+  // body paragraph classified cite, which made shrink refuse it.
+  it('ignores whitespace-only cite runs: body with cite-marked spaces stays card_body', () => {
+    const doc = makeDoc(
+      cardWith(
+        tagNode('T'),
+        bodyOf(plain('underlined warrant'), cited(' '), plain('more text')),
+      ),
+    );
+    const result = withPlugin(doc);
+    expect(result.firstChild!.child(1).type.name).toBe('card_body');
+  });
+
+  it('demotes a cite_paragraph whose only cite runs are whitespace', () => {
+    const doc = makeDoc(
+      cardWith(
+        tagNode('T'),
+        citeParaOf(plain('body text'), cited(' '), plain('continues')),
+      ),
+    );
+    const result = withPlugin(doc);
+    expect(result.firstChild!.child(1).type.name).toBe('card_body');
+  });
+
   it('classifies multiple bodies in a card independently', () => {
     const doc = makeDoc(
       cardWith(

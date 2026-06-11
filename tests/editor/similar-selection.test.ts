@@ -254,6 +254,22 @@ describe('computeSimilarMatches', () => {
     const found = textAtRanges(doc, matches).sort();
     expect(found).toEqual(['Bare 11pt', 'Explicit 11pt']);
   });
+
+  it('whitespace-only runs match on marks alone, ignoring size (cut-doc 8pt spaces)', () => {
+    // Imported cuts leave 8pt cite-styled SPACES between full-size
+    // runs. Size is invisible on a space; requiring effective-pt
+    // equality made Select Similar → F12 skip exactly that debris.
+    const cite = () => schema.marks['cite_mark']!.create();
+    const body = schema.nodes['card_body']!.create(null, [
+      schema.text('lead words', [cite()]),
+      schema.text(' ', [cite(), fs(16)]),
+      schema.text('tail words', [cite()]),
+    ]);
+    const doc = docOf(card(tag('T'), body));
+    const cursorPos = findTextStart(doc, 'lead words');
+    const matches = computeSimilarMatches(doc, cursorPos, null, effectivePt);
+    expect(textAtRanges(doc, matches)).toEqual(['lead words', ' ', 'tail words']);
+  });
 });
 
 // ---- helpers ----

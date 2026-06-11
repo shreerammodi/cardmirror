@@ -1038,9 +1038,15 @@ function assembleDoc(paragraphs: ParaInfo[]): PMNode {
   }
 }
 
-/** True if any inline node in the array carries the cite_mark mark. */
+/** True if any NON-WHITESPACE inline node carries the cite_mark mark.
+ *  Cut docs routinely carry the cite character style on shrunk
+ *  inter-word spaces deep into body text (Verbatim's 8-pt-space
+ *  convention keeps whatever rStyle the cut left on them) — that's
+ *  styling debris, not a cite line, and classifying on it turned body
+ *  paragraphs into cite_paragraphs that e.g. refuse to shrink. */
 function hasCiteMark(inlines: readonly PMNode[]): boolean {
   for (const n of inlines) {
+    if (n.isText && (!n.text || !n.text.trim())) continue;
     if (n.marks.some((m) => m.type.name === 'cite_mark')) return true;
   }
   return false;

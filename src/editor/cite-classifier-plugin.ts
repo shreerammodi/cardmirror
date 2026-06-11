@@ -77,7 +77,14 @@ function hasCiteMark(node: PMNode): boolean {
   let has = false;
   node.descendants((child) => {
     if (has) return false;
-    if (child.isText && child.marks.some((m) => m.type.name === 'cite_mark')) {
+    if (
+      child.isText &&
+      // Whitespace-only runs don't count: imported cut docs carry the
+      // cite style on shrunk inter-word spaces deep into body text —
+      // debris, not a cite line (same rule as the importer).
+      child.text?.trim() &&
+      child.marks.some((m) => m.type.name === 'cite_mark')
+    ) {
       has = true;
     }
     return undefined;

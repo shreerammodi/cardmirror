@@ -322,7 +322,12 @@ export function computeSimilarMatches(
     if (!node.isText) return true;
     if (!parent || parent.type.name !== fp.parentTypeName) return true;
     if (!marksEqual(stripFontSize(node.marks), fp.marks)) return true;
-    if (effectivePt(node, parent) !== fp.effectivePt) return true;
+    // Whitespace-only runs match on marks alone — size is invisible on
+    // a space, and cut docs leave 8-pt cite-styled spaces between
+    // full-size runs. Requiring size equality made Select Similar →
+    // F12 skip exactly the debris it exists to clean up.
+    const whitespaceOnly = !node.text || !node.text.trim();
+    if (!whitespaceOnly && effectivePt(node, parent) !== fp.effectivePt) return true;
     const start = Math.max(from, pos);
     const end = Math.min(to, pos + node.nodeSize);
     if (start < end) out.push({ from: start, to: end });

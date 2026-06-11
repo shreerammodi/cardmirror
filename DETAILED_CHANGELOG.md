@@ -7,6 +7,32 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Cite classification ignores whitespace-only cite runs; Select
+  Similar size-matching exempts whitespace** (`src/import/importer.ts`
+  `hasCiteMark`, `src/editor/cite-classifier-plugin.ts`,
+  `src/editor/similar-selection-plugin.ts` `computeSimilarMatches`,
+  `src/editor/ribbon-commands.ts` `sizeCycleCommand`). Real-doc case
+  (burgum 18): a card body imported with 55 single-space runs carrying
+  `cite_mark` + 8pt `font_size` — Verbatim's shrunk-space cutting
+  convention keeps whatever character style the cut left on inter-word
+  spaces. Consequences chained: the importer's content-based
+  classification (any cite_mark → cite_paragraph) typed the body as a
+  cite line; shrink's scope only collects card_body/paragraph, so F11
+  silently no-opped; and Select Similar Formatting couldn't clean the
+  debris because its fingerprint requires effective-pt equality — the
+  8pt spaces never matched the 13pt sampled text, so F12 left them,
+  and the live classifier (same any-cite_mark rule) kept re-affirming
+  cite_paragraph. Fixes: (1) both `hasCiteMark` sites skip
+  whitespace-only text runs — a paragraph whose only cite-marked
+  content is spaces is body text with styling debris; (2)
+  whitespace-only runs match Select Similar fingerprints on marks
+  alone, size ignored (size is invisible on a space, and sampling one
+  deliberately is not a real flow); (3) shrink with the cursor in a
+  cite_paragraph shows a toast naming the actual blocker instead of
+  silently returning false. Existing .cmir files with debris reclassify
+  on the first edit that touches the paragraph (the classifier is
+  transaction-scoped).
+
 - **Structural command with a selection inside a same-type head fixed**
   (`src/editor/ribbon-commands.ts` `applyStructuralToSelection` /
   `transformDocChild`). With a non-empty selection, F7 routed through

@@ -34,6 +34,17 @@ see `DETAILED_CHANGELOG.md`.
   doing work during drags. Long sessions that open and close many
   files (a tournament day) no longer accumulate that weight.
 
+- **Body paragraphs with leftover cite styling on spaces now behave
+  like body text.** Imported cuts often carry the cite character style
+  on the shrunk spaces between words, deep into card bodies. Those
+  invisible runs made the whole paragraph count as a cite line — so
+  Shrink refused it, and Select Similar Formatting couldn't catch the
+  spaces (their 8pt size didn't match the sampled text). Now:
+  whitespace-only runs don't make a paragraph a cite line, Select
+  Similar matches spaces by formatting alone (size ignored), and
+  Shrink tells you when the cursor is in an actual cite line instead
+  of silently doing nothing.
+
 - **F7 with text selected inside a tag no longer breaks up the card.**
   Selecting a word in a tag and pressing F7 quietly pushed the card's
   cite and body out as plain paragraphs (the cite lost its formatting;

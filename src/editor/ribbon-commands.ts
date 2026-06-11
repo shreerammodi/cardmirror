@@ -48,6 +48,7 @@ import {
   toggleCase,
 } from './condense.js';
 import { applyPlainPasteFromText, togglePlainPaste } from './paste-plugin.js';
+import { showToast } from './toast.js';
 import { getElectronHost, getHost } from './host/index.js';
 import { classifyChar, isWordChar } from './word-break.js';
 import {
@@ -2409,7 +2410,18 @@ function sizeCycleCommand(
 ): Command {
   return (state, dispatch) => {
     const ranges = computeShrinkScope(state);
-    if (ranges.length === 0) return false;
+    if (ranges.length === 0) {
+      // The common dead-end is a cite line that READS as body text
+      // (imported cite-style debris kept the paragraph classified as
+      // cite) — silently refusing made that undiagnosable. Still
+      // returns false: the command didn't run.
+      if (dispatch && state.selection.$from.parent.type.name === 'cite_paragraph') {
+        showToast('This paragraph is a cite line — shrink works on body text', {
+          durationMs: 2200,
+        });
+      }
+      return false;
+    }
 
     // If the protect-restore setting is on, identify protected spans
     // (built-in omissions + warning markers + user custom rules + auto-
