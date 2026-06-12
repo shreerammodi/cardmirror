@@ -7,6 +7,22 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Mobile starter doc** (`index.ts`, `makeMobileStarterDoc` +
+  `isMobileLayout`). `makeNewDocBody` now picks a layout-specific
+  onboarding doc: the desktop starter is all ribbon buttons / F-keys /
+  Mod-chords, so on the mobile layout it would describe controls that
+  don't exist. The mobile starter introduces the real touch affordances
+  (☰ outline, ⋮ menu, Read/Move/Repair mode bar). The layout decision
+  reuses `resolveMobileLayout`, recomputed because `makeNewDocBody` runs
+  before the boot-time `BOOT_MOBILE` constant initializes.
+
+- **Mobile nav drawer slid out under the mode sheets** (`style.css`). The
+  drawer was `z-index: 320`, below the move/repair bottom sheet (325, which
+  reuses `.pmd-mobile-movesheet`), the generic sheet (330), and the
+  badge/popup layer (340), so opening the outline in Repair/Move mode left
+  the sheet on top. Lifted the drawer to 350 and its scrim to 345 so the
+  nav pane (and its dimming scrim) sit above every mobile bottom sheet.
+
 - **Voice startup crashed on macOS: missing `vosk_recognizer_set_grm`**
   (`apps/desktop/src/voice/vosk.ts`). The macOS build is pinned to libvosk
   0.3.42 (the last with a prebuilt macOS binary); the dynamic-grammar

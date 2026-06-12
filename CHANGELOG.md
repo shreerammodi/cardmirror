@@ -13,7 +13,18 @@ see `DETAILED_CHANGELOG.md`.
   bar and rebindable under Settings → Keyboard shortcuts, like the other
   Quick Cards actions.
 
+### Changed
+
+- **The welcome document matches your device.** On the mobile view, the
+  onboarding starter now explains the touch interface (the ☰ outline, the
+  Read / Move / Repair mode bar) instead of the desktop ribbon and keyboard
+  shortcuts.
+
 ### Fixed
+
+- **Mobile: the outline drawer slides out on top of the mode panels.**
+  Opening the outline while the Repair (or Move) panel was up left the
+  panel covering the drawer; the drawer now sits above it.
 
 - **Voice control now starts on macOS.** The packaged Mac build bundles an
   older libvosk that lacks the dynamic-grammar function, so starting voice

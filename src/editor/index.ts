@@ -3528,14 +3528,70 @@ function makeBlankNewDoc(): PMNode {
   ]);
 }
 
+/** Mobile-view onboarding doc — the desktop starter is all ribbon
+ *  buttons, F-keys, and Mod-chords, none of which exist in the touch UI.
+ *  This one introduces the actual mobile affordances (the ☰ outline, the
+ *  ⋮ menu, the Read/Move/Repair mode bar). */
+function makeMobileStarterDoc(): PMNode {
+  const n = schema.nodes;
+  const paraText = (text: string) => n['paragraph']!.create(null, schema.text(text));
+  const paraIndented = (text: string) =>
+    n['paragraph']!.create({ indent: 720 }, schema.text(text));
+  const blank = () => n['paragraph']!.create(null);
+
+  return n['doc']!.createChecked(null, [
+    n['pocket']!.create({ id: newHeadingId() }, schema.text('Welcome to CardMirror')),
+    paraText(
+      'This is the mobile view — a quick way to read, navigate, and lightly edit your debate files. It opens and saves the same Word .docx files as Verbatim and the CardMirror desktop app.',
+    ),
+    blank(),
+
+    n['hat']!.create({ id: newHeadingId() }, schema.text('1. Open a file')),
+    paraText(
+      'Tap ⋮ (top-right) to open a Verbatim or CardMirror file, or start a new one. Saving writes back the same format. CardMirror is alpha software — save often and keep a Verbatim copy of anything important.',
+    ),
+    blank(),
+
+    n['hat']!.create({ id: newHeadingId() }, schema.text('2. Find your way around')),
+    paraText(
+      'Tap ☰ (top-left) for the outline — every Pocket, Hat, Block, and Tag in the document. Tap an entry to jump straight to it.',
+    ),
+    blank(),
+
+    n['hat']!.create({ id: newHeadingId() }, schema.text('3. The mode bar')),
+    paraText('The bar along the bottom sets what a tap does:'),
+    paraIndented('◉ Read — study the document; tap text to drop a reading marker.'),
+    paraIndented('✥ Move — tap a card or heading to pick it up and drop it somewhere new.'),
+    paraIndented('✦ Repair — tap a card to clean up its formatting.'),
+    blank(),
+
+    n['hat']!.create({ id: newHeadingId() }, schema.text('4. Cutting and full editing live on the desktop')),
+    paraText(
+      'The mobile view is built for reading, navigating, and quick fixes. For cutting cards, structural edits, and the full keyboard workflow, open the same file in the CardMirror desktop app — it is the same document.',
+    ),
+  ]);
+}
+
+/** Whether this session is using the mobile (touch) layout. Mirrors the
+ *  boot-time `BOOT_MOBILE` decision, recomputed here because
+ *  `makeNewDocBody` runs before that constant is initialized. */
+function isMobileLayout(): boolean {
+  return resolveMobileLayout(settings.get('mobileLayout'), {
+    hostKind: getHost().kind,
+    coarsePointer:
+      typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches,
+    viewportWidth: window.innerWidth,
+  });
+}
+
 /** Pick between the onboarding starter and a blank doc based on
  *  the `showOnboardingStarter` setting. Single entry point for
  *  "what does a fresh doc look like?" so the initial mount and the
- *  New flow stay in lockstep. */
+ *  New flow stay in lockstep. The starter is layout-specific so the
+ *  guidance matches the UI the user is actually looking at. */
 function makeNewDocBody(): PMNode {
-  return settings.get('showOnboardingStarter')
-    ? makeStarterDoc()
-    : makeBlankNewDoc();
+  if (!settings.get('showOnboardingStarter')) return makeBlankNewDoc();
+  return isMobileLayout() ? makeMobileStarterDoc() : makeStarterDoc();
 }
 
 /**
