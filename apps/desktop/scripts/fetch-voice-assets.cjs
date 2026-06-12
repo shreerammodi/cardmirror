@@ -14,13 +14,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const VOSK_VERSION = '0.3.45';
+// vosk stopped shipping prebuilt macOS binaries after 0.3.42 — there is
+// no osx zip or macOS wheel for 0.3.45 on either GitHub or PyPI, so the
+// darwin build pins to 0.3.42. Its libvosk.dylib is a universal2
+// (arm64 + x86_64) binary, so it runs natively on both Apple Silicon and
+// Intel, and its C API is compatible with the 0.22 model we ship.
+const VOSK_MAC_VERSION = '0.3.42';
 const MODEL_NAME = 'vosk-model-en-us-0.22-lgraph';
 const MODEL_URL = `https://alphacephei.com/vosk/models/${MODEL_NAME}.zip`;
 
 const PLATFORMS = {
-  linux: { zip: `vosk-linux-x86_64-${VOSK_VERSION}.zip`, lib: 'libvosk.so' },
-  darwin: { zip: `vosk-osx-${VOSK_VERSION}.zip`, lib: 'libvosk.dylib' },
-  win32: { zip: `vosk-win64-${VOSK_VERSION}.zip`, lib: 'libvosk.dll' },
+  linux: { version: VOSK_VERSION, zip: `vosk-linux-x86_64-${VOSK_VERSION}.zip`, lib: 'libvosk.so' },
+  darwin: { version: VOSK_MAC_VERSION, zip: `vosk-osx-${VOSK_MAC_VERSION}.zip`, lib: 'libvosk.dylib' },
+  win32: { version: VOSK_VERSION, zip: `vosk-win64-${VOSK_VERSION}.zip`, lib: 'libvosk.dll' },
 };
 
 const plat = PLATFORMS[process.platform];
@@ -72,7 +78,7 @@ async function ensureLib() {
     copyLibs(path.join(spike, 'lib'));
     return;
   }
-  const url = `https://github.com/alphacep/vosk-api/releases/download/v${VOSK_VERSION}/${plat.zip}`;
+  const url = `https://github.com/alphacep/vosk-api/releases/download/v${plat.version}/${plat.zip}`;
   const tmpZip = path.join(dest, '_lib.zip');
   const tmpDir = path.join(dest, '_lib');
   await download(url, tmpZip);
