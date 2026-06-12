@@ -193,6 +193,10 @@ export interface CardAnalysis {
    *  emphasis layer. Computed here because models reliably miss the
    *  ABSENCE of a signature; the request states it as a fact. */
   hasPlainUnderline: boolean;
+  /** The card's base font size in half-points (the largest size covering
+   *  ≥10% of chars, else the modal size) — surfaced so the request can
+   *  state the size relationship for size-encoded (pattern-4) cards. */
+  baseHalfPoints: number;
 }
 
 export function signatureKey(flags: ReadonlySet<FormatFlag>): string {
@@ -305,7 +309,50 @@ export function analyzeCard(group: readonly BodyBlock[]): CardAnalysis {
     (r) => (r.flags.has('u') || r.flags.has('du')) && !r.flags.has('b'),
   );
 
-  return { blocks, charPos, texts, runs, signatures, hasPlainUnderline };
+  return { blocks, charPos, texts, runs, signatures, hasPlainUnderline, baseHalfPoints: base };
+}
+
+function formatPt(halfPoints: number): string {
+  const pt = halfPoints / 2;
+  return Number.isInteger(pt) ? String(pt) : pt.toFixed(1);
+}
+
+/** The FACTS bullets appended to a card request. Models reliably miss the
+ *  ABSENCE of a signature, so the request states the underline situation as
+ *  a fact. Three cases:
+ *   - underlining present, some non-bold → bold+underline is a stand-out
+ *     emphasis layer (pattern 2/3).
+ *   - underlining present, all bold → bold+underline IS the underline pass.
+ *   - NO underlining + a base/shrunk size split → size-encoded (pattern 4):
+ *     state the base size and shrunk share AND the direction (base-size was
+ *     underlined, shrunk is unread), because the shrunk text is usually the
+ *     majority and the model otherwise underlines it backwards. */
+export function buildFacts(analysis: CardAnalysis): string[] {
+  const { runs } = analysis;
+  const hasAnyUnderline = runs.some((r) => r.flags.has('u') || r.flags.has('du'));
+  if (hasAnyUnderline) {
+    return [
+      analysis.hasPlainUnderline
+        ? 'This card HAS plain (non-bold) underlining — bold+underline is a stand-out layer on top of it.'
+        : 'This card has NO plain (non-bold) underlining — ALL underlined text is bold, so bold+underline IS the underline pass (there was no emphasis pass).',
+    ];
+  }
+  let smallChars = 0;
+  let baseChars = 0;
+  for (const r of runs) {
+    const n = r.end - r.start;
+    if (r.flags.has('small')) smallChars += n;
+    else baseChars += n;
+  }
+  if (smallChars > 0 && baseChars > 0) {
+    const basePt = formatPt(analysis.baseHalfPoints);
+    const pct = Math.round((smallChars / (smallChars + baseChars)) * 100);
+    return [
+      'This card has NO underlining at all — it is SIZE-ENCODED (pattern 4): the underline pass was destroyed on import and survives only in font size.',
+      `Base size is ${basePt}pt; ${pct}% of the body is shrunk below it (the "small" signatures). Per pattern 4, the BASE-SIZE signatures (those WITHOUT "small") are the text that was underlined → give them u; the "small" signatures are unread → target nothing. Do NOT underline the "small" text, even though it is the majority of the card.`,
+    ];
+  }
+  return ['This card has NO underlining.'];
 }
 
 /** The per-card request body: plain text + signature table. */
@@ -318,10 +365,8 @@ export function buildCardRequest(analysis: CardAnalysis): string {
         s.samples.map((x) => JSON.stringify(x)).join(', '),
     )
     .join('\n');
-  const facts = analysis.hasPlainUnderline
-    ? 'This card HAS plain (non-bold) underlining — bold+underline is a stand-out layer on top of it.'
-    : 'This card has NO plain (non-bold) underlining — ALL underlined text is bold, so bold+underline IS the underline pass (there was no emphasis pass).';
-  return `CARD TEXT:\n${analysis.texts.join('\n')}\n\nFORMATTING SIGNATURES:\n${table}\n\nFACTS:\n- ${facts}`;
+  const facts = buildFacts(analysis);
+  return `CARD TEXT:\n${analysis.texts.join('\n')}\n\nFORMATTING SIGNATURES:\n${table}\n\nFACTS:\n- ${facts.join('\n- ')}`;
 }
 
 export interface FormatPlan {

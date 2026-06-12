@@ -158,6 +158,33 @@ describe('analyzeCard', () => {
     expect(analysis.hasPlainUnderline).toBe(true);
     expect(buildCardRequest(analysis)).toContain('HAS plain (non-bold) underlining');
   });
+
+  // Live miss: a size-encoded (pattern-4) card with NO underlining had the
+  // shrunk MAJORITY text underlined and the base-size text stripped — the
+  // model inverted the size direction. The FACTS now state the base size,
+  // the shrunk share, and the direction explicitly, and never claim "all
+  // underlining is bold" for a card that has no underlining at all.
+  it('states the size-encoded direction for a pattern-4 card with no underline', () => {
+    const doc = makeDoc(
+      card(
+        tag('TAG'),
+        body(
+          t('READ', m('highlight')),
+          t(' base-size read text ', m('emphasis_mark')),
+          t('the long shrunk connective tissue that is unread here', m('font_size', { halfPoints: 18 })),
+        ),
+      ),
+    );
+    const analysis = analyzeCard(collectBodyBlocks(doc, 0, doc.content.size));
+    expect(analysis.hasPlainUnderline).toBe(false);
+    expect(analysis.baseHalfPoints).toBe(22);
+    const req = buildCardRequest(analysis);
+    expect(req).toContain('SIZE-ENCODED');
+    expect(req).toContain('Base size is 11pt');
+    expect(req).toContain('Do NOT underline the "small"');
+    // The misleading bold-underline fact must NOT appear for a no-underline card.
+    expect(req).not.toContain('ALL underlined text is bold');
+  });
 });
 
 describe('parseFormatResponse', () => {
