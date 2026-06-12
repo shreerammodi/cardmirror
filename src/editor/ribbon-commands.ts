@@ -3715,6 +3715,9 @@ export type RibbonCommandId =
   | 'sendHeadingsToFlowCell'
   | 'pullFromFlow'
   | 'createFlow'
+  | 'startFlowHost'
+  | 'toggleVoice'
+  | 'openCardCutter'
   | 'createFlashcard'
   | 'manageFlashcards'
   | 'wordCountSelection'
@@ -3867,6 +3870,9 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'sendHeadingsToFlowCell',
   'pullFromFlow',
   'createFlow',
+  'startFlowHost',
+  'toggleVoice',
+  'openCardCutter',
   'createFlashcard',
   'manageFlashcards',
   'wordCountSelection',
@@ -3995,6 +4001,9 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   sendHeadingsToFlowCell: 'Send Headings to Flow (single cell)',
   pullFromFlow: 'Pull Selection from Flow',
   createFlow: 'Create New Flow',
+  startFlowHost: 'Start Flow Connection',
+  toggleVoice: 'Toggle voice control',
+  openCardCutter: 'Cut card with AI…',
   createFlashcard: 'Create Flashcard From Selection',
   manageFlashcards: 'Manage Flashcards',
   wordCountSelection: 'Word Count Selection',
@@ -4101,6 +4110,15 @@ export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly st
   cycleTheme: ['dark mode', 'light mode', 'toggle theme', 'switch theme', 'appearance'],
   deleteCurrentHeading: ['delete card', 'delete heading', 'remove card', 'delete current card'],
   saveSendDoc: ['send doc', 'export send doc', 'send version'],
+  startFlowHost: ['warm flow', 'prewarm flow', 'flow connection', 'connect to flow', 'speed up flow'],
+  toggleVoice: ['voice control', 'voice mode', 'dictation', 'speech', 'microphone', 'start voice', 'stop voice'],
+  // The cutter shortcut serves double duty for its highlighting verbs, so
+  // those names resolve to it too.
+  openCardCutter: [
+    'cut card', 'card cutter', 'trim card', 'ai cut', 'auto highlight',
+    'highlight', 'add highlight', 'dehighlight', 'remove highlight', 'unhighlight',
+    'refine highlighting', 'refine highlight', 'rehighlight', 'fix highlighting',
+  ],
 };
 
 /**
@@ -4167,6 +4185,9 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   sendHeadingsToFlowCell: '',
   pullFromFlow: '',
   createFlow: '',
+  startFlowHost: '',
+  toggleVoice: 'Mod-Shift-V',
+  openCardCutter: 'Mod-Alt-c',
   createFlashcard: '',
   manageFlashcards: '',
   wordCountSelection: '',
@@ -4360,6 +4381,16 @@ export interface RibbonContext {
   sendHeadingsToFlowCell: () => void;
   pullFromFlow: () => void;
   createFlow: () => void;
+  /** Pre-warm the persistent Flow PowerShell host (Windows only). */
+  startFlowHost: () => void;
+  /** Toggle the voice-control session on/off (desktop only). */
+  toggleVoice: () => void;
+  /** Open the AI card-cutter launch sheet for the current card. Gated on
+   *  `cardCutterActive` — a no-op when the experiment is off. */
+  openCardCutter: () => void;
+  /** Whether the card-cutter experiment is currently enabled. Lets the
+   *  keymap fall through when off so the binding isn't consumed. */
+  cardCutterActive: () => boolean;
   createFlashcard: () => void;
   manageFlashcards: () => void;
   /** File-level commands. These work regardless of whether the editor
@@ -4488,6 +4519,10 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   sendHeadingsToFlowCell: () => {},
   pullFromFlow: () => {},
   createFlow: () => {},
+  startFlowHost: () => {},
+  toggleVoice: () => {},
+  openCardCutter: () => {},
+  cardCutterActive: () => false,
   createFlashcard: () => {},
   manageFlashcards: () => {},
   newDocument: () => {},
@@ -4730,6 +4765,27 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return (_state, dispatch) => {
         if (!dispatch) return true;
         ctx.createFlow();
+        return true;
+      };
+    case 'startFlowHost':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.startFlowHost();
+        return true;
+      };
+    case 'toggleVoice':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.toggleVoice();
+        return true;
+      };
+    case 'openCardCutter':
+      // Gated on the experiment being on. Returning false when off lets
+      // the keystroke fall through instead of being silently swallowed.
+      return (_state, dispatch) => {
+        if (!ctx.cardCutterActive()) return false;
+        if (!dispatch) return true;
+        ctx.openCardCutter();
         return true;
       };
     case 'createFlashcard':

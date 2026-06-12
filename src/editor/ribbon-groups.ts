@@ -191,7 +191,16 @@ export const RIBBON_GROUPS: RibbonGroup[] = [
       'sendHeadingsToFlowCell',
       'pullFromFlow',
       'createFlow',
+      'startFlowHost',
     ],
+  },
+  {
+    title: 'Voice',
+    commands: ['toggleVoice'],
+  },
+  {
+    title: 'Card cutter',
+    commands: ['openCardCutter'],
   },
   {
     title: 'Reading',

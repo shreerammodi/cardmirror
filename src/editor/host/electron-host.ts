@@ -73,6 +73,7 @@ interface ElectronAPI {
   flowSend?(payload: { cells: string[] }, force?: boolean): Promise<FlowResult>;
   flowPull?(): Promise<FlowResult>;
   flowCreate?(templatePath?: string): Promise<FlowResult>;
+  flowStartHost?(): Promise<FlowResult>;
   /** Card-cutter local plugin (experimental; optional so an older
    *  preload tolerates its absence). */
   cardCutterPickFile?(): Promise<string | null>;
@@ -299,6 +300,9 @@ export class ElectronHost implements Host {
   }
   async flowCreate(templatePath?: string): Promise<FlowResult> {
     return (await api().flowCreate?.(templatePath)) ?? { ok: false, error: 'unsupported' };
+  }
+  async flowStartHost(): Promise<FlowResult> {
+    return (await api().flowStartHost?.()) ?? { ok: false, error: 'unsupported' };
   }
 
   /** Card-cutter local plugin: pick the engine file / load it from disk

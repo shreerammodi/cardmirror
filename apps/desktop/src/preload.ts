@@ -561,6 +561,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   flowPull: (): Promise<Record<string, unknown>> => ipcRenderer.invoke('host:flow-pull'),
   flowCreate: (templatePath?: string): Promise<Record<string, unknown>> =>
     ipcRenderer.invoke('host:flow-create', templatePath),
+  /** Pre-warm the persistent PowerShell host (no Excel interaction). */
+  flowStartHost: (): Promise<Record<string, unknown>> => ipcRenderer.invoke('host:flow-start'),
 
   cardCutterPickFile: (): Promise<string | null> =>
     ipcRenderer.invoke('host:cardcutter-pick-file'),

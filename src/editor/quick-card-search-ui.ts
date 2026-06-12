@@ -37,7 +37,7 @@ import { schema } from '../schema/index.js';
 import { settings, SETTING_METADATA, type SettingsCategory } from './settings.js';
 import { openSettings, CATEGORY_TABS, type SettingsTarget } from './settings-ui.js';
 import { appVersion } from './install-info.js';
-import { getHost, getElectronHost } from './host/index.js';
+import { getHost, getElectronHost, isWindowsHost } from './host/index.js';
 import { showToast } from './toast.js';
 import { insertSpeechSlice } from './speech-doc-send.js';
 import { quickCardsStore, distinctTags, normalizeTag } from './quick-cards-store.js';
@@ -74,13 +74,13 @@ interface WarmEntry {
 }
 const warmCache = new Map<string, WarmEntry>();
 import {
-  RIBBON_COMMAND_IDS,
   RIBBON_COMMAND_LABELS,
   RIBBON_COMMAND_ALIASES,
   DEFAULT_RIBBON_KEYS,
   formatKeyForDisplay,
   type RibbonCommandId,
 } from './ribbon-commands.js';
+import { availableRibbonCommandIds } from './ribbon-availability.js';
 
 // ── Warm-cache machinery (module-level, shared by the open palette and
 //    the proactive idle pre-warm) ────────────────────────────────────
@@ -300,10 +300,11 @@ function searchCommandSource(query: string): PaletteResult[] {
     const label = RIBBON_COMMAND_LABELS[id].toLowerCase();
     return aliases && aliases.length ? `${label} ${aliases.join(' ')}` : label;
   };
+  const available = availableRibbonCommandIds();
   const matched =
     tokens.length === 0
-      ? [...RIBBON_COMMAND_IDS]
-      : RIBBON_COMMAND_IDS.filter((id) => {
+      ? available
+      : available.filter((id) => {
           const hay = haystack(id);
           return tokens.every((t) => hay.includes(t));
         });
@@ -407,6 +408,7 @@ function searchSettingsSource(query: string): PaletteResult[] {
     (m) =>
       !m.searchHidden &&
       (!m.electronOnly || hostKind === 'electron') &&
+      (!m.windowsOnly || isWindowsHost()) &&
       (!m.webOnly || hostKind === 'browser') &&
       matchSetting(m),
   );

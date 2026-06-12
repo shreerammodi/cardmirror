@@ -7,6 +7,72 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+## 0.1.0-alpha.12 — 2026-06-12
+
+- **Voice control failed to start in packaged builds.** The recognizer
+  worker is forked under a real Node binary (`execPath`), which has no
+  asar support and so could not load `worker.js` — or koffi — from inside
+  `app.asar`; the forked process died instantly with `MODULE_NOT_FOUND`
+  and the session ended before it began. (Dev runs were unaffected:
+  `__dirname` there is an ordinary directory.) Fixed by unpacking the
+  worker tree and koffi — whose native binary lives in the per-platform
+  `@koromix/koffi-<os>-<arch>` package — via electron-builder's
+  `asarUnpack`, and rewriting the fork target from `app.asar` to
+  `app.asar.unpacked` so the real Node loads it off disk. Windows, Linux,
+  and Apple Silicon macOS now start a session in the packaged app. Intel
+  macOS is still pending: the arm64 CI runner installs only the arm64
+  koffi binary, so the x64 dmg ships without its native module.
+
+- **Persistent Verbatim Flow host** (`apps/desktop/resources/flow/
+  verbatim-flow.ps1` rewritten as a stdin server; `flow-bridge.ts`
+  rewritten as a host manager). Each Flow action used to spawn a fresh
+  `powershell.exe -File … -Verb …`, paying Windows PowerShell's cold start
+  (CLR load, the OS scanning the launch) plus a fresh COM attach to Excel
+  every time — seconds per send on a VM. The helper is now one long-lived
+  process: it reads newline-delimited JSON requests on stdin and writes
+  one JSON response per line, so payloads travel inline (no more per-call
+  temp file). `flow-bridge.ts` spawns it lazily on the first verb,
+  serializes requests (one in-flight; Excel COM is single-threaded),
+  reassembles responses across stdout chunks, restarts the host if it
+  dies, times a wedged request out at 20 s (tearing the host down so the
+  next call respawns clean), and kills it on app quit. After the first
+  send the cold start is gone and verbs run in milliseconds. Three ways to
+  start it, all idempotent: lazily on first use, the new **Start Flow
+  Connection** command (`startFlowHost`, a `ping` that warms the process
+  without touching Excel), and a Windows-only **flowHostOnLaunch** setting
+  that pre-warms it at renderer boot. No idle timeout — the host stays up
+  for the session.
+
+- **Voice-control toggle is now a rebindable command** (`toggleVoice`,
+  default `Mod-Shift-V`). It moved off a fixed editor keymap into the
+  ribbon-command registry, so it shows in the command bar and the
+  keybindings editor and honors user overrides. It's view-less (works
+  with no pane focused) and hidden off the desktop.
+
+- **Ribbon-command availability gating** (new `ribbon-availability.ts`).
+  The command bar, keybindings editor, and shortcuts reference now filter
+  the command list through `isRibbonCommandAvailable()` — Flow commands
+  appear only on the Windows desktop, voice only on desktop — and skip a
+  group when nothing in it is available. The keymap still binds every
+  command (each self-guards), and conflict detection still scans the full
+  set, so a hidden binding can't be silently reused. Settings gained a
+  `windowsOnly` flag with matching gating, used by the new Flow warm-host
+  setting; `isWindowsHost()` (Electron + a `Windows` user-agent) is the
+  shared check.
+
+- **Send Headings to Flow sends only cite-marked text** (`flow-port.ts`).
+  In headings-only mode a `cite_paragraph` now runs through
+  `collectCiteText()` — the same nav-pane logic, with discontinuous
+  cite-mark bridging and the ampersand-spacing fix — instead of emitting
+  the whole paragraph's `textContent`. A cite line with no marks sends
+  nothing, mirroring the nav preview.
+
+- **Flow overwrite-prompt cancel no longer blurs the editor**
+  (`flow-port.ts`). `window.confirm` steals focus from the contenteditable
+  and the cancel branch returned without restoring it, so the editor
+  silently stopped accepting keystrokes. Both the cancel and success paths
+  now call `view.focus()` — the same fix `speech-doc-send.ts` already used.
+
 ## 0.1.0-alpha.11 — 2026-06-11
 
 - **Revamped "AI is working" affordance** (new `src/editor/ai/

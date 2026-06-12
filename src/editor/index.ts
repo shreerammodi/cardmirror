@@ -108,7 +108,7 @@ import { runAiCreateCite } from './ai/cite-creator.js';
 import { runTranslate } from './translate.js';
 import { runRepairText } from './ai/repair-text.js';
 import { runRepairFormatting } from './ai/repair-formatting.js';
-import { runSendToFlow, runPullFromFlow, runCreateFlow } from './flow-port.js';
+import { runSendToFlow, runPullFromFlow, runCreateFlow, runStartFlowHost } from './flow-port.js';
 import {
   readModePlugin,
   PMD_READ_MODE_TOGGLE,
@@ -177,7 +177,7 @@ import {
 import { openWordCount } from './word-count-ui.js';
 import { wireColorPanel } from './color-panel.js';
 import { countReadAloudWords, formatReadTime, formatNumber } from './word-count.js';
-import { getHost, getElectronHost, isSameOpenHandle, type OpenedFile, type JournalEntry } from './host/index.js';
+import { getHost, getElectronHost, isWindowsHost, isSameOpenHandle, type OpenedFile, type JournalEntry } from './host/index.js';
 
 // Tag the body with the host kind so CSS can gate platform-specific
 // chrome (e.g. the plain-paste toggle button only appears in the
@@ -1022,6 +1022,16 @@ const ribbonContext: RibbonContext = {
   createFlow: () => {
     void runCreateFlow();
   },
+  startFlowHost: () => {
+    void runStartFlowHost();
+  },
+  toggleVoice: () => {
+    void getVoiceController().toggle();
+  },
+  openCardCutter: () => {
+    if (view) void openCutLaunchSheet(view);
+  },
+  cardCutterActive: () => cardCutterActive(),
   createFlashcard: () => {
     if (!view) return;
     const sel = view.state.selection;
@@ -2753,6 +2763,10 @@ const VIEWLESS_RIBBON_COMMANDS = new Set<RibbonCommandId>([
   'sendDocToSlot3',
   'toggleSlotExpand',
   'closeDocOrWindow',
+  // Voice toggle flips a session, not a doc — works with no pane focused.
+  'toggleVoice',
+  // Pre-warming the Flow host spawns a process; no doc required.
+  'startFlowHost',
 ]);
 
 function runViewlessRibbon(id: RibbonCommandId): void {
@@ -2770,6 +2784,8 @@ function runViewlessRibbon(id: RibbonCommandId): void {
     case 'toggleNavPane': ribbonContext.toggleNavPane(); return;
     case 'goHome': ribbonContext.goHome(); return;
     case 'openQuickCardSearch': ribbonContext.openQuickCardSearch(); return;
+    case 'toggleVoice': ribbonContext.toggleVoice(); return;
+    case 'startFlowHost': ribbonContext.startFlowHost(); return;
     // Multi-pane workspace navigation. Each dispatches into the
     // shell via dynamic import — keeps single-doc bundles free
     // of the shell's deps. All no-op in single-doc mode (the
@@ -3591,17 +3607,6 @@ export function buildEditorPlugins(): Plugin[] {
     // takes precedence). Outside tables, Tab on a paragraph-spanning
     // selection indents; on a collapsed cursor inserts '\t'.
     keymap({ Tab: indentParagraph, 'Shift-Tab': outdentParagraph }),
-    // Card-cutter shortcuts — inert (return false) unless the console
-    // command has enabled the experiment, so the binding is invisible
-    // until then. Gating is checked at run time so toggling needs no
-    // re-plug.
-    keymap({
-      'Mod-Alt-c': (_state, _dispatch, view) => {
-        if (!cardCutterActive() || !view) return false;
-        void openCutLaunchSheet(view);
-        return true;
-      },
-    }),
     buildPastePlugin({
       condenseOnPaste: () => settings.get('condenseOnPaste'),
       paragraphIntegrity: () => settings.get('paragraphIntegrity'),
@@ -3642,17 +3647,10 @@ export function buildEditorPlugins(): Plugin[] {
   // on the `editorSpellcheck` setting (does nothing when off).
   plugins.push(viewportSpellcheckPlugin());
   // Voice control (SPEC-voice.md §12 item 3): plugin state (mode, pen,
-  // utterance atomicity) + the session toggle. Desktop-only at runtime;
-  // the plugin itself is inert without a session.
+  // utterance atomicity). Desktop-only at runtime; the plugin itself is
+  // inert without a session. The session toggle is bound through the
+  // rebindable ribbon command (`toggleVoice`), not a fixed keymap here.
   plugins.push(voicePlugin());
-  plugins.push(
-    keymap({
-      'Mod-Shift-V': () => {
-        void getVoiceController().toggle();
-        return true;
-      },
-    }),
-  );
   return plugins;
 }
 
@@ -5795,6 +5793,12 @@ installExternalInsertHost({
 // `__cardcutter('on')` console entry point; does nothing visible
 // until enabled.
 installCardCutterGate();
+// Start-on-launch: pre-warm the Verbatim Flow PowerShell host so the
+// first Send to Flow doesn't pay the cold start. No-ops off Windows and
+// when the setting is off; silent (no toast) on this automatic path.
+if (settings.get('flowHostOnLaunch') && isWindowsHost()) {
+  void runStartFlowHost(true);
+}
 requestAnimationFrame(positionDropzone);
 window.addEventListener('resize', positionDropzone);
 {

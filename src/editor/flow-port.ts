@@ -12,12 +12,17 @@ import type { EditorView } from 'prosemirror-view';
 import type { Node as PMNode } from 'prosemirror-model';
 import { getElectronHost } from './host/index.js';
 import type { FlowResult } from './host/electron-host.js';
+import { collectCiteText } from './headings.js';
 import { showToast } from './toast.js';
 
 /** Body prose — excluded in "headings only" mode (Verbatim's
  *  OutlineLevel<>BodyText filter). Everything else (pocket/hat/block/tag/
  *  analytic/cite/undertag) is a heading/label and is kept. */
 const BODY_TYPE = 'card_body';
+/** The citation line. In "headings only" mode we send only its
+ *  cite-marked text (the short author/year cite), not the whole
+ *  bibliographic paragraph — matching the nav pane's cite preview. */
+const CITE_TYPE = 'cite_paragraph';
 
 export interface SendOptions {
   /** cell = all blocks joined into ONE cell; column = one cell per block. */
@@ -36,7 +41,13 @@ function selectionCells(view: EditorView, opts: SendOptions): string[] {
     view.state.doc.nodesBetween(from, to, (node: PMNode) => {
       if (!node.isTextblock) return true; // descend into containers
       if (opts.headingsOnly && node.type.name === BODY_TYPE) return false;
-      const text = node.textContent.replace(/\s+/g, ' ').trim();
+      // Cite line in headings mode: only the cite-marked spans, joined by
+      // the same discontinuous-mark bridging the nav pane preview uses.
+      const raw =
+        opts.headingsOnly && node.type.name === CITE_TYPE
+          ? collectCiteText(node)
+          : node.textContent;
+      const text = raw.replace(/\s+/g, ' ').trim();
       if (text) blocks.push(text);
       return false; // don't descend into inline content
     });
@@ -96,7 +107,13 @@ export async function runSendToFlow(view: EditorView, opts: SendOptions): Promis
   let res = await host.flowSend({ cells });
   if (res.needsConfirm) {
     const where = res.cell ? ` (${res.cell})` : '';
-    if (!window.confirm(`There's already text where you're sending${where}. Overwrite?`)) return;
+    if (!window.confirm(`There's already text where you're sending${where}. Overwrite?`)) {
+      // `window.confirm` steals focus from the editor's contenteditable;
+      // on cancel nothing else grabs it back, leaving the editor unable to
+      // take keyboard input until clicked. Re-focus explicitly.
+      view.focus();
+      return;
+    }
     res = await host.flowSend({ cells }, true);
   }
   if (res.ok) {
@@ -105,6 +122,9 @@ export async function runSendToFlow(view: EditorView, opts: SendOptions): Promis
   } else {
     showToast(flowError(res));
   }
+  // Same focus-restore on the OK path — the native confirm (and Excel
+  // grabbing foreground) can leave the editor blurred.
+  view.focus();
 }
 
 export async function runPullFromFlow(view: EditorView): Promise<void> {
@@ -142,4 +162,17 @@ export async function runCreateFlow(): Promise<void> {
   showToast('Opening a new Flow…');
   const res = await host.flowCreate();
   if (!res.ok) showToast(flowError(res));
+}
+
+/** Pre-warm the persistent PowerShell host so the first real send is
+ *  fast. `silent` suppresses the toasts for the start-on-launch path. */
+export async function runStartFlowHost(silent = false): Promise<void> {
+  const host = getElectronHost();
+  if (!host?.flowStartHost) {
+    if (!silent) showToast('The Verbatim Flow integration is Windows-only.');
+    return;
+  }
+  const res = await host.flowStartHost();
+  if (silent) return;
+  showToast(res.ok ? 'Flow connection ready.' : flowError(res));
 }

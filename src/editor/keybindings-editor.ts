@@ -33,6 +33,7 @@ import {
   type RibbonCommandId,
 } from './ribbon-commands.js';
 import { RIBBON_GROUPS } from './ribbon-groups.js';
+import { isRibbonCommandAvailable } from './ribbon-availability.js';
 import { settings, type KeyboardMacro } from './settings.js';
 import { setIcon } from './icons';
 
@@ -568,13 +569,18 @@ export function buildKeybindingsEditor(): HTMLElement {
     const list = document.createElement('div');
     list.className = 'pmd-keybindings-list';
     for (const group of RIBBON_GROUPS) {
+      // Skip commands not available in this context (Flow off Windows,
+      // voice off desktop, the cutter while disabled) — and the whole
+      // group if nothing in it is available.
+      const ids = group.commands.filter(isRibbonCommandAvailable);
+      if (ids.length === 0) continue;
       const section = document.createElement('section');
       section.className = 'pmd-keybindings-group';
       const heading = document.createElement('h3');
       heading.className = 'pmd-keybindings-group-title';
       heading.textContent = group.title;
       section.appendChild(heading);
-      for (const id of group.commands) section.appendChild(renderRow(id));
+      for (const id of ids) section.appendChild(renderRow(id));
       list.appendChild(section);
     }
     wrap.appendChild(list);

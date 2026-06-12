@@ -58,6 +58,17 @@ export function getElectronHost(): ElectronHost | null {
   return h.kind === 'electron' ? (h as ElectronHost) : null;
 }
 
+/** Whether we're running on the Windows desktop — the only place the
+ *  Verbatim Flow COM bridge works. Gates Flow commands and settings from
+ *  the discovery surfaces on Mac/Linux/web. */
+export function isWindowsHost(): boolean {
+  return (
+    getElectronHost() !== null &&
+    typeof navigator !== 'undefined' &&
+    /Windows/.test(navigator.userAgent)
+  );
+}
+
 /** Compare two file handles for identity — used by the
  *  duplicate-open guard so we can refuse a second open of a doc
  *  that's already loaded into the workspace. Electron handles are

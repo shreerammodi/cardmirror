@@ -7,6 +7,47 @@ see `DETAILED_CHANGELOG.md`.
 
 ## Unreleased
 
+## 0.1.0-alpha.12 — 2026-06-12
+
+### Added
+
+- **Faster Verbatim Flow, with a warm connection you can control (Windows
+  only).** CardMirror now keeps a single background connection to Excel
+  alive instead of starting a new one for every action — so every Send or
+  Pull after the first is near-instant instead of pausing a second or
+  more. It starts on its own the first time you use a Flow command and
+  stays ready; you can also start it up front with the new **Start Flow
+  Connection** command, or turn on **"Keep a Verbatim Flow connection
+  warm"** in Settings to have it ready the moment CardMirror launches.
+
+### Changed
+
+- **The voice-control shortcut is now rebindable.** Turning voice mode on
+  and off (default Ctrl-Shift-V) is a regular command now — searchable in
+  the command bar and rebindable under Settings → Keyboard shortcuts.
+
+- **Verbatim Flow commands appear only on Windows.** The integration is
+  Windows-only, so its commands no longer show in the command bar, the
+  keyboard-shortcuts editor, or the shortcuts reference on macOS and
+  Linux.
+
+- **Send Headings to Flow sends only the cite-marked text.** A cite line
+  now contributes just its marked citation — the same text the nav pane's
+  cite preview shows — instead of the whole bibliographic paragraph.
+
+### Fixed
+
+- **Voice control now starts in the packaged desktop app.** In the
+  previous release the recognizer failed to launch on Windows, Linux,
+  and macOS, so a voice session ended the instant it began. On macOS
+  this currently works on Apple Silicon; Intel Mac support is still
+  pending.
+
+- **Canceling the Flow overwrite prompt no longer locks up the keyboard.**
+  Dismissing the "there's already text where you're sending" confirmation
+  with Cancel used to leave the editor unable to accept keystrokes until
+  you clicked it; it now keeps focus.
+
 ## 0.1.0-alpha.11 — 2026-06-11
 
 ### Added

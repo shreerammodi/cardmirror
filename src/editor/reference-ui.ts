@@ -14,6 +14,7 @@ import {
   type RibbonCommandId,
 } from './ribbon-commands.js';
 import { RIBBON_GROUPS } from './ribbon-groups.js';
+import { isRibbonCommandAvailable } from './ribbon-availability.js';
 import { settings } from './settings.js';
 import { setIcon } from './icons';
 
@@ -91,6 +92,12 @@ class ReferenceModal {
     body.className = 'pmd-reference-body';
 
     for (const group of RIBBON_GROUPS) {
+      // Hide commands that don't apply here (Flow off Windows, voice off
+      // desktop, the cutter while disabled), and skip a group entirely
+      // when none of its commands are available.
+      const ids = group.commands.filter(isRibbonCommandAvailable);
+      if (ids.length === 0) continue;
+
       const section = document.createElement('section');
       section.className = 'pmd-reference-group';
 
@@ -102,7 +109,7 @@ class ReferenceModal {
       const rows = document.createElement('div');
       rows.className = 'pmd-reference-group-rows';
 
-      for (const id of group.commands) {
+      for (const id of ids) {
         const row = document.createElement('div');
         row.className = 'pmd-reference-row';
 

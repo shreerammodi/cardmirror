@@ -944,7 +944,8 @@ models ship inside the app, which is why the desktop installers are about
 130 MB larger.
 
 This is early, experimental software; expect rough edges, and keep the
-keyboard within reach.
+keyboard within reach. On macOS, voice currently requires an Apple
+Silicon Mac; Intel support is still pending.
 
 ### Starting a session
 

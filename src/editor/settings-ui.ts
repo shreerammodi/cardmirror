@@ -33,7 +33,7 @@ import { isFontAvailable } from './font-detect.js';
 import { WORD_HIGHLIGHT_COLORS } from './color-palette.js';
 import { buildKeybindingsEditor } from './keybindings-editor.js';
 import { TRANSLATION_LANGUAGES } from './translate.js';
-import { getHost, getElectronHost } from './host/index.js';
+import { getHost, getElectronHost, isWindowsHost } from './host/index.js';
 import { getInstallInfo } from './install-info.js';
 import { resetTimer } from './timer-state.js';
 import { showToast } from './toast.js';
@@ -393,6 +393,7 @@ class SettingsModal {
         (m) =>
           m.category === id &&
           (!m.electronOnly || hostKind === 'electron') &&
+          (!m.windowsOnly || isWindowsHost()) &&
           (!m.webOnly || hostKind === 'browser') &&
           (!m.revealWhen || !!settings.get(m.revealWhen)),
       );

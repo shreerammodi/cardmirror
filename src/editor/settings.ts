@@ -297,6 +297,10 @@ export interface Settings {
    *  native blinking caret is hidden and a steady custom caret is drawn
    *  in its place. */
   disableCursorBlink: boolean;
+  /** Windows/Verbatim Flow: when true, the persistent PowerShell host
+   *  that talks to Excel is started at app launch, so the first Send to
+   *  Flow is fast instead of paying the cold start. */
+  flowHostOnLaunch: boolean;
   /** Per-token UI color overrides. Keyed by CSS-variable name
    *  WITHOUT the `--` prefix (e.g. `"pmd-c-accent"`); values are
    *  CSS color strings the user picked in the accessibility
@@ -919,6 +923,7 @@ const DEFAULTS: Settings = {
   commentsColumnWidth: 320,
   reduceMotion: 'auto',
   disableCursorBlink: false,
+  flowHostOnLaunch: false,
   overrideHighlightColor: false,
   overrideHighlightSlots: ['#ffff00'],
   overrideShadingColor: false,
@@ -1137,6 +1142,9 @@ export interface SettingMeta {
    *  hosts (real file paths, native dialogs). The settings UI
    *  hides the row entirely on the web edition. */
   electronOnly?: boolean;
+  /** When true, this setting is only relevant on the Windows desktop
+   *  (the Verbatim Flow COM bridge). Hidden everywhere else. */
+  windowsOnly?: boolean;
   /** When true, this setting is only relevant on the web edition
    *  (browser host). The settings UI hides the row on Electron. */
   webOnly?: boolean;
@@ -1247,6 +1255,16 @@ export const SETTING_METADATA: SettingMeta[] = [
       'When on (default), New Document opens the CardMirror welcome doc — the same starter you get the first time you launch. When off, New opens a blank doc with a single empty paragraph. Affects every freshly created doc, including newly spawned windows.',
     kind: 'toggle',
     category: 'general',
+  },
+  {
+    key: 'flowHostOnLaunch',
+    label: 'Keep a Verbatim Flow connection warm',
+    description:
+      'Start the background connection to Excel when CardMirror launches, so your first Send to Flow is fast instead of waiting a second or two for it to spin up. Leave off to start it on demand the first time you use a Flow command (every send after that is fast either way). You can also start it any time with the "Start Flow Connection" command.',
+    kind: 'toggle',
+    category: 'general',
+    windowsOnly: true,
+    aliases: ['flow', 'verbatim flow', 'powershell', 'warm', 'prewarm', 'excel'],
   },
   {
     key: 'defaultSpeechDocFolder',
@@ -2089,6 +2107,7 @@ function sanitize(s: Settings): Settings {
     reduceMotion:
       s.reduceMotion === 'on' || s.reduceMotion === 'off' ? s.reduceMotion : 'auto',
     disableCursorBlink: s.disableCursorBlink === true,
+    flowHostOnLaunch: s.flowHostOnLaunch === true,
     overrideHighlightColor: !!s.overrideHighlightColor,
     overrideHighlightSlots: sanitizeColorSlots(
       s.overrideHighlightSlots,
