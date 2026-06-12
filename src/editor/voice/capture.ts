@@ -16,15 +16,7 @@ export class MicCapture {
 
   async start(onChunk: (pcm: ArrayBuffer) => void, deviceId?: string): Promise<void> {
     if (this.stream) return;
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: deviceId ? { exact: deviceId } : undefined,
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
+    this.stream = await this.acquireStream(deviceId);
     // Chromium resamples to the context rate — ask for 16 kHz directly.
     this.ctx = new AudioContext({ sampleRate: 16000 });
     const source = this.ctx.createMediaStreamSource(this.stream);
@@ -42,6 +34,34 @@ export class MicCapture {
     };
     source.connect(this.node);
     this.node.connect(this.ctx.destination); // required for processing to run
+  }
+
+  /** Open the mic. When a specific device is requested but missing — a
+   *  deviceId saved on another machine, an unplugged mic — Chromium throws
+   *  NotFoundError/OverconstrainedError for the `exact` constraint; fall
+   *  back to the system default instead of failing outright. (If there's
+   *  genuinely no input device, the default request throws too and the
+   *  caller surfaces "microphone unavailable".) */
+  private async acquireStream(deviceId?: string): Promise<MediaStream> {
+    const constraints = (id?: string): MediaStreamConstraints => ({
+      audio: {
+        deviceId: id ? { exact: id } : undefined,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+    if (deviceId) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints(deviceId));
+      } catch (err) {
+        const name = (err as DOMException)?.name;
+        if (name !== 'NotFoundError' && name !== 'OverconstrainedError') throw err;
+        // Selected mic isn't on this machine — try the default.
+      }
+    }
+    return navigator.mediaDevices.getUserMedia(constraints(undefined));
   }
 
   stop(): void {

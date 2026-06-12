@@ -7,6 +7,20 @@ see `DETAILED_CHANGELOG.md`.
 
 ## Unreleased
 
+### Fixed
+
+- **Voice control now starts on macOS.** The packaged Mac build bundles an
+  older libvosk that lacks the dynamic-grammar function, so starting voice
+  failed with "cannot find function 'vosk_recognizer_set_grm'". Voice now
+  runs on macOS; live document vocabulary still updates (it rebuilds the
+  recognizer when needed).
+
+- **Voice falls back to your default microphone.** If the previously
+  selected microphone isn't available on this machine — a device chosen on
+  another computer, or one that's been unplugged — voice now uses the
+  system default instead of failing with "microphone unavailable / device
+  not found."
+
 ## 0.1.0-alpha.12 — 2026-06-12
 
 ### Added

@@ -7,6 +7,27 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Voice startup crashed on macOS: missing `vosk_recognizer_set_grm`**
+  (`apps/desktop/src/voice/vosk.ts`). The macOS build is pinned to libvosk
+  0.3.42 (the last with a prebuilt macOS binary); the dynamic-grammar
+  swap `vosk_recognizer_set_grm` was added in 0.3.43, so koffi threw
+  "cannot find function" while binding it and voice never started. The
+  binding is now optional (bound in a try/catch), and `Recognizer.set-
+  Grammar` falls back to recreating the recognizer via
+  `vosk_recognizer_new_grm` (present in 0.3.42) when the in-place swap is
+  unavailable — a graph rebuild, but it only fires on actual vocabulary
+  changes, so dynamic doc vocab keeps working on macOS. Linux and Windows
+  (libvosk 0.3.45) still use the in-place swap. Verified both paths against
+  the bundled library.
+
+- **Mic capture falls back to the default device** (`src/editor/voice/
+  capture.ts`). `getUserMedia` was called with `deviceId: { exact }` from
+  the saved `voiceInputDevice`; if that device isn't present (a deviceId
+  from another machine, an unplugged mic) Chromium throws
+  NotFoundError/OverconstrainedError and voice failed outright. It now
+  retries without the device constraint, so it opens the system default;
+  a genuinely device-less machine still surfaces "microphone unavailable."
+
 ## 0.1.0-alpha.12 — 2026-06-12
 
 - **Voice control failed to start in packaged builds.** The recognizer

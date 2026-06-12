@@ -12,7 +12,11 @@ interface VoskFns {
   modelFree: (model: unknown) => void;
   recNew: (model: unknown, sampleRate: number) => unknown;
   recNewGrm: (model: unknown, sampleRate: number, grammar: string) => unknown;
-  recSetGrm: (rec: unknown, grammar: string) => void;
+  /** `vosk_recognizer_set_grm` (dynamic grammar swap) was added in vosk
+   *  0.3.43. The macOS build is pinned to 0.3.42 (the last with a prebuilt
+   *  macOS binary), which lacks it — null there, and `Recognizer.setGrammar`
+   *  recreates the recognizer via `recNewGrm` instead. */
+  recSetGrm: ((rec: unknown, grammar: string) => void) | null;
   recSetWords: (rec: unknown, words: number) => void;
   recAccept: (rec: unknown, data: Buffer, length: number) => number;
   recPartial: (rec: unknown) => string;
@@ -26,13 +30,21 @@ let fns: VoskFns | null = null;
 export function loadLibVosk(libPath: string): void {
   if (fns) return;
   const lib = koffi.load(libPath);
+  // Optional: absent on the macOS 0.3.42 binary. koffi.func() throws when
+  // the symbol can't be resolved, so bind it defensively.
+  let recSetGrm: ((rec: unknown, grammar: string) => void) | null = null;
+  try {
+    recSetGrm = lib.func('void vosk_recognizer_set_grm(void *rec, const char *grammar)');
+  } catch {
+    recSetGrm = null;
+  }
   fns = {
     setLogLevel: lib.func('void vosk_set_log_level(int level)'),
     modelNew: lib.func('void *vosk_model_new(const char *path)'),
     modelFree: lib.func('void vosk_model_free(void *model)'),
     recNew: lib.func('void *vosk_recognizer_new(void *model, float sample_rate)'),
     recNewGrm: lib.func('void *vosk_recognizer_new_grm(void *model, float sample_rate, const char *grammar)'),
-    recSetGrm: lib.func('void vosk_recognizer_set_grm(void *rec, const char *grammar)'),
+    recSetGrm,
     recSetWords: lib.func('void vosk_recognizer_set_words(void *rec, int words)'),
     recAccept: lib.func('int vosk_recognizer_accept_waveform(void *rec, const uint8_t *data, int length)'),
     recPartial: lib.func('const char *vosk_recognizer_partial_result(void *rec)'),
@@ -80,8 +92,17 @@ export class Model {
 
 export class Recognizer {
   private ptr: unknown;
+  private wordsOn = false;
+  /** Whether this recognizer was created grammar-constrained — only those
+   *  support `setGrammar` (and only those need the recreate fallback). */
+  private readonly grammarBacked: boolean;
 
-  constructor(model: Model, sampleRate: number, grammar?: string[]) {
+  constructor(
+    private readonly model: Model,
+    private readonly sampleRate: number,
+    grammar?: string[],
+  ) {
+    this.grammarBacked = grammar !== undefined;
     this.ptr = grammar
       ? api().recNewGrm(model.handle, sampleRate, JSON.stringify(grammar))
       : api().recNew(model.handle, sampleRate);
@@ -89,10 +110,24 @@ export class Recognizer {
   }
 
   setGrammar(phrases: string[]): void {
-    api().recSetGrm(this.ptr, JSON.stringify(phrases));
+    const setGrm = api().recSetGrm;
+    if (setGrm) {
+      setGrm(this.ptr, JSON.stringify(phrases));
+      return;
+    }
+    // libvosk 0.3.42 (macOS) has no in-place grammar swap — recreate the
+    // recognizer with the new grammar via vosk_recognizer_new_grm, which
+    // it does have. Costs a graph rebuild, but only fires on vocabulary
+    // changes (viewport/navigation), and keeps dynamic vocab working.
+    if (!this.grammarBacked) return;
+    api().recFree(this.ptr);
+    this.ptr = api().recNewGrm(this.model.handle, this.sampleRate, JSON.stringify(phrases));
+    if (!this.ptr) throw new Error('voice: failed to recreate recognizer');
+    if (this.wordsOn) api().recSetWords(this.ptr, 1);
   }
 
   setWords(on: boolean): void {
+    this.wordsOn = on;
     api().recSetWords(this.ptr, on ? 1 : 0);
   }
 
