@@ -53,6 +53,13 @@ export interface Thread {
 
 export interface CommentsState {
   threads: Map<string, Thread>;
+  /** Threads the GC removed (their `comment_range` mark was gone) but
+   *  kept around so an UNDO that restores the mark can resurrect the
+   *  thread — the GC removal is non-undoable, so doc history alone can't
+   *  bring the comment content back. Per-document (lives in plugin state,
+   *  not a module global) so it can't leak across docs/panes; cleared on
+   *  `load`. */
+  tombstone: Map<string, Thread>;
   /** Mirrors `settings.commentsVisible` so the view can read this
    *  state directly without subscribing to the settings store. */
   visible: boolean;
@@ -69,13 +76,14 @@ type CommentsMeta =
   | { type: 'edit-text'; threadId: string; commentId: string; text: string }
   | { type: 'delete-thread'; threadId: string }
   | { type: 'delete-comment'; threadId: string; commentId: string }
+  | { type: 'gc'; threads: Thread[]; tombstone: Thread[] }
   | { type: 'set-visible'; visible: boolean };
 
 export const commentsPlugin: Plugin<CommentsState> = new Plugin<CommentsState>({
   key: commentsKey,
   state: {
     init() {
-      return { threads: new Map(), visible: false };
+      return { threads: new Map(), tombstone: new Map(), visible: false };
     },
     apply(tr, prev) {
       const meta = tr.getMeta(commentsKey) as CommentsMeta | undefined;
@@ -84,7 +92,15 @@ export const commentsPlugin: Plugin<CommentsState> = new Plugin<CommentsState>({
         case 'load': {
           const threads = new Map<string, Thread>();
           for (const t of meta.threads) threads.set(t.id, t);
-          return { ...prev, threads };
+          // Fresh document — drop any tombstones from the previous one.
+          return { ...prev, threads, tombstone: new Map() };
+        }
+        case 'gc': {
+          const threads = new Map<string, Thread>();
+          for (const t of meta.threads) threads.set(t.id, t);
+          const tombstone = new Map<string, Thread>();
+          for (const t of meta.tombstone) tombstone.set(t.id, t);
+          return { ...prev, threads, tombstone };
         }
         case 'add': {
           const threads = new Map(prev.threads);
@@ -162,19 +178,44 @@ export const commentsPlugin: Plugin<CommentsState> = new Plugin<CommentsState>({
 export function gcOrphanThreads(view: { state: EditorState; dispatch: (tr: Transaction) => void }): void {
   const state = commentsKey.getState(view.state);
   if (!state) return;
-  if (state.threads.size === 0) return;
+  const tombstone = state.tombstone ?? new Map<string, Thread>();
+  // Nothing tracked and nothing parked → nothing to reconcile (skips the
+  // O(doc) walk on docs with no comments).
+  if (state.threads.size === 0 && tombstone.size === 0) return;
+
   const liveIds = collectLiveThreadIds(view.state.doc);
-  const surviving: Thread[] = [];
-  let stale = false;
-  for (const [id, thread] of state.threads) {
-    if (liveIds.has(id)) {
-      surviving.push(thread);
-    } else {
-      stale = true;
+  const nextThreads = new Map(state.threads);
+  const nextTombstone = new Map(tombstone);
+  let changed = false;
+
+  // Resurrect: a tombstoned thread whose `comment_range` mark is live
+  // again — i.e. an undo/redo/paste brought the anchor back.
+  for (const id of liveIds) {
+    if (!nextThreads.has(id)) {
+      const parked = nextTombstone.get(id);
+      if (parked) {
+        nextThreads.set(id, parked);
+        nextTombstone.delete(id);
+        changed = true;
+      }
     }
   }
-  if (!stale) return;
-  const tr = view.state.tr.setMeta(commentsKey, { type: 'load', threads: surviving });
+  // Tombstone-and-drop: a tracked thread whose mark is gone. Park it (not
+  // discard) so a later undo can resurrect it.
+  for (const [id, thread] of state.threads) {
+    if (!liveIds.has(id)) {
+      nextThreads.delete(id);
+      nextTombstone.set(id, thread);
+      changed = true;
+    }
+  }
+  if (!changed) return;
+
+  const tr = view.state.tr.setMeta(commentsKey, {
+    type: 'gc',
+    threads: [...nextThreads.values()],
+    tombstone: [...nextTombstone.values()],
+  });
   tr.setMeta('addToHistory', false);
   view.dispatch(tr);
 }
@@ -232,7 +273,7 @@ export function loadThreads(state: EditorState, threads: Thread[]): Transaction 
 /** Read-only accessor — the side column UI calls this to render. */
 export function getCommentsState(state: EditorState): CommentsState {
   return (
-    commentsKey.getState(state) ?? { threads: new Map(), visible: false }
+    commentsKey.getState(state) ?? { threads: new Map(), tombstone: new Map(), visible: false }
   );
 }
 

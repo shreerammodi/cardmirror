@@ -133,6 +133,17 @@ code (`reference-docs/AUDIT-2026-06-10.md`):
   re-exports as a plain `<w:br/>` — because the doc model has no node for
   it; tracked separately. Test in `tests/round-trip/inverse.test.ts`.
 
+- **Comment lost when undoing a deletion** (`comments-plugin.ts`).
+  `gcOrphanThreads` removed a thread whose `comment_range` mark was gone via
+  a non-undoable transaction, so undoing the deletion restored the text and
+  the mark but not the thread content — leaving a mark pointing at nothing.
+  Added a per-document tombstone (in plugin state, so it can't leak across
+  docs/panes; cleared on `load`). The GC pass is now bidirectional: it parks
+  an orphaned thread in the tombstone instead of discarding it, and
+  resurrects it when its mark reappears (undo/redo/paste). A new `gc` meta
+  carries the reconciled `{threads, tombstone}`. Tests in
+  `tests/editor/comments-gc.test.ts`.
+
 - **Demolish-mode condense flattened tables** (`condense.ts`). The demolish
   path flattens every container in range into a single textblock run;
   `flattenForDemolish` recursed into a `table` too, pulling its cell
