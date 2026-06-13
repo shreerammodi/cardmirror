@@ -32,6 +32,7 @@ import type { Node as PMNode } from 'prosemirror-model';
 import { schema } from '../schema/index.js';
 import { stampMissingHeadingIds } from '../schema/ids.js';
 import type { Thread } from '../editor/comments-plugin.js';
+import { gzip, gunzip, isGzip } from './codec.js';
 
 /** Magic identifier present in every CardMirror native file. Rejects
  *  arbitrary JSON files. */
@@ -93,10 +94,13 @@ export function serializeNative(
   if (opts.docId) {
     file.docId = opts.docId;
   }
-  // Pretty-print for diffability + manual inspection. JSON whitespace
-  // is recoverable on the next save anyway, so the cost is minimal.
-  const json = JSON.stringify(file, null, 2);
-  return new TextEncoder().encode(json);
+  // Minify, then gzip-wrap. The pretty-print whitespace was only for
+  // human inspection, which gzip defeats anyway (`gunzip file.cmir | jq`
+  // restores it on demand). Compression yields ~10× smaller files; the
+  // gzip magic (0x1F 0x8B) lets `parseNative` tell new files from legacy
+  // plaintext ones (which begin with `{`).
+  const json = JSON.stringify(file);
+  return gzip(new TextEncoder().encode(json));
 }
 
 export interface ParseNativeResult {
@@ -118,7 +122,10 @@ export interface ParseNativeResult {
 export function parseNative(bytes: Uint8Array): ParseNativeResult {
   let parsed: unknown;
   try {
-    const text = new TextDecoder().decode(bytes);
+    // Compressed files (gzip magic) inflate first; legacy plaintext files
+    // (begin with `{`) pass straight through. Everything below is unchanged.
+    const raw = isGzip(bytes) ? gunzip(bytes) : bytes;
+    const text = new TextDecoder().decode(raw);
     parsed = JSON.parse(text);
   } catch (err) {
     throw new Error(
@@ -170,8 +177,17 @@ export function parseNative(bytes: Uint8Array): ParseNativeResult {
  *  identifier — useful for ambiguous file picks where the extension
  *  is missing or unreliable. */
 export function looksLikeNative(bytes: Uint8Array): boolean {
-  // Peek at the first ~120 chars; the `format` key lands in the
+  // Compressed files: inflate (only happens on an ambiguous single-file
+  // pick, never in bulk) and check the inflated head.
+  let head: Uint8Array = bytes;
+  if (isGzip(bytes)) {
+    try {
+      head = gunzip(bytes);
+    } catch {
+      return false;
+    }
+  }
+  // Peek at the first ~256 chars; the `format` key lands in the
   // first few-dozen bytes of any well-formed file we produce.
-  const head = new TextDecoder().decode(bytes.subarray(0, 256));
-  return head.includes(`"${FORMAT_ID}"`);
+  return new TextDecoder().decode(head.subarray(0, 256)).includes(`"${FORMAT_ID}"`);
 }

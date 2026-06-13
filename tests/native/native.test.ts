@@ -49,6 +49,44 @@ describe('native format (.cmir)', () => {
     expect(doc.eq(original)).toBe(true);
   });
 
+  it('writes gzip-compressed bytes (magic 0x1f 0x8b), smaller than the JSON', () => {
+    const original = makeSampleDoc();
+    const bytes = serializeNative(original);
+    expect(bytes[0]).toBe(0x1f);
+    expect(bytes[1]).toBe(0x8b);
+    // The compressed payload is well under the uncompressed JSON size.
+    const rawJsonLen = JSON.stringify({
+      format: 'cardmirror-doc',
+      formatVersion: 1,
+      createdBy: 'CardMirror',
+      createdAt: '',
+      doc: original.toJSON(),
+    }).length;
+    expect(bytes.length).toBeLessThan(rawJsonLen);
+  });
+
+  it('still parses a legacy (uncompressed) .cmir file', () => {
+    const original = makeSampleDoc();
+    // A pre-compression file: the plaintext envelope, exactly as old
+    // builds wrote it (pretty-printed, begins with `{`).
+    const legacy = new TextEncoder().encode(
+      JSON.stringify(
+        {
+          format: 'cardmirror-doc',
+          formatVersion: 1,
+          createdBy: 'CardMirror 0.1.0-alpha.12',
+          createdAt: '2026-06-01T00:00:00.000Z',
+          doc: original.toJSON(),
+        },
+        null,
+        2,
+      ),
+    );
+    expect(legacy[0]).toBe(0x7b); // `{` — not gzip
+    const { doc } = parseNative(legacy);
+    expect(doc.eq(original)).toBe(true);
+  });
+
   it('preserves heading IDs', () => {
     const original = makeSampleDoc();
     const bytes = serializeNative(original);

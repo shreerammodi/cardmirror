@@ -12,6 +12,7 @@
  */
 
 import { Docx } from './ooxml/docx.js';
+import { gzip, gunzip, isGzip } from './native/codec.js';
 
 /** Read a file's existing docId, or null if it has none. Cheap — for
  *  `.docx` it only inspects the custom-properties part. */
@@ -27,7 +28,8 @@ export async function readDocIdFromBytes(
     }
   }
   try {
-    const obj = JSON.parse(new TextDecoder().decode(bytes)) as { docId?: unknown };
+    const raw = isGzip(bytes) ? gunzip(bytes) : bytes;
+    const obj = JSON.parse(new TextDecoder().decode(raw)) as { docId?: unknown };
     return typeof obj.docId === 'string' && obj.docId ? obj.docId : null;
   } catch {
     return null;
@@ -46,7 +48,13 @@ export async function stampDocId(
     await docx.writeDocId(docId);
     return docx.toBuffer();
   }
-  const obj = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+  // Mirror the input's format: a compressed file stays compressed, a
+  // plaintext file stays plaintext (stamping a docId shouldn't itself flip
+  // a file's container format — a full save does that).
+  const wasGzip = isGzip(bytes);
+  const raw = wasGzip ? gunzip(bytes) : bytes;
+  const obj = JSON.parse(new TextDecoder().decode(raw)) as Record<string, unknown>;
   obj['docId'] = docId;
-  return new TextEncoder().encode(JSON.stringify(obj, null, 2));
+  const out = new TextEncoder().encode(JSON.stringify(obj));
+  return wasGzip ? gzip(out) : out;
 }
