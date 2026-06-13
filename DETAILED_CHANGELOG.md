@@ -7,39 +7,34 @@ in each release, see `CHANGELOG.md`.
 
 ## 0.1.0-alpha.14 — 2026-06-13
 
-- **macOS voice no-audio: microphone permission/entitlement + capture fixes
-  + temporary diagnostics** (`apps/desktop/package.json`,
-  `apps/desktop/build/entitlements.mac.plist`, `apps/desktop/src/voice/ipc.ts`,
-  `editor/voice/controller.ts`, `editor/voice/capture.ts`). The mic could be
-  selected and the stream connected, but every sample was zero (running
-  context, `inRate=48000`, processor firing ~12 buffers/s, `peak≈0.0000`). The
-  **root cause**: the packaged app is hardened-runtime + ad-hoc-signed, but
-  electron-builder's default entitlements omit `com.apple.security.device.audio-input`
-  and there was no `NSMicrophoneUsageDescription` — so macOS handed back a
-  silent track while getUserMedia "succeeded". Fixes: a custom
-  `entitlements.mac.plist` granting `audio-input` (wired via `mac.entitlements`
-  + `entitlementsInherit`, with `hardenedRuntime: true` explicit), an
-  `NSMicrophoneUsageDescription` in `mac.extendInfo`, and a
-  `systemPreferences.askForMediaAccess('microphone')` call in the `host:voice-start`
-  handler (darwin-only) that prompts on first use and returns `voice-mic-denied`
-  (surfaced as a "enable it in System Settings" toast) if refused. Two
-  supporting audio-path fixes from earlier in this cycle: (1) the `AudioContext`
-  is created right after
-  `await getUserMedia` — outside the user-gesture tick — so Chromium could
-  start it *suspended*, leaving the ScriptProcessor's `onaudioprocess` to
-  never fire; now `await ctx.resume()` after creation. (2) It no longer forces
+- **macOS voice no-audio: microphone permission/entitlement + capture fixes**
+  (`apps/desktop/package.json`, `apps/desktop/build/entitlements.mac.plist`,
+  `apps/desktop/src/voice/ipc.ts`, `editor/voice/controller.ts`,
+  `editor/voice/capture.ts`). The mic could be selected and the stream
+  connected, but every sample was zero (running context, native rate, processor
+  firing, peak ≈ 0). The **root cause**: the packaged app is hardened-runtime +
+  ad-hoc-signed, but electron-builder's default entitlements omit
+  `com.apple.security.device.audio-input` and there was no
+  `NSMicrophoneUsageDescription` — so macOS handed back a silent track while
+  getUserMedia "succeeded". Fixes: a custom `entitlements.mac.plist` granting
+  `audio-input` (wired via `mac.entitlements` + `entitlementsInherit`, with
+  `hardenedRuntime: true` explicit) — **including
+  `com.apple.security.cs.disable-library-validation`**, which electron-builder's
+  default carries and a custom file must keep, or the hardened runtime refuses
+  to load the Electron Framework in an ad-hoc build and the app crashes at
+  launch; an `NSMicrophoneUsageDescription` in `mac.extendInfo`; and a
+  `systemPreferences.askForMediaAccess('microphone')` call in the
+  `host:voice-start` handler (darwin-only) that prompts on first use and returns
+  `voice-mic-denied` (surfaced as an "enable it in System Settings" toast) if
+  refused. Two supporting audio-path fixes: (1) the `AudioContext` is created
+  after `await getUserMedia` — outside the user-gesture tick — so Chromium could
+  start it *suspended*, leaving the ScriptProcessor's `onaudioprocess` to never
+  fire; now `await ctx.resume()` after creation. (2) It no longer forces
   `new AudioContext({ sampleRate: 16000 })`, which makes a `MediaStreamSource`
   emit silence on macOS Core Audio when the input device runs at 44.1/48 kHz
-  (Linux/PulseAudio happened to resample it). It now uses the context's native
+  (Linux/PulseAudio happened to resample it); it now uses the context's native
   rate and downsamples each capture buffer to 16 kHz in-app (`downsampleTo16k`,
-  a box-average for cheap anti-aliasing; the worker still expects 16 kHz mono
-  s16le). Also added clearly-marked **TEMP** diagnostics: a one-time
-  `ctx.state` / input-rate log and a once-per-second buffers/peak/state log in
-  `onaudioprocess`, to confirm the context is running and the mic is delivering
-  non-silent samples — paired with the existing worker-side `voice: clock
-  check` log they localize any remaining failure (no frames → suspended; peak
-  ≈ 0 → silent source; peak > 0 but no clock check → IPC/worker). The
-  diagnostics are temporary and tagged for removal.
+  box-average anti-aliasing; the worker still expects 16 kHz mono s16le).
 
 - **`bold_off` mark — un-bolding inside bold-by-default blocks**
   (`schema/marks.ts`, `ribbon-commands.ts`, `import/importer.ts`,

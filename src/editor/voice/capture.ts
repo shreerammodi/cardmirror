@@ -61,39 +61,12 @@ export class MicCapture {
     }
     const inRate = ctx.sampleRate;
 
-    // --- TEMP voice-capture diagnostics (remove once the macOS no-audio
-    // issue is resolved): confirm the context is running and the mic is
-    // delivering non-silent samples. See CHANGELOG. ---
-    console.warn(`[voice] capture start: ctx.state=${ctx.state} inRate=${inRate}`);
-    let diagBuffers = 0;
-    let diagPeak = 0;
-    let diagLast = performance.now();
-    // --- end TEMP ---
-
     const source = ctx.createMediaStreamSource(this.stream);
     // ScriptProcessor is deprecated but dependency-free and fine for a mono
     // tap; an AudioWorklet swap is mechanical if it goes.
     this.node = ctx.createScriptProcessor(4096, 1, 1);
     this.node.onaudioprocess = (e) => {
       const f32 = e.inputBuffer.getChannelData(0);
-
-      // --- TEMP voice-capture diagnostics ---
-      for (let i = 0; i < f32.length; i++) {
-        const a = Math.abs(f32[i] as number);
-        if (a > diagPeak) diagPeak = a;
-      }
-      diagBuffers++;
-      const tnow = performance.now();
-      if (tnow - diagLast >= 1000) {
-        console.warn(
-          `[voice] capture: ${diagBuffers} buffers/s, peak=${diagPeak.toFixed(4)}, ctx.state=${ctx.state}`,
-        );
-        diagBuffers = 0;
-        diagPeak = 0;
-        diagLast = tnow;
-      }
-      // --- end TEMP ---
-
       const ds = downsampleTo16k(f32, inRate);
       const i16 = new Int16Array(ds.length);
       for (let i = 0; i < ds.length; i++) {
