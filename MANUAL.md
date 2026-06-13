@@ -343,6 +343,14 @@ work on the result.
   [AI features](#11-ai-features)).
 - **Create Reference** copies a formatted reference for the current
   document to your clipboard.
+- **Lock Highlighting** converts highlighting to a light-gray background in
+  place, freeing the highlight layer so you can re-highlight from scratch.
+  With nothing selected it locks the whole card your cursor is in; with a
+  selection it locks just the selection. (With no selection and no card under
+  the cursor it does nothing — it won't lock an entire pocket/hat/block.)
+  Unlike Create Reference it edits the card directly, adds no heading, and
+  never grays the text — the card stays fully editable. (Any background you'd
+  already applied is left as-is.)
 
 ### Colors: highlight, background, and font color
 

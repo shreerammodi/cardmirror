@@ -112,6 +112,7 @@ export const RIBBON_GROUPS: RibbonGroup[] = [
       'standardizeShading',
       'highlightToShading',
       'shadingToHighlight',
+      'lockHighlighting',
       'togglePaintbrushHighlight',
       'togglePaintbrushShading',
     ],

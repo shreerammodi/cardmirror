@@ -1594,6 +1594,11 @@ if (cardMenuBtn) {
         title: 'Highlighting',
         items: [
           {
+            label: 'Lock Highlighting',
+            commandId: 'lockHighlighting',
+            run: () => runRibbon('lockHighlighting'),
+          },
+          {
             label: 'Highlight to Background',
             commandId: 'highlightToShading',
             run: () => runRibbon('highlightToShading'),

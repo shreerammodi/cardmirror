@@ -48,6 +48,7 @@ import {
   toggleCase,
 } from './condense.js';
 import { applyPlainPasteFromText, togglePlainPaste } from './paste-plugin.js';
+import { lockHighlighting } from './create-reference.js';
 import { showToast } from './toast.js';
 import { getElectronHost, getHost } from './host/index.js';
 import { classifyChar, isWordChar } from './word-break.js';
@@ -3755,6 +3756,7 @@ export type RibbonCommandId =
   | 'smartShrink'
   | 'regrow'
   | 'createReference'
+  | 'lockHighlighting'
   | 'extractUndertag'
   | 'highlightToShading'
   | 'shadingToHighlight'
@@ -3911,6 +3913,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'smartShrink',
   'regrow',
   'createReference',
+  'lockHighlighting',
   'extractUndertag',
   'highlightToShading',
   'shadingToHighlight',
@@ -4043,6 +4046,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   smartShrink: 'Smart Shrink (Deeper for Unmarked Paragraphs)',
   regrow: 'Restore Card Text Size',
   createReference: 'Create Reference',
+  lockHighlighting: 'Lock Highlighting',
   extractUndertag: 'Extract Undertag',
   highlightToShading: 'Highlight to Background',
   shadingToHighlight: 'Background to Highlight',
@@ -4161,6 +4165,7 @@ export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly st
   markActiveAsSpeech: ['toggle speech doc', 'set speech document'],
   // vague / Word-flavored labels
   clearToNormal: ['clear formatting', 'remove formatting', 'clear to normal'],
+  lockHighlighting: ['lock highlights', 'grey highlights', 'gray highlights', 'rehighlight'],
   regrow: ['unshrink', 'regrow', 'restore text size', 'unshrink card text'],
   smartShrink: ['smart shrink', 'deep shrink'],
   pasteAsText: ['paste without formatting', 'paste unformatted', 'paste text'],
@@ -4228,6 +4233,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   // Menu / button commands — exposed for user-defined bindings via
   // the keybinding editor; no default key.
   createReference: '',
+  lockHighlighting: '',
   extractUndertag: '',
   highlightToShading: '',
   shadingToHighlight: '',
@@ -4717,6 +4723,8 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       };
     case 'extractUndertag':
       return extractUndertag(ctx.extractUndertagInQuotes);
+    case 'lockHighlighting':
+      return lockHighlighting();
     case 'highlightToShading':
       return highlightToShading();
     case 'shadingToHighlight':

@@ -26,6 +26,16 @@ see `DETAILED_CHANGELOG.md`.
   untouched). A transitional tool — it'll be retired once libraries have
   migrated.
 
+- **Lock Highlighting (Card menu → Highlighting).** Converts highlighting to a
+  light-gray background in one pass, freeing the highlight layer so you can
+  re-highlight. With no selection it locks the whole card the cursor is in;
+  with a selection it locks just the selection. (No card under the cursor and
+  no selection → nothing happens; it won't lock a whole pocket/hat/block.)
+  Unlike Create Reference it works in place, adds no "FOR REFERENCE" heading,
+  and never grays the text — the card stays fully editable. Any background you'd
+  already applied is left alone. No default shortcut; rebindable, and findable
+  in the command bar.
+
 ### Fixed
 
 - **Spell check no longer flags a word whose styling changes mid-word.** When

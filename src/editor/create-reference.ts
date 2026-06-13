@@ -23,7 +23,7 @@
  */
 
 import { DOMSerializer, Fragment, type Node as PMNode } from 'prosemirror-model';
-import type { EditorState } from 'prosemirror-state';
+import type { Command, EditorState } from 'prosemirror-state';
 import { schema } from '../schema/index.js';
 import { collectCiteText } from './headings.js';
 
@@ -31,27 +31,26 @@ import { collectCiteText } from './headings.js';
 const REFERENCE_SHADING_HEX = 'C0C0C0';
 const FONT_SIZE_DECREMENT_PT = 3;
 
-export type EffectivePtForNode = (
-  node: PMNode | null,
-  parent: PMNode,
-) => number;
+interface CardBodySelection {
+  paragraphs: { node: PMNode; pos: number }[];
+  parentCard: PMNode;
+}
 
-export async function createReference(
+/** Collect the card_body paragraphs a selection touches, requiring every
+ *  touched textblock to be a card_body living inside ONE shared card.
+ *  Returns null if the selection touches anything else or spans more than
+ *  one card. (Create Reference's strict single-card validation.) */
+function collectCardBodySelection(
   state: EditorState,
-  effectivePtForNode: EffectivePtForNode,
-  useGray50: boolean,
-): Promise<boolean> {
-  const sel = state.selection;
-  if (sel.empty) return false;
-
-  // 1. Validate: collect every textblock the selection touches and
-  // confirm they're all card_body AND share the same parent card.
+  from: number,
+  to: number,
+): CardBodySelection | null {
   let parentCardPos: number | null = null;
   let parentCard: PMNode | null = null;
   const paragraphs: { node: PMNode; pos: number }[] = [];
   let invalid = false;
 
-  state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
+  state.doc.nodesBetween(from, to, (node, pos) => {
     if (invalid) return false;
     if (!node.isTextblock) return true;
     if (node.type.name !== 'card_body') {
@@ -82,7 +81,27 @@ export async function createReference(
     return false;
   });
 
-  if (invalid || paragraphs.length === 0 || parentCard === null) return false;
+  if (invalid || paragraphs.length === 0 || parentCard === null) return null;
+  return { paragraphs, parentCard };
+}
+
+export type EffectivePtForNode = (
+  node: PMNode | null,
+  parent: PMNode,
+) => number;
+
+export async function createReference(
+  state: EditorState,
+  effectivePtForNode: EffectivePtForNode,
+  useGray50: boolean,
+): Promise<boolean> {
+  const sel = state.selection;
+  if (sel.empty) return false;
+
+  // 1. Validate: every touched textblock must be a card_body in one card.
+  const found = collectCardBodySelection(state, sel.from, sel.to);
+  if (!found) return false;
+  const { paragraphs, parentCard } = found;
 
   // 2. Compute the cite for the heading via the same logic the nav
   // pane uses (handles cite_mark bridging, the ampersand fix-up).
@@ -180,4 +199,77 @@ export async function createReference(
     console.error('Create Reference: clipboard write failed', err);
     return false;
   }
+}
+
+/** The [before, after] range of the nearest enclosing card / analytic_unit
+ *  container for `$pos`, or null if the cursor isn't inside one. */
+function enclosingCardRange(
+  $pos: import('prosemirror-model').ResolvedPos,
+): { from: number; to: number } | null {
+  for (let d = $pos.depth; d >= 1; d--) {
+    const name = $pos.node(d).type.name;
+    if (name === 'card' || name === 'analytic_unit') {
+      return { from: $pos.before(d), to: $pos.after(d) };
+    }
+  }
+  return null;
+}
+
+/**
+ * "Lock Highlighting" — the in-place sibling of Create Reference. Converts
+ * every `highlight` mark in scope to the light-gray "protected" `shading`
+ * color, freeing the highlight layer so the user can re-highlight in one
+ * pass. Scope follows the selection: with a selection it locks just the
+ * selected range; with no selection it locks the whole card (or
+ * analytic_unit) the cursor is in.
+ *
+ * Unlike Create Reference it edits in place, writes no `<<… FOR REFERENCE>>`
+ * heading, leaves font size alone, and NEVER colors the underlying text gray
+ * — its whole point is to keep the card editable. An existing `shading` mark
+ * is left untouched (matching Create Reference), so re-running won't re-tint
+ * already-locked runs.
+ *
+ * No-op (returns false) when there's no selection and the cursor isn't in a
+ * card, or when the scope contains no highlights to lock.
+ */
+export function lockHighlighting(): Command {
+  return (state, dispatch) => {
+    const sel = state.selection;
+    let from: number;
+    let to: number;
+    if (sel.empty) {
+      const range = enclosingCardRange(sel.$from);
+      if (!range) return false; // card-scoped, but not in a card
+      ({ from, to } = range);
+    } else {
+      from = sel.from;
+      to = sel.to;
+    }
+
+    const highlightType = schema.marks['highlight']!;
+    const shadingType = schema.marks['shading']!;
+    const tr = state.tr;
+    let changed = false;
+
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (!node.isText) return true;
+      if (!node.marks.some((m) => m.type === highlightType)) return true;
+      const start = Math.max(from, pos);
+      const end = Math.min(to, pos + node.nodeSize);
+      if (start >= end) return true;
+      tr.removeMark(start, end, highlightType);
+      // Convert to the protected gray background — but never overwrite an
+      // existing shading (matches Create Reference).
+      if (!node.marks.some((m) => m.type === shadingType)) {
+        tr.addMark(start, end, shadingType.create({ color: REFERENCE_SHADING_HEX }));
+      }
+      changed = true;
+      return true;
+    });
+
+    if (!changed) return false; // nothing highlighted in scope
+    if (!dispatch) return true;
+    dispatch(tr);
+    return true;
+  };
 }

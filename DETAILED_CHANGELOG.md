@@ -7,6 +7,24 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Lock Highlighting** (`create-reference.ts` `lockHighlighting`, wired in
+  `ribbon-commands.ts` + `ribbon-groups.ts` + the Card menu's Highlighting
+  submenu). In-place sibling of Create Reference: a `Command` that drops each
+  highlighted run's `highlight` mark and adds the protected light-gray
+  (`C0C0C0`) `shading`, freeing the highlight layer so the card can be
+  re-highlighted in one pass. Scope follows the selection: non-empty selection
+  → the selected range; empty selection → the nearest enclosing `card` /
+  `analytic_unit` (`enclosingCardRange`), and a no-op if the cursor isn't in
+  one — deliberately NOT the smallest enclosing container, so it never locks a
+  whole `block` / `hat` / `pocket`. One undo step. Differs from Create
+  Reference: edits in place (no clipboard), writes no `<<… FOR REFERENCE>>`
+  heading, leaves font size alone, and never sets a gray `font_color` (the
+  point is to keep the card editable). Existing `shading` runs are left
+  untouched, so it's idempotent on already-locked text. No default keybinding;
+  rebindable; in the command palette via aliases (lock highlights / grey
+  highlights / rehighlight). Distinct from the existing `highlightToShading`,
+  which preserves each highlight's color rather than forcing gray.
+
 - **Spell check joins style-split words** (`viewport-spellcheck.ts`).
   `computeDecos` ran the word regex over each text node separately, so a word
   whose styling changes mid-word — which ProseMirror stores as adjacent text
