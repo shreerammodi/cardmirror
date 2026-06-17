@@ -157,6 +157,7 @@ import {
   enterAtTagEnd,
   enterInHeading,
 } from './tag-keymap.js';
+import { keepCursorInLeadingBlockOnBlockedMerge } from './boundary-cursor-keymap.js';
 import { indentParagraph, outdentParagraph } from './indent-keymap.js';
 import {
   registerRibbonTooltip,
@@ -3644,10 +3645,12 @@ export function buildEditorPlugins(): Plugin[] {
     keymap({
       Backspace: (state, dispatch, view) =>
         backspaceAtTagStart(state, dispatch, view) ||
-        backspaceAtFirstBodyStart(state, dispatch, view),
+        backspaceAtFirstBodyStart(state, dispatch, view) ||
+        keepCursorInLeadingBlockOnBlockedMerge(state, dispatch, view),
       Delete: (state, dispatch, view) =>
         deleteAtTagEnd(state, dispatch, view) ||
-        deleteAtContainerEnd(state, dispatch, view),
+        deleteAtContainerEnd(state, dispatch, view) ||
+        keepCursorInLeadingBlockOnBlockedMerge(state, dispatch, view),
       Enter: (state, dispatch, view) =>
         enterAtTagEnd(state, dispatch, view) ||
         enterMidTag(state, dispatch, view) ||

@@ -17,6 +17,16 @@ see `DETAILED_CHANGELOG.md`.
   selection would merge the two paragraphs, instead of that happening as a
   surprise.
 
+### Fixed
+
+- **Cursor no longer jumps to the next paragraph after deleting a selection
+  that can't merge.** When a selection includes the paragraph break after it
+  but the two paragraphs can't actually join — for example a card's tag and the
+  card below it — deleting it (Backspace, Delete, or voice delete) used to leave
+  the cursor at the start of the next paragraph. The cursor now stays in the
+  paragraph you were editing. The same fix applies to AI Format Cite, which no
+  longer leaves the cursor in the following paragraph.
+
 ## 0.1.0-alpha.14 — 2026-06-13
 
 ### Changed

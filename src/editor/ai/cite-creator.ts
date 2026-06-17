@@ -24,7 +24,7 @@
  */
 
 import type { EditorView } from 'prosemirror-view';
-import { TextSelection } from 'prosemirror-state';
+import { Selection, TextSelection } from 'prosemirror-state';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import { schema } from '../../schema/index.js';
 import { settings } from '../settings.js';
@@ -237,6 +237,30 @@ export function buildCiteTransaction(
   from = clamped.from;
   to = clamped.to;
 
+  // If `to` merely grabs a trailing paragraph break — it sits at the start
+  // of a later textblock with nothing of that block actually selected (the
+  // Ctrl-Shift-Down shape) — pull it back to the end of the leading block.
+  // Otherwise `insertText` reaches across the break: on an isolating tag/card
+  // boundary the trailing block survives but the caret ends up parked there.
+  // A selection reaching INTO the trailing block's text (parentOffset > 0) is
+  // left alone — the own-paragraph split below handles that legitimate case.
+  let trimmedBreak = false;
+  const $to = state.doc.resolve(to);
+  if ($to.parent.isTextblock && $to.parentOffset === 0) {
+    const tailBlockStart = $to.before($to.depth);
+    if (from < tailBlockStart) {
+      try {
+        const leadingEnd = Selection.near(state.doc.resolve(tailBlockStart), -1).to;
+        if (leadingEnd > from && leadingEnd < to) {
+          to = leadingEnd;
+          trimmedBreak = true;
+        }
+      } catch {
+        /* keep the clamped `to` */
+      }
+    }
+  }
+
   const tr = state.tr;
   tr.insertText(result.cite, from, to);
 
@@ -261,6 +285,19 @@ export function buildCiteTransaction(
       if (matchEnd > end) break;
       tr.addMark(matchStart, matchEnd, citeType.create());
       searchOffset = idx + token.length;
+    }
+  }
+
+  // When we trimmed a grabbed trailing break, the original selection still
+  // reaches into the next block, so the default mapped caret would land
+  // there. Pin the caret to the end of the inserted cite (in the leading
+  // block) before the splits below — the transaction remaps this stored
+  // selection through them.
+  if (trimmedBreak) {
+    try {
+      tr.setSelection(TextSelection.create(tr.doc, end));
+    } catch {
+      /* leave the default mapped selection */
     }
   }
 

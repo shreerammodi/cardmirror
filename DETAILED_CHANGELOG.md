@@ -28,6 +28,36 @@ in each release, see `CHANGELOG.md`.
   ascent/descent and pinch in where line-height exceeds the glyph). Covers the
   trailing/downward case only.
 
+- **Caret stays in the leading block when a cross-boundary delete can't merge**
+  (`editor/boundary-cursor-keymap.ts`, `editor/index.ts`,
+  `editor/voice/dispatch.ts`, `editor/ai/cite-creator.ts`). The same
+  trailing-break-grab selection that the pilcrow cue marks lands the caret at
+  the START of the next block after a delete, because `deleteSelection` leaves
+  it at the mapped selection end. When the two blocks merge (plain paragraphs)
+  that's fine, but when an `isolating` boundary blocks the merge — e.g. select a
+  card's tag including the break and Backspace — the delete empties the leading
+  block yet leaves both blocks standing, and the caret wrongly jumps into the
+  untouched next block. New `deleteSelectionKeepingLeadingCursor` runs a
+  throwaway `deleteSelection` probe and compares the doc's textblock count: if
+  it's unchanged the leading block survived (emptied) without merging, so it
+  instead does a clean delete of only the leading block's selected content
+  (`[from, leadingEnd]`, where `leadingEnd = Selection.near(resolve(
+  tailBlockStart), -1).to`), which leaves the break/trailing block untouched and
+  the caret maps cleanly into the emptied block; if the count dropped the blocks
+  really merged (or a whole tag-only card was removed) and the plain delete's
+  caret is correct. Position-mapping the survivor directly is unreliable —
+  `deleteSelection` collapses the content and the boundary into one cut point,
+  so no original position resolves back inside the emptied block. Wired as the
+  last Backspace/Delete fallback after the tag-boundary commands
+  (`keepCursorInLeadingBlockOnBlockedMerge`), and reused by the voice `delete`/
+  `deleteQuote`/`retype` commands. AI Format Cite gets the equivalent at its
+  insert site: after the `TextSelection.between` clamp, a `to` that sits at
+  `parentOffset === 0` of a later block is pulled back to the leading block's
+  end before `insertText`, and the caret is pinned to the end of the inserted
+  cite (a selection reaching INTO the next block's text — `parentOffset > 0` —
+  is left to the existing own-paragraph split). Enter/`splitBlock` over such a
+  selection is not yet covered.
+
 ## 0.1.0-alpha.14 — 2026-06-13
 
 - **macOS voice no-audio: microphone permission/entitlement + capture fixes**

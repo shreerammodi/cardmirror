@@ -30,6 +30,7 @@ import {
 } from './align.js';
 import { alignReading } from './paint-align.js';
 import { matchCommandName } from './please-match.js';
+import { deleteSelectionKeepingLeadingCursor } from '../boundary-cursor-keymap.js';
 import {
   containingScope,
   everyInIteration,
@@ -306,7 +307,7 @@ export async function applyVoiceCommand(
         rememberRange();
         if (qVerb === 'markQuote') return applyPen(view, deps, pen, dispatch);
         if (qVerb === 'deleteQuote') {
-          dispatch(view.state.tr.deleteSelection().scrollIntoView());
+          dispatch(deleteSelectionKeepingLeadingCursor(view.state));
           return true;
         }
         if (qVerb === 'cutQuote') return nativeClip(deps, 'cut');
@@ -793,7 +794,7 @@ export async function applyVoiceCommand(
       if ((ok = requireSelection(view, deps))) ok = nativeClip(deps, 'cut');
       break;
     case 'delete':
-      if ((ok = requireSelection(view, deps))) dispatch(view.state.tr.deleteSelection().scrollIntoView());
+      if ((ok = requireSelection(view, deps))) dispatch(deleteSelectionKeepingLeadingCursor(view.state));
       break;
     case 'paste':
       ok = nativeClip(deps, 'paste');
@@ -828,7 +829,7 @@ export async function applyVoiceCommand(
       break;
     }
     case 'retype':
-      if ((ok = requireSelection(view, deps))) dispatch(view.state.tr.deleteSelection());
+      if ((ok = requireSelection(view, deps))) dispatch(deleteSelectionKeepingLeadingCursor(view.state));
       break;
 
     // Card operations
