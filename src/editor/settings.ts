@@ -556,6 +556,9 @@ export interface Settings {
    *  prefix). Searched recursively for `.cmir` files on demand (no
    *  persistent index). Empty disables file search. Electron only. */
   fileSearchRoot: string;
+  /** Which file formats appear in the command-palette file search:
+   *  'both' (default), 'cmir' only, or 'docx' only. */
+  fileSearchFormats: 'both' | 'cmir' | 'docx';
   /** Which structural objects appear when searching within a file
    *  (`f` → Tab). Subset of pocket/hat/block/tag/cite/analytic;
    *  defaults to block/tag/cite. Stored as kind strings. */
@@ -1015,6 +1018,7 @@ const DEFAULTS: Settings = {
   ribbonTooltipMode: 'both',
   showDropzonePill: false,
   fileSearchRoot: '',
+  fileSearchFormats: 'both',
   fileSearchObjectTypes: ['block', 'tag'],
   fileSearchOutlineDepth: 3,
   pinAutoEnabled: true,
@@ -1139,6 +1143,7 @@ export interface SettingMeta {
     | 'keybindings'
     | 'text'
     | 'folder'
+    | 'fileSearchFormats'
     | 'fileSearchObjectTypes'
     | 'fileSearchOutlineDepth'
     | 'speechDocFormat'
@@ -1316,8 +1321,17 @@ export const SETTING_METADATA: SettingMeta[] = [
     key: 'fileSearchRoot',
     label: 'File search folder',
     description:
-      'Root folder for the command-palette file search (type "f " in the search bar). It is scanned recursively for .cmir files each time you search — there is no persistent index yet, so very large libraries may feel slow. Leave empty to disable file search.',
+      'Root folder for the command-palette file search (type "f " in the search bar). It is scanned recursively for .cmir and .docx files each time you search — there is no persistent index yet, so very large libraries may feel slow. Leave empty to disable file search.',
     kind: 'folder',
+    category: 'general',
+    electronOnly: true,
+  },
+  {
+    key: 'fileSearchFormats',
+    label: 'File search: file formats to list',
+    description:
+      'Which document formats appear in the file search results — both .cmir and .docx, or just one. Each result shows its format on its badge.',
+    kind: 'fileSearchFormats',
     category: 'general',
     electronOnly: true,
   },
@@ -2232,6 +2246,12 @@ function sanitize(s: Settings): Settings {
     ribbonTooltipMode: sanitizeRibbonTooltipMode(s.ribbonTooltipMode),
     showDropzonePill: s.showDropzonePill === true,
     fileSearchRoot: typeof s.fileSearchRoot === 'string' ? s.fileSearchRoot : '',
+    fileSearchFormats:
+      s.fileSearchFormats === 'cmir'
+        ? 'cmir'
+        : s.fileSearchFormats === 'docx'
+          ? 'docx'
+          : 'both',
     fileSearchObjectTypes: sanitizeFileObjectTypes(s.fileSearchObjectTypes),
     fileSearchOutlineDepth: Number.isFinite(s.fileSearchOutlineDepth)
       ? clamp(Math.round(s.fileSearchOutlineDepth), 1, 4)

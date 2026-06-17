@@ -782,6 +782,10 @@ class SettingsModal {
       row.appendChild(text);
       row.appendChild(buildShrinkProtectionsEditor());
       return row;
+    } else if (meta.kind === 'fileSearchFormats') {
+      row.appendChild(text);
+      row.appendChild(buildFileSearchFormatsEditor());
+      return row;
     } else if (meta.kind === 'fileSearchObjectTypes') {
       row.appendChild(text);
       row.appendChild(buildFileObjectTypesEditor());
@@ -1970,6 +1974,44 @@ function buildVoiceDictationModelEditor(): HTMLElement {
       void refresh();
     });
   });
+  return wrap;
+}
+
+function buildFileSearchFormatsEditor(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'pmd-multi-doc-layout-mode-editor';
+  const options: { value: 'both' | 'cmir' | 'docx'; label: string }[] = [
+    { value: 'both', label: 'Both .cmir and .docx (default)' },
+    { value: 'cmir', label: '.cmir only' },
+    { value: 'docx', label: '.docx only' },
+  ];
+  const groupName = `pmd-file-search-formats-${Math.random().toString(36).slice(2, 8)}`;
+  const inputs: HTMLInputElement[] = [];
+  for (const o of options) {
+    const row = document.createElement('label');
+    row.className = 'pmd-multi-doc-layout-mode-row';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = groupName;
+    input.value = o.value;
+    input.checked = o.value === settings.get('fileSearchFormats');
+    input.addEventListener('change', () => {
+      if (input.checked) settings.set('fileSearchFormats', o.value);
+    });
+    inputs.push(input);
+    row.appendChild(input);
+    const labelText = document.createElement('span');
+    labelText.className = 'pmd-multi-doc-layout-mode-row-label';
+    labelText.textContent = o.label;
+    row.appendChild(labelText);
+    wrap.appendChild(row);
+  }
+  // Re-sync if the value changes elsewhere while the panel is open.
+  const unsub = settings.subscribe(() => {
+    const cur = settings.get('fileSearchFormats');
+    for (const input of inputs) input.checked = input.value === cur;
+  });
+  onDetached(wrap, () => unsub());
   return wrap;
 }
 

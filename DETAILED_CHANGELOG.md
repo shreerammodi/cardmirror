@@ -7,6 +7,21 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **`fileSearchFormats` setting controls which formats the file search lists**
+  (`editor/settings.ts`, `editor/settings-ui.ts`,
+  `editor/quick-card-search-ui.ts`). New `'both' | 'cmir' | 'docx'` setting
+  (default `'both'`), added to the `Settings` type, `DEFAULTS`, `sanitize`
+  (garbage → `'both'`), the `SettingMeta` kind union, and `SETTING_METADATA`
+  (Settings → General, `electronOnly`, next to the file-search folder option).
+  Rendered as a three-way radio group (`buildFileSearchFormatsEditor`,
+  mirroring `buildSpeechDocFormatEditor`, with a `settings.subscribe` re-sync).
+  The search UI filters the cached file list at search time via
+  `filterFilesByFormatSetting` (using the existing `fileFormat(f.path)`) at both
+  result-building sites (the `f ` prefix and the no-prefix everything-search),
+  so toggling it needs no re-scan and takes effect on the next search. The scan
+  still lists both formats; this is a display filter. (The empty-folder message
+  no longer hardcodes ".cmir".)
+
 - **Command-bar file search lists `.docx` files**
   (`apps/desktop/src/main.ts`, `editor/file-search.ts`,
   `editor/quick-card-search-ui.ts`). The recursive scan behind

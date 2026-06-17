@@ -109,6 +109,14 @@ function enabledSig(): string {
   return (settings.get('fileSearchObjectTypes') as string[]).slice().sort().join(',');
 }
 
+/** Filter the file list to the formats the user wants surfaced (the
+ *  `fileSearchFormats` setting; 'both' shows everything). Applied at search
+ *  time off the cached list, so toggling the setting needs no re-scan. */
+function filterFilesByFormatSetting(files: FileEntry[]): FileEntry[] {
+  const pref = settings.get('fileSearchFormats');
+  return pref === 'both' ? files : files.filter((f) => fileFormat(f.path) === pref);
+}
+
 /** Drop warm entries for files that are no longer pinned. */
 function pruneWarm(pins: Set<string>): void {
   for (const key of [...warmCache.keys()]) {
@@ -801,7 +809,9 @@ class QuickCardSearchUI {
         ...searchCommandSource(query),
         ...searchSettingsSource(query),
         ...(this.fileList && filePins
-          ? searchFiles(this.fileList, query).map((f) => fileResult(f, filePins.has(f.path)))
+          ? searchFiles(filterFilesByFormatSetting(this.fileList), query).map((f) =>
+              fileResult(f, filePins.has(f.path)),
+            )
           : []),
       ];
       this.emptyText = 'No matches.';
@@ -843,7 +853,7 @@ class QuickCardSearchUI {
     // ★ + top-sort reflect MANUAL pins (the user-controlled feature);
     // auto pins (recents/frequents) are warmed silently, not surfaced.
     const pins = this.manualPinPaths();
-    const matched = searchFiles(this.fileList, query);
+    const matched = searchFiles(filterFilesByFormatSetting(this.fileList), query);
     const ordered = [
       ...matched.filter((f) => pins.has(f.path)),
       ...matched.filter((f) => !pins.has(f.path)),
@@ -851,7 +861,7 @@ class QuickCardSearchUI {
     this.results = ordered.map((f) => fileResult(f, pins.has(f.path)));
     this.emptyText = this.fileList.length
       ? 'No matching files.'
-      : 'No .cmir files in the search folder.';
+      : 'No files in the search folder.';
     this.finishSearch();
   }
 

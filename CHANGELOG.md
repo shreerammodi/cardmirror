@@ -14,7 +14,9 @@ see `DETAILED_CHANGELOG.md`.
   `.docx` documents. Each result's badge shows its format — `CMIR` or `DOCX` —
   and the file name is shown without its extension. `.docx` and `.cmir` behave
   identically: press Enter to open either, or Tab to dive into either and
-  search its contents (blocks, tags, cites) and insert from it.
+  search its contents (blocks, tags, cites) and insert from it. A new
+  **Settings → General → File search: file formats to list** option restricts
+  results to just `.cmir`, just `.docx`, or both (the default).
 
 ### Changed
 

@@ -71,6 +71,17 @@ describe('settings import (replaceAll)', () => {
     expect(s.get('keyboardMacros')).toEqual([]);
   });
 
+  it('fileSearchFormats: defaults to both, accepts cmir/docx, rejects garbage', () => {
+    const s = new SettingsStore();
+    expect(s.get('fileSearchFormats')).toBe('both'); // default
+    s.replaceAll({ fileSearchFormats: 'cmir' });
+    expect(s.get('fileSearchFormats')).toBe('cmir');
+    s.replaceAll({ fileSearchFormats: 'docx' });
+    expect(s.get('fileSearchFormats')).toBe('docx');
+    s.replaceAll({ fileSearchFormats: 'nonsense' });
+    expect(s.get('fileSearchFormats')).toBe('both'); // garbage → default
+  });
+
   it('round-trips an export back through import', () => {
     const a = new SettingsStore();
     a.set('commentAuthor', 'Round');
