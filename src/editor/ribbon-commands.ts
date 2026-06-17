@@ -1260,6 +1260,51 @@ export function highlightAcronym(activeColor: () => string): Command {
 }
 
 /**
+ * After a toggle-OFF of underline / highlight, clear the style from
+ * whitespace left dangling at the boundary. The operating range is
+ * trailing-trimmed (Layer 3) before a toggle, which is right for toggle-ON
+ * (don't style the trailing space) but on toggle-OFF leaves a styled space
+ * just OUTSIDE the range — between the now-unstyled word and a styled
+ * neighbor — still underlined / highlighted. This removes the style from the
+ * contiguous styled-whitespace run immediately before `from` and after `to`
+ * (bounded to the textblock): a space should carry the run style only when
+ * the words on BOTH sides do, and the toggled side no longer does. Positions
+ * are stable across `removeMark`, so `doc` is read pre-toggle and the same
+ * coordinates apply to `tr`.
+ */
+function clearDanglingBoundaryStyle(
+  tr: Transaction,
+  doc: PMNode,
+  from: number,
+  to: number,
+  markTypes: readonly MarkType[],
+): void {
+  const charIsSpace = (pos: number): boolean => {
+    const ch = doc.textBetween(pos, pos + 1);
+    return ch.length === 1 && /\s/.test(ch);
+  };
+  const charHasStyle = (pos: number): boolean => {
+    let found = false;
+    doc.nodesBetween(pos, pos + 1, (node) => {
+      if (!node.isText) return true;
+      if (node.marks.some((m) => markTypes.includes(m.type))) found = true;
+      return false;
+    });
+    return found;
+  };
+  // Leading styled-whitespace run immediately before the toggled-off range.
+  const tbStart = doc.resolve(from).start();
+  let p = from;
+  while (p > tbStart && charIsSpace(p - 1) && charHasStyle(p - 1)) p--;
+  if (p < from) for (const mt of markTypes) tr.removeMark(p, from, mt);
+  // Trailing styled-whitespace run immediately after the toggled-off range.
+  const tbEnd = doc.resolve(to).end();
+  let q = to;
+  while (q < tbEnd && charIsSpace(q) && charHasStyle(q)) q++;
+  if (q > to) for (const mt of markTypes) tr.removeMark(to, q, mt);
+}
+
+/**
  * F9 / Mod-U — toggle Verbatim's "Underline" style on the selection.
  *
  * Two marks back this: `underline_mark` (named-style, used in body
@@ -1329,6 +1374,7 @@ export function applyUnderline(
         // Verbatim's "press F9 twice clears formatting" — opt-out
         // via setting.
         if (clearFormattingOnToggleOff()) stripDirectFormatting(tr, from, to);
+        clearDanglingBoundaryStyle(tr, state.doc, from, to, [namedMark, directMark]);
       }
     } else {
       // Toggle on: per-textblock segments across all operating
@@ -1512,7 +1558,10 @@ export function applyHighlight(activeColor: () => string): Command {
     if (!dispatch) return true;
     const tr = state.tr;
     if (allMarked) {
-      for (const { from, to } of op.ranges) tr.removeMark(from, to, highlightType);
+      for (const { from, to } of op.ranges) {
+        tr.removeMark(from, to, highlightType);
+        clearDanglingBoundaryStyle(tr, state.doc, from, to, [highlightType]);
+      }
     } else {
       // Replace any existing highlight color with the active one
       // across each range. removeMark + addMark guarantees the new

@@ -31,6 +31,14 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Turning off underline or highlight no longer strands it on the spaces next
+  to the word.** Toggling underline (F9 / Mod-U) or highlight (F11) *on* leaves
+  the space after a double-clicked word unstyled, as it should — but toggling
+  *off* used to leave that space (and the one before the word) still underlined
+  or highlighted, dangling between the now-plain word and its styled neighbor.
+  Toggling off now also clears the style from those adjacent spaces, so a space
+  stays styled only when the words on both sides of it are.
+
 - **Cursor no longer jumps to the next paragraph after deleting a selection
   that can't merge.** When a selection includes the paragraph break after it
   but the two paragraphs can't actually join — for example a card's tag and the

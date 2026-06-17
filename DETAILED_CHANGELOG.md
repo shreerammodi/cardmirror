@@ -7,6 +7,22 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Toggle-off of underline / highlight clears dangling boundary whitespace**
+  (`editor/ribbon-commands.ts`). Formatting operating ranges are
+  trailing-trimmed by `getOperatingRangesForFormatting` (Layer 3, so a
+  double-clicked `word ` styles only the word). That's correct for toggle-ON
+  but wrong for toggle-OFF: `removeMark` ran over the trimmed range, leaving a
+  styled space just outside it — between the now-unstyled word and a styled
+  neighbor — still underlined/highlighted. New `clearDanglingBoundaryStyle`
+  runs in the toggle-off branch of `applyUnderline` (F9 / Mod-U, both
+  `underline_mark` and `underline_direct`) and `applyHighlight` (F11): after
+  the `removeMark`, it strips the style from the contiguous styled-whitespace
+  run immediately before `from` and after `to`, bounded to the textblock. A
+  run-style space is kept only when the words on both sides carry it; the
+  toggled side no longer does, so the boundary spaces are cleared. Positions
+  are stable across `removeMark`, so it reads pre-toggle `state.doc` and
+  applies the same coordinates to the transaction.
+
 - **Bulk structural re-apply / replace over a shadow selection**
   (`editor/ribbon-commands.ts`). `selectAllOfStyle` (right-click a ribbon style
   button) sets shadow ranges and collapses the PM selection, but
