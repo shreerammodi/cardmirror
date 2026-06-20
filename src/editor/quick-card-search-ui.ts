@@ -319,10 +319,18 @@ function searchCommandSource(query: string): PaletteResult[] {
   // Searchable text = label + any aliases, so a query phrased like an
   // alias still matches. Ranking still prefers the label: an alias-only
   // hit (not in the label) sorts after label hits via the Infinity below.
+  // "Fix" and "repair" are treated as synonyms for each other: any command
+  // whose label contains one matches a query phrased with the other (e.g.
+  // "Repair OCR/PDF Text" is reachable via "fix", "Fix Formatting Gaps"
+  // via "repair").
   const haystack = (id: RibbonCommandId): string => {
     const aliases = RIBBON_COMMAND_ALIASES[id];
     const label = RIBBON_COMMAND_LABELS[id].toLowerCase();
-    return aliases && aliases.length ? `${label} ${aliases.join(' ')}` : label;
+    const synonyms: string[] = [];
+    if (label.includes('fix')) synonyms.push('repair');
+    if (label.includes('repair')) synonyms.push('fix');
+    const extra = [...(aliases ?? []), ...synonyms];
+    return extra.length ? `${label} ${extra.join(' ')}` : label;
   };
   const available = availableRibbonCommandIds();
   const matched =

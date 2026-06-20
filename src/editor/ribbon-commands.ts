@@ -1014,7 +1014,7 @@ function applyBodyMark(
     if (op.fromShadow) tr.setMeta(META_OPERATING_ON_SHADOW, true);
     dispatch(tr);
     return true;
-  });
+  }, { appliesNamedStyle: true });
 }
 
 export function applyCite(): Command {
@@ -1361,21 +1361,86 @@ function expandToAdjacentBookends(
   return { from: eFrom, to: eTo };
 }
 
+/** Clip a gap's normalization range so explicitly-selected trailing/leading
+ *  PUNCTUATION survives as the command set it. A gap char inside the operating
+ *  range `r` that is punctuation was deliberately selected — selecting
+ *  "government." (with the period) and pressing F9 means the period takes the
+ *  style, even though it's a gap char between "government" and the next word. So
+ *  the gap-fix must not strip it. Whitespace is NOT protected: a selected
+ *  trailing space is still normalized away, matching the Layer-3 trim's
+ *  space-only policy ("government. " → underline the period, not the space).
+ *  Punctuation outside `r` stays a normal gap char (so an unselected "." still
+ *  bridges/strips). Returns the sub-range of `[gapFrom, gapTo)` the gap-fix may
+ *  touch — empty (from === to) when the whole gap is protected. */
+function gapModRange(
+  doc: PMNode,
+  gapFrom: number,
+  gapTo: number,
+  r: { from: number; to: number },
+): { from: number; to: number } {
+  const inSel = (pos: number): boolean => pos >= r.from && pos < r.to;
+  const isPunct = (pos: number): boolean =>
+    classifyChar(doc.textBetween(pos, pos + 1)) === 'punct';
+  let from = gapFrom;
+  while (from < gapTo && inSel(from) && isPunct(from)) from++;
+  let to = gapTo;
+  while (to > from && inSel(to - 1) && isPunct(to - 1)) to--;
+  return { from, to };
+}
+
+/** Whether EVERY text node in `[from, to)` carries `type`. Unlike PM's
+ *  `rangeHasMark` (true if the mark occurs ANYWHERE in the range), this is the
+ *  "throughout" test — used to tell a continuously-styled gap from one that's
+ *  only partly styled. Empty range → false. */
+function rangeFullyHasMark(
+  doc: PMNode,
+  from: number,
+  to: number,
+  type: MarkType,
+): boolean {
+  if (to <= from) return false;
+  let full = true;
+  doc.nodesBetween(from, to, (node) => {
+    if (node.isText && !type.isInSet(node.marks)) full = false;
+    return full;
+  });
+  return full;
+}
+
 /** Normalize ONE gap across ALL formatting families to the value its bookends
  *  imply — bridge a mark both carry, strip one the bookends don't agree on.
  *  Used by the per-apply wrapper (`withGapFix`), which calls it only on the
- *  EDGE gaps of a changed range. Here underline and emphasis are one family:
- *  both bookends carrying either (incl. emphasis+emphasis) → the gap fills
- *  with UNDERLINE, so an emphasized selection's edges join an emphasized
- *  neighbor with underline. (The manual `fixFormattingGaps` command keeps its
- *  own per-gap rule, which bridges emphasis+emphasis with emphasis.)
- *  `effectivePt` omitted → `font_size` is left alone (no size resolver). */
+ *  EDGE gaps of a changed range.
+ *
+ *  The underline/emphasis "named-style" family has two bridging rules, chosen
+ *  by `appliesNamedStyle` — true only when the command that ran actually
+ *  toggles that family (underline / emphasis / cite):
+ *    - appliesNamedStyle = true: underline AND emphasis are one family —
+ *      both bookends carrying either (incl. emphasis+emphasis) → the gap fills
+ *      with UNDERLINE, so an emphasized selection's edges join an emphasized
+ *      neighbor with underline (the continuous read-aloud marker).
+ *    - appliesNamedStyle = false: the command was an UNRELATED family
+ *      (highlight / shading / font_size), so the named-style family is just
+ *      tidied with the manual `fixFormattingGaps` rule — emphasis+emphasis
+ *      bridges with EMPHASIS (preserved, never converted to underline).
+ *      Otherwise toggling highlight on emphasized text would break the
+ *      emphasis at the selection's edge gaps.
+ *  `effectivePt` omitted → `font_size` is left alone (no size resolver).
+ *
+ *  The bookends come from `hit`, but the actual mark mutations are confined to
+ *  `[modFrom, modTo)` — the part of the gap the caller permits us to touch
+ *  (`gapModRange` shaves off explicitly-selected punctuation). The bookend
+ *  decision is unchanged; only the written span narrows. */
 function applyFullGapTarget(
   tr: Transaction,
   hit: GapHit,
+  modFrom: number,
+  modTo: number,
+  appliesNamedStyle: boolean,
   effectivePt?: (node: PMNode | null, parent: PMNode) => number,
 ): void {
-  const { gapFrom, gapTo, firstNode, lastNode, parent } = hit;
+  if (modFrom >= modTo) return;
+  const { firstNode, lastNode, parent } = hit;
   const um = schema.marks['underline_mark']!;
   const ud = schema.marks['underline_direct']!;
   const emphasisType = schema.marks['emphasis_mark']!;
@@ -1391,22 +1456,49 @@ function applyFullGapTarget(
   const marksToAdd: Mark[] = [];
   const marksToRemove: MarkType[] = [];
 
-  // Named-style target (mutually exclusive). Underline and emphasis form one
+  // Named-style target (mutually exclusive). When the command that ran toggles
+  // the named-style family (appliesNamedStyle), underline and emphasis are one
   // "underline family": whenever BOTH bookends carry one of them — underline
-  // both sides, emphasis both sides, OR mixed — the gap fills with UNDERLINE.
-  // Emphasis never fills a gap (two emphasized words are joined by underline,
-  // the continuous read-aloud marker). Cite stays distinct.
+  // both sides, emphasis both sides, OR mixed — the gap fills with UNDERLINE
+  // (two emphasized words joined by underline, the continuous read-aloud
+  // marker). When the command was an UNRELATED family (highlight / shading /
+  // font_size), fall back to the manual normalizer's rule so emphasis on both
+  // sides bridges with EMPHASIS instead of being converted to underline.
   const fmU = has(fm, um) || has(fm, ud);
   const lmU = has(lm, um) || has(lm, ud);
   const fmE = has(fm, emphasisType);
   const lmE = has(lm, emphasisType);
-  let named: 'underline' | 'cite' | null = null;
-  if ((fmU || fmE) && (lmU || lmE)) named = 'underline';
-  else if (has(fm, citeType) && has(lm, citeType)) named = 'cite';
+  const fmC = has(fm, citeType);
+  const lmC = has(lm, citeType);
+  let named: 'underline' | 'emphasis' | 'cite' | null = null;
+  if (appliesNamedStyle) {
+    // The emphasis→underline join is for SEPARATELY-emphasized words, which
+    // have a non-emphasized gap between them (a real seam). When the gap is
+    // ALREADY emphasized, the bookends and gap form one CONTINUOUS emphasized
+    // phrase — re-applying emphasis to part of it (F10 is a one-directional
+    // apply, never a toggle-off) must not punch underlined holes at the
+    // sub-span's edges; keep the emphasis. The command only marks the operating
+    // word, never the flanking edge gaps, so `tr.doc` at the gap still reflects
+    // its pre-command state.
+    if (fmE && lmE && rangeFullyHasMark(tr.doc, modFrom, modTo, emphasisType))
+      named = 'emphasis';
+    else if ((fmU || fmE) && (lmU || lmE)) named = 'underline';
+    else if (fmC && lmC) named = 'cite';
+  } else {
+    if (fmU && lmU) named = 'underline';
+    else if (fmE && lmE) named = 'emphasis';
+    else if (fmC && lmC) named = 'cite';
+    else if ((fmU && lmE) || (fmE && lmU)) named = 'underline';
+  }
   if (named === 'underline') {
     const structural = STRUCTURAL_TEXTBLOCKS_FOR_UNDERLINE.has(parent.type.name);
     marksToAdd.push((structural ? ud : um).create());
     marksToRemove.push(structural ? um : ud, emphasisType, citeType);
+  } else if (named === 'emphasis') {
+    // `excludes` strips underline_mark / cite automatically; underline_direct
+    // has no excludes, so strip it explicitly.
+    marksToAdd.push(emphasisType.create());
+    marksToRemove.push(ud);
   } else if (named === 'cite') {
     marksToAdd.push(citeType.create());
     marksToRemove.push(ud);
@@ -1442,8 +1534,8 @@ function applyFullGapTarget(
     else marksToRemove.push(fontSizeType);
   }
 
-  for (const mt of marksToRemove) tr.removeMark(gapFrom, gapTo, mt);
-  for (const mk of marksToAdd) tr.addMark(gapFrom, gapTo, mk);
+  for (const mt of marksToRemove) tr.removeMark(modFrom, modTo, mt);
+  for (const mk of marksToAdd) tr.addMark(modFrom, modTo, mk);
 }
 
 /** Wrap a formatting Command so that, after it runs, the gaps around what it
@@ -1453,11 +1545,18 @@ function applyFullGapTarget(
  *  style the bookends don't agree on. Runs in the command's OWN transaction
  *  (one undo step); reads the changed ranges from its mark steps (positions
  *  are stable across mark steps). `effectivePt` enables font_size normalization
- *  (passed by the size commands). */
+ *  (passed by the size commands). `appliesNamedStyle` marks commands that
+ *  toggle the underline/emphasis/cite family — only those let an emphasized
+ *  edge gap fill with underline; for everything else (highlight / shading /
+ *  font_size) the named-style family is preserved (see `applyFullGapTarget`). */
 function withGapFix(
   command: Command,
-  effectivePt?: (node: PMNode | null, parent: PMNode) => number,
+  opts: {
+    effectivePt?: (node: PMNode | null, parent: PMNode) => number;
+    appliesNamedStyle?: boolean;
+  } = {},
 ): Command {
+  const { effectivePt, appliesNamedStyle = false } = opts;
   return (state, dispatch, view) => {
     if (!dispatch) return command(state, undefined, view);
     // The authoritative edges are the edges of the user's OPERATING ranges
@@ -1497,7 +1596,11 @@ function withGapFix(
         // gapFrom-1, right bookend char at gapTo.
         const internal = hit.gapFrom - 1 >= r.from && hit.gapTo < r.to;
         if (internal) return;
-        applyFullGapTarget(tr, hit, effectivePt);
+        // Shave explicitly-selected trailing/leading punctuation out of the
+        // writable span: the user picked it on purpose, so the command's mark
+        // stands there. The bookends (hence bridge-vs-strip) are unchanged.
+        const mod = gapModRange(tr.doc, hit.gapFrom, hit.gapTo, r);
+        applyFullGapTarget(tr, hit, mod.from, mod.to, appliesNamedStyle, effectivePt);
       });
     }
     dispatch(tr);
@@ -1609,7 +1712,7 @@ export function applyUnderline(
     if (op.fromShadow) tr.setMeta(META_OPERATING_ON_SHADOW, true);
     dispatch(tr);
     return true;
-  });
+  }, { appliesNamedStyle: true });
 }
 
 const STRUCTURAL_TEXTBLOCKS_FOR_UNDERLINE = new Set([
@@ -2177,7 +2280,7 @@ export function adjustFontSize(
     });
     dispatch(tr);
     return true;
-  }, effectivePt);
+  }, { effectivePt });
 }
 
 /**
@@ -2238,7 +2341,7 @@ export function setFontSize(
     }
     dispatch(tr);
     return true;
-  }, effectivePt);
+  }, { effectivePt });
 }
 
 // ----------------------------------------------------------------

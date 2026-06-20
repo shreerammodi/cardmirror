@@ -5,6 +5,40 @@ changes in each release, written for users of the editor. For
 in-depth rationale and implementation context behind each entry,
 see `DETAILED_CHANGELOG.md`.
 
+## Unreleased
+
+### Fixed
+
+- **Highlighting emphasized text no longer breaks the emphasis at the edges.**
+  Toggling highlight (or shading, or a font-size change) over a run of
+  emphasized text left underlined gaps where the highlighted span met its
+  emphasized neighbors. Filling an emphasized gap with underline is now
+  reserved for when you actually apply emphasis or underline; unrelated
+  formatting leaves the emphasis intact.
+
+- **Re-emphasizing part of an already-emphasized phrase no longer breaks it.**
+  Pressing Emphasis on a word (or words) inside a continuously-emphasized run
+  used to underline the gaps at the edges of what you selected. Emphasis now
+  fills a gap with underline only where it joins two *separately*-emphasized
+  words; a gap that's already emphasized stays emphasized, so a continuous
+  phrase stays continuous.
+
+- **Selecting trailing/leading punctuation now formats it.** If you select a
+  word together with an adjacent punctuation mark — e.g. `government.` with the
+  period, or `(government` with the paren — and apply a style, the punctuation
+  now takes the style instead of being treated as part of the gap and left
+  unformatted. Spaces still behave as before: selecting `government. ` with the
+  trailing space underlines the period but not the space. Punctuation you didn't
+  select still bridges normally between two formatted words.
+
+### Changed
+
+- **"Fix" and "repair" now match each other in the command bar.** Commands
+  whose names contain one of those words — *Repair OCR/PDF Text*, *Repair
+  Formatting (AI)*, *Fix Formatting Gaps* — are reachable by searching for
+  either word. Typing "fix" surfaces the Repair commands, and "repair"
+  surfaces Fix Formatting Gaps.
+
 ## 0.1.0-alpha.16 — 2026-06-17
 
 ### Added

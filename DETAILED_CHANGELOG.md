@@ -5,6 +5,73 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
+## Unreleased
+
+- **Gap-fix no longer converts emphasis to underline for unrelated commands**
+  (`editor/ribbon-commands.ts`). `withGapFix` runs `applyFullGapTarget` over the
+  edge gaps after *every* formatting command. Its underline-family rule treats
+  underline and emphasis as one family, so both bookends emphasized → the gap
+  fills with underline — the continuous read-aloud marker. That conversion was
+  firing unconditionally, including for highlight/shading/font-size, so toggling
+  highlight on a continuously-emphasized run rewrote its edge gaps to underline
+  and visibly broke the emphasis at the selection boundaries. `withGapFix` now
+  takes an `appliesNamedStyle` flag (true only for `applyUnderline` and
+  `applyBodyMark`, i.e. underline/emphasis/cite); `applyFullGapTarget` keeps the
+  emphasis→underline conversion when it's set, and otherwise falls back to the
+  manual `fixFormattingGaps` rule, where emphasis+emphasis bridges with emphasis
+  (preserved). Only the emphasis-on-both-sides case differs between the two
+  rules — underline+underline, mixed underline/emphasis→underline, and cite+cite
+  are identical either way. The `withGapFix` second argument changed from a bare
+  `effectivePt` to an options object (`{ effectivePt, appliesNamedStyle }`); the
+  two font-size callers updated accordingly.
+
+- **Re-emphasizing inside a continuous emphasized phrase preserves it**
+  (`editor/ribbon-commands.ts`). The `appliesNamedStyle` fix above still let the
+  emphasis→underline conversion fire on the emphasis command itself: emphasis is
+  a one-directional apply (`applyBodyMark` always adds, never toggles off), so
+  pressing F10 on a word inside an already-emphasized run re-ran the per-apply
+  rule over its edge gaps (both bookends emphasized) and converted them to
+  underline — same broken seams as the highlight case, but it couldn't be solved
+  by the flag because this *is* a named-style apply and the conversion is wanted
+  when joining two separately-emphasized words. The distinguishing signal is the
+  gap's own pre-command emphasis: separately-emphasized words have a plain gap (a
+  real seam); a continuous phrase has an already-emphasized gap. `applyFullGapTarget`'s
+  `appliesNamedStyle` branch now bridges with emphasis (not underline) when both
+  bookends *and* the gap are emphasized (`rangeFullyHasMark(tr.doc, gapFrom,
+  gapTo, emphasisType)` — a new "throughout" helper, since PM's `rangeHasMark`
+  is "anywhere"). The command only marks the operating word, never the flanking
+  edge gaps, so `tr.doc` at the gap still reflects its pre-command state. The
+  formatting-gaps test for the separate-words join was rewritten to use a
+  realistic plain-gap setup (it previously used pre-emphasized gaps, which the
+  new rule correctly reads as continuous).
+
+- **Explicitly-selected edge punctuation is formatted, not gap-stripped**
+  (`editor/ribbon-commands.ts`). The operating range can include trailing/leading
+  punctuation the user deliberately selected (`government.` with the period);
+  the command marks it, but `withGapFix` then ran `applyFullGapTarget` over the
+  whole bookend-to-bookend gap and, when the neighbor disagreed, stripped the
+  mark right back off that punctuation. Punctuation should only count as gap for
+  *bridging* (an unselected `. ` between two underlined words still bridges); a
+  selected punctuation mark is the user's choice. New `gapModRange(doc, gapFrom,
+  gapTo, r)` shaves the in-selection punctuation run off each end of the gap and
+  returns the sub-range the gap-fix may write; `applyFullGapTarget` takes that
+  `[modFrom, modTo)` and confines its `addMark`/`removeMark` (and the
+  `rangeFullyHasMark` continuity check) to it, while still deciding bridge-vs-strip
+  from the unchanged bookends. Whitespace is intentionally *not* protected, so a
+  selected trailing space is still normalized away — matching the Layer-3 trim's
+  space-only policy (`government. ` → period underlined, space not).
+
+- **"Fix" / "repair" are command-search synonyms** (`editor/quick-card-search-ui.ts`).
+  `searchCommandSource`'s per-command `haystack` now appends `repair` to any
+  command whose label contains `fix`, and `fix` to any whose label contains
+  `repair`, so each word matches commands named with the other. This covers the
+  three existing fix/repair commands (`repairText`, `repairFormatting`,
+  `fixFormattingGaps`) and any future ones automatically — the expansion is
+  driven off the label text, not a hardcoded id list. The synonym terms join the
+  existing `RIBBON_COMMAND_ALIASES` in the haystack, so they affect matching only,
+  not display, and label hits still outrank alias/synonym-only hits in the
+  ranking pass.
+
 ## 0.1.0-alpha.16 — 2026-06-17
 
 - **`fileSearchFormats` setting controls which formats the file search lists**

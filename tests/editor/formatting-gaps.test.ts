@@ -221,6 +221,41 @@ describe('withGapFix — full normalization, local scope', () => {
   });
 });
 
+// ---- explicitly-selected edge punctuation ----
+
+describe('withGapFix — selected edge punctuation is formatted, not gap-stripped', () => {
+  it('selecting a word WITH its trailing period underlines the period (not the following space)', () => {
+    // "government." selected (period included), F9. The period was picked on
+    // purpose → it takes the underline; the space before the next sentence is
+    // the real gap and stays clean.
+    const doc = docOf(['government. Even']);
+    const next = run(doc, 'government.', applyUnderline(() => false));
+    expect(mask(next.doc, 'underline_mark')).toBe('___________     '); // "government."
+  });
+
+  it('a selected trailing SPACE is still trimmed — period underlined, space not', () => {
+    // "government. " selected (trailing space). Layer 3 shaves the space out of
+    // the operating range, so we underline the period but not the space.
+    const doc = docOf(['government. Even']);
+    const next = run(doc, 'government. ', applyUnderline(() => false));
+    expect(mask(next.doc, 'underline_mark')).toBe('___________     ');
+  });
+
+  it('an UNselected trailing period still bridges between two underlined words', () => {
+    // The period belongs to the (already underlined) "government"; underlining
+    // the next word "even" bridges the ". " gap so the run is continuous.
+    const doc = docOf(['government', [U()]], ['. even']);
+    const next = run(doc, 'even', applyUnderline(() => false));
+    expect(mask(next.doc, 'underline_mark')).toBe('________________'); // all of it
+  });
+
+  it('selecting a word WITH a leading paren underlines the paren (not the preceding space)', () => {
+    const doc = docOf(['see (government here']);
+    const next = run(doc, '(government', applyUnderline(() => false));
+    expect(mask(next.doc, 'underline_mark')).toBe('    ___________     '); // "(government"
+  });
+});
+
 // ---- cite / emphasis ----
 
 describe('withGapFix — cite/emphasis bridge', () => {
@@ -233,12 +268,26 @@ describe('withGapFix — cite/emphasis bridge', () => {
 
   it('emphasizing a word between two separately-emphasized words fills the EDGE gaps with underline', () => {
     const E = () => schema.marks['emphasis_mark']!.create();
-    const doc = docOf(['alpha ', [E()]], ['beta'], [' gamma', [E()]]);
+    // "alpha" and "gamma" are SEPARATELY emphasized — their gaps to "beta" are
+    // plain (a real seam, as word-by-word F10 would leave them). Emphasizing
+    // "beta" joins it to each neighbor across those plain gaps with underline.
+    const doc = docOf(['alpha', [E()]], [' beta '], ['gamma', [E()]]);
     const next = run(doc, 'beta', applyEmphasis());
-    // "beta" is a single-word edit; both its gaps are EDGE gaps meeting an
-    // emphasized neighbor, so they bridge with underline.
     expect(mask(next.doc, 'emphasis_mark')).toBe('_____ ____ _____');
     expect(mask(next.doc, 'underline_mark')).toBe('     _    _     ');
+  });
+
+  it('re-emphasizing a word inside a continuous emphasized phrase keeps the gaps emphasized', () => {
+    const E = () => schema.marks['emphasis_mark']!.create();
+    // The whole run "alpha beta gamma" is one continuous emphasized phrase
+    // (spaces included). F10 is a one-directional apply, so re-emphasizing
+    // "beta" must NOT punch underlined holes at its edges — the already-
+    // emphasized gaps mark a continuous phrase, not a seam between separate
+    // words, so they stay emphasized.
+    const doc = docOf(['alpha beta gamma', [E()]]);
+    const next = run(doc, 'beta', applyEmphasis());
+    expect(mask(next.doc, 'emphasis_mark')).toBe('________________'); // intact
+    expect(mask(next.doc, 'underline_mark')).toBe('                '); // none added
   });
 
   it('emphasizing a contiguous multi-word selection keeps its INTERNAL gaps emphasized', () => {
@@ -268,6 +317,20 @@ describe('withGapFix — cite/emphasis bridge', () => {
     // "beta" + both gaps become underline; the emphasized "alpha" word keeps
     // its emphasis but the gap after it is underlined.
     expect(mask(next.doc, 'underline_mark')).toBe('     ___________'); // " beta gamma"
+  });
+
+  it('highlighting inside continuously-emphasized text leaves the emphasis whole', () => {
+    // All of "alpha beta gamma" is emphasized; highlight just "beta". The edge
+    // gaps meet emphasized neighbors, but highlight is an UNRELATED family —
+    // the emphasis→underline conversion is reserved for actually applying the
+    // underline/emphasis family. So the emphasis must survive untouched at the
+    // selection's edges, with no underline introduced.
+    const E = () => schema.marks['emphasis_mark']!.create();
+    const doc = docOf(['alpha beta gamma', [E()]]);
+    const next = run(doc, 'beta', applyHighlight(() => 'yellow'));
+    expect(mask(next.doc, 'emphasis_mark')).toBe('________________'); // emphasis intact
+    expect(mask(next.doc, 'underline_mark')).toBe('                '); // none added
+    expect(mask(next.doc, 'highlight')).toBe('      ____      '); // just "beta"
   });
 });
 
