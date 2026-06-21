@@ -366,10 +366,7 @@ directly at <https://marijnhaverbeke.nl/fund/>.
 CardMirror's voice control was shaped by ideas pioneered in the
 hands-free-editing community — [Talon](https://talonvoice.com/),
 [Cursorless](https://www.cursorless.org/), and
-[Pokey Rule](https://github.com/pokey). Concepts like spoken targeting
-of on-screen elements, hat/marker-based addressing, and composable voice
-commands informed the initial design of CardMirror's voice interaction
-pattern.
+[Pokey Rule](https://github.com/pokey).
 
 The card sharing feature was conceived and prototyped by
 [Q Cooper](https://github.com/mosuqc) of Missouri State University; his
