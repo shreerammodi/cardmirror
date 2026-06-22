@@ -35,6 +35,14 @@ see `DETAILED_CHANGELOG.md`.
   it as flat, unstyled text. (Coverage is broad but not universal — unusual or
   one-off style schemes may still come in as plain text.)
 
+### Changed
+
+- **File search can use multiple folders.** Settings → General's "File search
+  folder" is now "File search folders" — add as many as you like. Each is
+  scanned recursively; overlapping or nested folders are fine, since a file
+  found under more than one is searched only once. Your existing folder is
+  carried over automatically.
+
 ## 0.1.0-alpha.18 — 2026-06-21
 
 ### Added

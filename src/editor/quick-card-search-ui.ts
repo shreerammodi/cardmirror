@@ -183,27 +183,45 @@ async function runWarmPass(
   }
 }
 
+/** Map a main-process file listing to FileEntry rows. */
+function toFileEntries(
+  list: ReadonlyArray<{ path: string; relPath: string; mtimeMs: number }>,
+): FileEntry[] {
+  return list.map((it) => ({
+    path: it.path,
+    relPath: it.relPath,
+    name: stripFileExt(baseName(it.relPath)),
+    mtimeMs: it.mtimeMs,
+  }));
+}
+
+/** Merge per-folder listings into one, de-duplicated by absolute path — so a
+ *  file that lives under two overlapping search folders is searched once. */
+function mergeFileLists(lists: Iterable<FileEntry[]>): FileEntry[] {
+  const byPath = new Map<string, FileEntry>();
+  for (const list of lists) {
+    for (const f of list) if (!byPath.has(f.path)) byPath.set(f.path, f);
+  }
+  return [...byPath.values()];
+}
+
 /** Pre-warm pinned/recent files during idle, before the palette is ever
  *  opened, so the first search's file parse is already cached and
- *  never lands on a keystroke. No-op off Electron or without a
- *  file-search root; best-effort (the palette warms on open as a
- *  fallback). Called once at boot. */
+ *  never lands on a keystroke. No-op off Electron or with no search
+ *  folders; best-effort (the palette warms on open as a fallback).
+ *  Called once at boot. */
 export function prewarmQuickCardFiles(): void {
   const electron = getElectronHost();
   if (!electron) return;
-  const root = settings.get('fileSearchRoot');
-  if (!root) return;
+  const roots = settings.get('fileSearchRoots');
+  if (!roots.length) return;
   scheduleIdle(() => {
     void (async () => {
       try {
-        const list = await electron.listCmirFiles(root);
-        const fileList: FileEntry[] = list.map((it) => ({
-          path: it.path,
-          relPath: it.relPath,
-          name: stripFileExt(baseName(it.relPath)),
-          mtimeMs: it.mtimeMs,
-        }));
-        await runWarmPass(electron, fileList, () => true);
+        const lists = await Promise.all(
+          roots.map((r) => electron.listCmirFiles(r).then(toFileEntries).catch(() => [] as FileEntry[])),
+        );
+        await runWarmPass(electron, mergeFileLists(lists), () => true);
       } catch {
         /* ignore */
       }
@@ -561,8 +579,12 @@ class QuickCardSearchUI {
   private emptyText = '';
 
   // ── File-search state (the `f` prefix) ──────────────────────────────
-  /** Recursive `.cmir` listing, cached for one palette session. */
+  /** Recursive `.cmir` listing (merged + de-duplicated across every search
+   *  folder), cached for one palette session. */
   private fileList: FileEntry[] | null = null;
+  /** Per-folder listings keyed by search root, so a per-root index-update can
+   *  be merged in incrementally; `fileList` is the merged, de-duplicated view. */
+  private rootLists: Map<string, FileEntry[]> = new Map();
   private fileListLoading = false;
   /** Monotonic guard so a stale async (list / read) result from a
    *  prior query or a closed palette is ignored. */
@@ -596,6 +618,7 @@ class QuickCardSearchUI {
     this.runCommand = opts.runCommand;
     this.openFilePath = opts.openFilePath;
     this.fileList = null;
+    this.rootLists = new Map();
     this.fileListLoading = false;
     this.inFile = null;
 
@@ -662,6 +685,7 @@ class QuickCardSearchUI {
     this.fileIndexUnsub = null;
     this.asyncToken++; // invalidate any in-flight list / read
     this.fileList = null;
+    this.rootLists.clear();
     this.inFile = null;
     this.root.remove();
     this.root = null;
@@ -844,15 +868,15 @@ class QuickCardSearchUI {
       this.finishSearch();
       return;
     }
-    const root = settings.get('fileSearchRoot');
-    if (!root) {
+    const roots = settings.get('fileSearchRoots');
+    if (!roots.length) {
       this.results = [];
-      this.emptyText = 'Set a file-search folder in Settings → General.';
+      this.emptyText = 'Add a file-search folder in Settings → General.';
       this.finishSearch();
       return;
     }
     if (this.fileList === null) {
-      if (!this.fileListLoading) this.loadFileList(root, electron);
+      if (!this.fileListLoading) this.loadFileList(roots, electron);
       this.results = [];
       this.emptyText = 'Searching files…';
       this.finishSearch();
@@ -906,32 +930,37 @@ class QuickCardSearchUI {
   private ensureFileList(): void {
     if (this.fileList !== null || this.fileListLoading) return;
     const electron = getElectronHost();
-    const root = settings.get('fileSearchRoot');
-    if (!electron || !root) return;
-    this.loadFileList(root, electron);
+    const roots = settings.get('fileSearchRoots');
+    if (!electron || !roots.length) return;
+    this.loadFileList(roots, electron);
   }
 
-  /** Recursively list `.cmir` files under `root` once per session; on
-   *  completion re-run the search (if still open + still in file mode). */
-  private loadFileList(root: string, electron: NonNullable<ReturnType<typeof getElectronHost>>): void {
+  /** Recursively list openable files under every search folder once per
+   *  session, merged + de-duplicated by path; on completion re-run the search
+   *  (if still open + still in file mode). A folder that fails to list resolves
+   *  to empty rather than failing the whole load. */
+  private loadFileList(roots: string[], electron: NonNullable<ReturnType<typeof getElectronHost>>): void {
     this.fileListLoading = true;
     const token = ++this.asyncToken;
-    void electron
-      .listCmirFiles(root)
-      .then((list) => {
+    void Promise.all(
+      roots.map((r) =>
+        electron
+          .listCmirFiles(r)
+          .then((list) => [r, toFileEntries(list)] as const)
+          .catch(() => [r, [] as FileEntry[]] as const),
+      ),
+    )
+      .then((perRoot) => {
         if (token !== this.asyncToken || !this.root) return;
-        this.fileList = list.map((it) => ({
-          path: it.path,
-          relPath: it.relPath,
-          name: stripFileExt(baseName(it.relPath)),
-          mtimeMs: it.mtimeMs,
-        }));
+        this.rootLists = new Map(perRoot);
+        this.fileList = mergeFileLists(this.rootLists.values());
         this.fileListLoading = false;
         if (!this.inFile) this.runSearch();
         void this.warmPins(); // pre-warm pinned files in the background
       })
       .catch(() => {
         if (token !== this.asyncToken || !this.root) return;
+        this.rootLists = new Map();
         this.fileList = [];
         this.fileListLoading = false;
         if (!this.inFile) this.runSearch();
@@ -954,13 +983,9 @@ class QuickCardSearchUI {
     entries: Array<{ path: string; relPath: string; mtimeMs: number; size: number }>;
   }): void {
     if (!this.root) return; // closed — the next open reloads from main
-    if (payload.root !== settings.get('fileSearchRoot')) return; // not our root
-    this.fileList = payload.entries.map((it) => ({
-      path: it.path,
-      relPath: it.relPath,
-      name: stripFileExt(baseName(it.relPath)),
-      mtimeMs: it.mtimeMs,
-    }));
+    if (!settings.get('fileSearchRoots').includes(payload.root)) return; // not one of our roots
+    this.rootLists.set(payload.root, toFileEntries(payload.entries));
+    this.fileList = mergeFileLists(this.rootLists.values());
     this.fileListLoading = false;
     void this.warmPins(); // re-warm pins against the new mtimes
     // In-file mode shows a file's objects, not the listing — leave the

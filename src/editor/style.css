@@ -6522,6 +6522,18 @@ body:has(#comments-column:not([hidden])) :is(#editor, .pmd-pane-editor) .pmd-com
   gap: 0.4rem;
   flex-wrap: wrap;
 }
+/* Multi-folder list (file-search folders): a column of folder rows + an
+   "+ Add folder" button. */
+.pmd-settings-folderlist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.pmd-settings-folderlist .pmd-readers-add {
+  align-self: flex-start;
+}
 .pmd-settings-folder-path {
   flex: 1 1 0;
   min-width: 0;

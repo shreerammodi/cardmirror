@@ -576,10 +576,11 @@ export interface Settings {
    *  works when off (Ctrl+\` sends, content is reachable from the
    *  next window opened); the pill is just hidden from the chrome. */
   showDropzonePill: boolean;
-  /** Root folder for the command-palette file search (the `f`
-   *  prefix). Searched recursively for `.cmir` files on demand (no
-   *  persistent index). Empty disables file search. Electron only. */
-  fileSearchRoot: string;
+  /** Folders for the command-palette file search (the `f` prefix). Each is
+   *  searched recursively for `.cmir`/`.docx` files on demand; folders that
+   *  overlap are fine — a file found under more than one is searched once.
+   *  Empty list disables file search. Electron only. */
+  fileSearchRoots: string[];
   /** Which file formats appear in the command-palette file search:
    *  'both' (default), 'cmir' only, or 'docx' only. */
   fileSearchFormats: 'both' | 'cmir' | 'docx';
@@ -1066,7 +1067,7 @@ const DEFAULTS: Settings = {
   uiFont: '',
   ribbonTooltipMode: 'both',
   showDropzonePill: false,
-  fileSearchRoot: '',
+  fileSearchRoots: [],
   fileSearchFormats: 'both',
   fileSearchObjectTypes: ['block', 'tag'],
   fileSearchOutlineDepth: 3,
@@ -1201,6 +1202,7 @@ export interface SettingMeta {
     | 'keybindings'
     | 'text'
     | 'folder'
+    | 'folderList'
     | 'fileSearchFormats'
     | 'fileSearchObjectTypes'
     | 'fileSearchOutlineDepth'
@@ -1380,11 +1382,11 @@ export const SETTING_METADATA: SettingMeta[] = [
     electronOnly: true,
   },
   {
-    key: 'fileSearchRoot',
-    label: 'File search folder',
+    key: 'fileSearchRoots',
+    label: 'File search folders',
     description:
-      'Root folder for the command-palette file search (type "f " in the search bar). It is scanned recursively for .cmir and .docx files each time you search — there is no persistent index yet, so very large libraries may feel slow. Leave empty to disable file search.',
-    kind: 'folder',
+      'Folders for the command-palette file search (type "f " in the search bar). Each is scanned recursively for .cmir and .docx files. Add as many as you like — overlapping folders are fine; a file found under more than one is searched only once. Leave the list empty to disable file search.',
+    kind: 'folderList',
     category: 'general',
     electronOnly: true,
   },
@@ -2377,7 +2379,9 @@ function sanitize(s: Settings): Settings {
     uiFont: sanitizeUiFont(s.uiFont),
     ribbonTooltipMode: sanitizeRibbonTooltipMode(s.ribbonTooltipMode),
     showDropzonePill: s.showDropzonePill === true,
-    fileSearchRoot: typeof s.fileSearchRoot === 'string' ? s.fileSearchRoot : '',
+    // Accept the new list; migrate the old single `fileSearchRoot` string when
+    // the list is absent (settings saved before multi-folder search).
+    fileSearchRoots: sanitizeFileSearchRoots(s),
     fileSearchFormats:
       s.fileSearchFormats === 'cmir'
         ? 'cmir'
@@ -2563,6 +2567,28 @@ function sanitize(s: Settings): Settings {
         )
       : [],
   };
+}
+
+/** Coerce the file-search folders, migrating the pre-multi-folder single
+ *  `fileSearchRoot` string. Trims, drops empties, de-duplicates. */
+function sanitizeFileSearchRoots(s: Settings): string[] {
+  const raw = s as { fileSearchRoots?: unknown; fileSearchRoot?: unknown };
+  const list = Array.isArray(raw.fileSearchRoots)
+    ? raw.fileSearchRoots
+    : typeof raw.fileSearchRoot === 'string' && raw.fileSearchRoot
+      ? [raw.fileSearchRoot]
+      : [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of list) {
+    if (typeof item !== 'string') continue;
+    const t = item.trim();
+    if (t && !seen.has(t)) {
+      seen.add(t);
+      out.push(t);
+    }
+  }
+  return out;
 }
 
 /** Accept a hex color string (`#rrggbb`, case-insensitive); fall

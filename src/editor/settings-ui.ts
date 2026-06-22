@@ -862,6 +862,63 @@ class SettingsModal {
       row.appendChild(text);
       row.appendChild(wrap);
       return row;
+    } else if (meta.kind === 'folderList') {
+      // A list of folders, each removable, plus "+ Add folder". Used for the
+      // multi-folder file search. electronOnly, so the picker host is present.
+      const wrap = document.createElement('div');
+      wrap.className = 'pmd-settings-folderlist';
+      const getRoots = (): string[] => (settings.get(meta.key) as string[]) ?? [];
+      const render = (): void => {
+        wrap.innerHTML = '';
+        const roots = getRoots();
+        if (roots.length === 0) {
+          const empty = document.createElement('span');
+          empty.className = 'pmd-settings-folder-path pmd-settings-folder-empty';
+          empty.textContent = '(none — file search is off)';
+          wrap.appendChild(empty);
+        } else {
+          roots.forEach((rootPath, i) => {
+            const rowEl = document.createElement('div');
+            rowEl.className = 'pmd-settings-folder';
+            const pathEl = document.createElement('span');
+            pathEl.className = 'pmd-settings-folder-path';
+            pathEl.textContent = rootPath;
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'pmd-pairing-delete';
+            remove.title = 'Remove folder';
+            setIcon(remove, 'close');
+            remove.addEventListener('click', () => {
+              settings.set(meta.key, getRoots().filter((_, j) => j !== i) as never);
+              render();
+            });
+            rowEl.append(pathEl, remove);
+            wrap.appendChild(rowEl);
+          });
+        }
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'pmd-readers-add';
+        addBtn.textContent = '+ Add folder';
+        addBtn.addEventListener('click', () => {
+          void (async (): Promise<void> => {
+            const electron = getElectronHost();
+            if (!electron) return;
+            const picked = await electron.pickDirectory({ title: meta.label });
+            if (picked == null) return;
+            const roots = getRoots();
+            if (!roots.includes(picked)) {
+              settings.set(meta.key, [...roots, picked] as never);
+              render();
+            }
+          })();
+        });
+        wrap.appendChild(addBtn);
+      };
+      render();
+      row.appendChild(text);
+      row.appendChild(wrap);
+      return row;
     } else if (meta.kind === 'cardCutterEnginePath') {
       // Like `folder`, but picks a FILE (the engine bundle) via the
       // native file dialog. electronOnly, so the host is always present.
