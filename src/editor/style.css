@@ -7822,18 +7822,6 @@ body.pmd-recovery-active.pmd-multi-doc #app {
 }
 
 /* Clean — protected styles panel */
-.pmd-clean-prot-summary {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-top: 0.45rem;
-  font-size: 0.85rem;
-  color: var(--pmd-c-text-muted, #888);
-}
-.pmd-clean-prot-manage {
-  padding: 0.15rem 0.55rem;
-  font-size: 0.8rem;
-}
 .pmd-clean-prot-list {
   display: flex;
   flex-direction: column;

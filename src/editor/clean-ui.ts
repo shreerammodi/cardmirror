@@ -79,7 +79,6 @@ class CleanModal {
   private cleanBtn!: HTMLButtonElement;
   private barFillEl!: HTMLDivElement;
   private protectedListEl: HTMLDivElement | null = null;
-  private protectedCountEl!: HTMLSpanElement;
   /** Stacked sub-modals (the protected-styles editor, the template picker)
    *  layered over the Clean modal. Escape closes the topmost first. */
   private subOverlays: { el: HTMLDivElement; onClose?: () => void }[] = [];
@@ -155,23 +154,6 @@ class CleanModal {
       'hyperlinks. Cleaned copies are written to the destination.';
     body.appendChild(blurb);
 
-    // Options.
-    const optField = document.createElement('div');
-    optField.className = 'pmd-bulk-field';
-    const optLabel = document.createElement('div');
-    optLabel.className = 'pmd-bulk-field-label';
-    optLabel.textContent = 'Options';
-    optField.appendChild(optLabel);
-    // Protected styles — summary + manage link (full editor behind the gear).
-    const protRow = document.createElement('div');
-    protRow.className = 'pmd-clean-prot-summary';
-    this.protectedCountEl = document.createElement('span');
-    const manageBtn = button('Manage…', () => this.openProtectedModal());
-    manageBtn.classList.add('pmd-clean-prot-manage');
-    protRow.append(this.protectedCountEl, manageBtn);
-    optField.appendChild(protRow);
-    body.appendChild(optField);
-
     // Input.
     const inField = document.createElement('div');
     inField.className = 'pmd-bulk-field';
@@ -228,7 +210,6 @@ class CleanModal {
     body.appendChild(this.statusEl);
 
     this.dialog.appendChild(body);
-    this.updateProtectedCount();
     this.refresh();
   }
 
@@ -313,7 +294,6 @@ class CleanModal {
     dialog.appendChild(body);
     this.pushSubOverlay(overlay, () => {
       this.protectedListEl = null;
-      this.updateProtectedCount();
     });
     this.refreshProtectedList();
     input.focus();
@@ -351,17 +331,10 @@ class CleanModal {
     );
     settings.set('cleanProtectedStyles', cleaned);
     this.refreshProtectedList();
-    this.updateProtectedCount();
   }
 
   private addNames(names: string[]): void {
     this.saveNames([...this.getProtectedNames(), ...names]);
-  }
-
-  private updateProtectedCount(): void {
-    const n = this.getProtectedNames().length;
-    this.protectedCountEl.textContent =
-      n === 0 ? 'No protected styles' : `${n} protected style${n === 1 ? '' : 's'}`;
   }
 
   private refreshProtectedList(): void {
