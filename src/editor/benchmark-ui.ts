@@ -5,6 +5,7 @@
  * with a frame-time graph.
  */
 
+import type { EditorState } from 'prosemirror-state';
 import { getActiveView, beginBenchmark, endBenchmark } from './index.js';
 import { runBenchmark, type BenchmarkResults } from './benchmark.js';
 
@@ -17,9 +18,15 @@ export async function launchBenchmarkOverlay(): Promise<void> {
     showMessage('Open a document first, then run the benchmark.');
     return;
   }
+  if (!view.editable) {
+    // The card-cutting test edits the document; read mode locks edits, so the
+    // benchmark would have nothing meaningful to run.
+    showMessage('The benchmark edits the document — exit read mode and run it again.');
+    return;
+  }
   running = true;
   // Snapshot the editor state + suppress autosave; the editing test mutates the
-  // live doc and we revert from this snapshot when done.
+  // live doc, and we revert from this snapshot when the user CLOSES the results.
   const snapshot = beginBenchmark();
   const chip = makeChip();
   document.body.appendChild(chip.el);
@@ -32,13 +39,16 @@ export async function launchBenchmarkOverlay(): Promise<void> {
     console.error('[benchmark] failed', err);
   } finally {
     chip.el.remove();
-    // Revert the document (and re-enable autosave) — it's back exactly as it
-    // was, undo history included.
-    endBenchmark(snapshot);
     running = false;
   }
-  if (results) showResults(results);
-  else showMessage('Benchmark failed — see the console.');
+  if (results) {
+    // Leave the document in its post-run state on screen; it's reverted (and
+    // autosave re-enabled) when the user closes the results.
+    showResults(results, snapshot);
+  } else {
+    endBenchmark(snapshot); // nothing to show — revert now
+    showMessage('Benchmark failed — see the console.');
+  }
 }
 
 function makeChip(): { el: HTMLElement; set: (s: string) => void } {
@@ -52,13 +62,16 @@ function makeChip(): { el: HTMLElement; set: (s: string) => void } {
   return { el, set: (s) => (txt.textContent = `Benchmarking — ${s}`) };
 }
 
-function overlay(): { root: HTMLElement; dialog: HTMLElement; close: () => void } {
+function overlay(onClose?: () => void): { root: HTMLElement; dialog: HTMLElement; close: () => void } {
   const root = document.createElement('div');
   root.className = 'pmd-bench-overlay';
   const dialog = document.createElement('div');
   dialog.className = 'pmd-bench-dialog';
   root.appendChild(dialog);
-  const close = (): void => root.remove();
+  const close = (): void => {
+    onClose?.();
+    root.remove();
+  };
   root.addEventListener('mousedown', (e) => {
     if (e.target === root) close();
   });
@@ -82,8 +95,15 @@ function showMessage(msg: string): void {
   dialog.append(p, footer([btn]));
 }
 
-function showResults(r: BenchmarkResults): void {
-  const { dialog, close } = overlay();
+function showResults(r: BenchmarkResults, snapshot: EditorState | null): void {
+  // Revert the document (and re-enable autosave) when the results close, by any
+  // path — Close, Run again, click-out, or Esc. Once-guarded.
+  let reverted = false;
+  const { dialog, close } = overlay(() => {
+    if (reverted) return;
+    reverted = true;
+    endBenchmark(snapshot);
+  });
 
   const header = document.createElement('div');
   header.className = 'pmd-bench-header';

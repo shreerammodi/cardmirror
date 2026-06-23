@@ -21,14 +21,13 @@ import type { EditorView } from 'prosemirror-view';
 import { newHeadingId } from '../schema/index.js';
 import { preciseScrollIntoView } from './precise-scroll.js';
 import { condenseBranchC } from './condense.js';
-import { READ_MODE_DRAG_META } from './reading-marker.js';
+import { runRibbon } from './index.js';
 import { SAMPLE_CARD, CITE_RUNS } from './benchmark-sample.js';
 
-/** Dispatch a benchmark edit, tagged so it bypasses read mode's edit lock — the
- *  benchmark's edits are controlled and reverted, so they're safe while reading.
- *  (Without this, read mode silently drops every edit and the test no-ops.) */
+/** Dispatch a benchmark edit. (The benchmark no-ops when the doc is in read mode
+ *  — see launchBenchmarkOverlay — so these edits always apply.) */
 function benchDispatch(view: EditorView, tr: Transaction): void {
-  view.dispatch(tr.setMeta(READ_MODE_DRAG_META, true));
+  view.dispatch(tr);
 }
 
 /** The sample card's plain text (runs concatenated) — inserted raw, then re-cut
@@ -544,6 +543,23 @@ async function benchEdit(
         bf < 0 ? [] : runRanges(bf, (c) => c.includes('h')),
         sch.marks['highlight']!.create({ color: 'yellow' }),
       ),
+    onProgress,
+    steps,
+  );
+  await measureStep(
+    'Shrink the card',
+    () => {
+      const r = findSampleBody(view.state.doc, tagId);
+      if (r) {
+        benchDispatch(
+          view,
+          view.state.tr
+            .setSelection(TextSelection.create(view.state.doc, r.from, r.to))
+            .scrollIntoView(),
+        );
+      }
+      runRibbon('smartShrink'); // Smart Shrink — unmarked text gets smaller
+    },
     onProgress,
     steps,
   );
