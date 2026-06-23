@@ -5,6 +5,32 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
+## Unreleased
+
+- **Clean — robustness on a full-library bulk run** (`apps/desktop/src/main.ts`,
+  `ooxml/style-clean/legacy-remap.ts`, `ooxml/style-clean/style-cleaner.ts`,
+  `editor/clean-ui.ts`). Cleaning an entire file library surfaced three failure
+  modes. (1) The recursive `.docx` walk (`host:list-files-recursive`) picked up
+  Word lock/owner files (`~$…`), macOS AppleDouble sidecars (`._…`), and
+  `__MACOSX` folders — none are real documents, and each failed JSZip's
+  end-of-central-directory check; they're now skipped in the walk. (2)
+  `no style with id or name 'Heading5'`: `legacy-remap` injects the canonical
+  set before assigning, but it tops out at Heading4, while the *shared*
+  `buildLegacyHeadingMap` can yield level 5 (the importer maps `Heading5→block`).
+  The cleaner's `headingIdFor` now caps at `Heading4` — its deepest injectable
+  heading — leaving the shared map untouched for the importer. (3)
+  `no style with id or name 'Heading1'/'Heading4'`: the header-detection pass
+  assigns these, but the canonical set is only injected when the *required*
+  styles (`Style13ptBold`/`StyleUnderline`/`Emphasis`) are missing, so a doc that
+  had the required styles but lacked a `HeadingN` threw on assignment —
+  python-docx treats built-in headings as always-available, our `Styles.get`
+  shim doesn't. A new `ensureHeadingStyle` injects the canonical set on demand
+  (idempotent) right before the lookup. Finally, the bulk runner classifies an
+  unreadable-zip error (empty / truncated / non-document) as **skipped (not a
+  valid .docx)** rather than a cleaning **failure**, so a few corrupt cloud
+  conflict-copies don't inflate the failure count. The byte-for-byte parity
+  suite against the Python reference still passes.
+
 ## 0.1.0-alpha.19 — 2026-06-22
 
 - **Clean — a client-side `.docx` style cleaner** (`ooxml/style-clean/style-cleaner.ts`,

@@ -5,6 +5,18 @@ changes in each release, written for users of the editor. For
 in-depth rationale and implementation context behind each entry,
 see `DETAILED_CHANGELOG.md`.
 
+## Unreleased
+
+### Fixed
+
+- **Clean handles a whole messy library without choking.** Cleaning a large
+  folder no longer trips over Word lock files (`~$…`), macOS `._…` sidecars, or
+  `__MACOSX` folders — those aren't real documents, so they're skipped — nor over
+  certain docs that previously errored with an internal "no style named
+  Heading…" message. Genuinely corrupt or empty files (e.g. cloud "conflicted
+  copy" duplicates) are now reported as **skipped (not a valid .docx)** rather
+  than counted as failures, so the summary reflects what actually happened.
+
 ## 0.1.0-alpha.19 — 2026-06-22
 
 ### Added
