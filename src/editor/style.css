@@ -6534,6 +6534,11 @@ body:has(#comments-column:not([hidden])) :is(#editor, .pmd-pane-editor) .pmd-com
 .pmd-settings-folderlist .pmd-readers-add {
   align-self: flex-start;
 }
+.pmd-settings-folderlist-empty {
+  color: var(--pmd-c-text-muted);
+  font-style: italic;
+  font-size: 0.85rem;
+}
 .pmd-settings-folder-path {
   flex: 1 1 0;
   min-width: 0;

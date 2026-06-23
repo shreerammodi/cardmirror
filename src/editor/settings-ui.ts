@@ -872,8 +872,8 @@ class SettingsModal {
         wrap.innerHTML = '';
         const roots = getRoots();
         if (roots.length === 0) {
-          const empty = document.createElement('span');
-          empty.className = 'pmd-settings-folder-path pmd-settings-folder-empty';
+          const empty = document.createElement('div');
+          empty.className = 'pmd-settings-folderlist-empty';
           empty.textContent = '(none — file search is off)';
           wrap.appendChild(empty);
         } else {
