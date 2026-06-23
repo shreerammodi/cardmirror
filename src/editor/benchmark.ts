@@ -22,7 +22,7 @@ import { newHeadingId } from '../schema/index.js';
 import { preciseScrollIntoView } from './precise-scroll.js';
 import { condenseBranchC } from './condense.js';
 import { runRibbon } from './index.js';
-import { SAMPLE_CARD, CITE_RUNS } from './benchmark-sample.js';
+import { SAMPLE_PARAS, CITE_RUNS } from './benchmark-sample.js';
 
 /** Dispatch a benchmark edit. (The benchmark no-ops when the doc is in read mode
  *  — see launchBenchmarkOverlay — so these edits always apply.) */
@@ -30,9 +30,6 @@ function benchDispatch(view: EditorView, tr: Transaction): void {
   view.dispatch(tr);
 }
 
-/** The sample card's plain text (runs concatenated) — inserted raw, then re-cut
- *  to the runs' formatting by the card-cutting sweep. */
-const SAMPLE_TEXT = SAMPLE_CARD.map((r) => r[0]).join('');
 const CITE_TEXT = CITE_RUNS.map((r) => r[0]).join('');
 
 const HEADING_NODES = new Set(['pocket', 'hat', 'block', 'tag']);
@@ -330,34 +327,41 @@ interface Range {
   to: number;
 }
 
-/** Content range of the card_body in the card owning `tagId` whose text is the
- *  sample we inserted — matched by TEXT, so the cutting sweeps can only ever
- *  touch our own body, never pre-existing document content. Mark sweeps don't
- *  change text length, so it stays valid across them. */
-function findSampleBody(doc: ProseNode, tagId: string): Range | null {
+/** The body card_bodies in the card owning `tagId`, EXCLUDING the cite line
+ *  (matched by text, so this only ever touches our own card). Before condense
+ *  this includes the blank spacer paragraphs; after condense it's the content
+ *  paragraphs in order (which line up with SAMPLE_PARAS). */
+function bodyParagraphs(doc: ProseNode, tagId: string): { node: ProseNode; pos: number }[] {
   const found = cardOfTag(doc, tagId);
-  if (!found) return null;
+  if (!found) return [];
   const { card, cardPos } = found;
-  let result: Range | null = null;
+  const out: { node: ProseNode; pos: number }[] = [];
   card.forEach((child, offset) => {
-    if (child.type.name === 'card_body' && child.textContent === SAMPLE_TEXT) {
-      const start = cardPos + 1 + offset;
-      result = { from: start + 1, to: start + child.nodeSize - 1 };
+    if (child.type.name === 'card_body' && child.textContent !== CITE_TEXT) {
+      out.push({ node: child, pos: cardPos + 1 + offset });
     }
   });
-  return result;
+  return out;
 }
 
-/** Absolute ranges in the inserted body (content starting at `bodyFrom`) for the
- *  runs whose mark code matches — used to re-cut the real card top→bottom. */
-function runRanges(bodyFrom: number, matches: (code: string) => boolean): Range[] {
+/** Spans to cut for one mark code, re-derived per paragraph AFTER condense: each
+ *  content paragraph lines up with SAMPLE_PARAS in order, so we locate the marked
+ *  runs' text within that paragraph's (possibly whitespace-cleaned) content —
+ *  robust to whatever condense did. */
+function computeSpans(doc: ProseNode, tagId: string, code: string): Range[] {
+  const bodies = bodyParagraphs(doc, tagId);
   const out: Range[] = [];
-  let off = 0;
-  for (const [text, code] of SAMPLE_CARD) {
-    if (text.length > 0 && matches(code)) {
-      out.push({ from: bodyFrom + off, to: bodyFrom + off + text.length });
+  for (let i = 0; i < SAMPLE_PARAS.length && i < bodies.length; i++) {
+    const base = bodies[i]!.pos + 1;
+    const text = bodies[i]!.node.textContent;
+    let cursor = 0;
+    for (const [runText, c] of SAMPLE_PARAS[i]!) {
+      if (runText.length === 0) continue;
+      const idx = text.indexOf(runText, cursor);
+      if (idx < 0) continue;
+      if (c.includes(code)) out.push({ from: base + idx, to: base + idx + runText.length });
+      cursor = idx + runText.length;
     }
-    off += text.length;
   }
   return out;
 }
@@ -493,14 +497,20 @@ async function benchEdit(
   );
 
   await measureStep(
-    'Paste a real card body',
+    'Paste a multi-paragraph card',
     () => {
       const c = findChildByText(view.state.doc, tagId, CITE_TEXT);
       if (!c) throw new Error('cite line missing');
-      // Insert as a new card_body block right AFTER the cite line (below it).
+      // Insert the real card's paragraphs below the cite, with extra blank
+      // paragraphs between them — a messy fresh paste that condense will clean.
       const after = c.pos + c.node.nodeSize;
-      const cb = sch.nodes['card_body']!.create(null, sch.text(SAMPLE_TEXT));
-      const tr = view.state.tr.insert(after, cb);
+      const blank = (): ProseNode => sch.nodes['card_body']!.create();
+      const nodes: ProseNode[] = [];
+      SAMPLE_PARAS.forEach((para, i) => {
+        if (i > 0) nodes.push(blank(), blank());
+        nodes.push(sch.nodes['card_body']!.create(null, sch.text(para.map((r) => r[0]).join(''))));
+      });
+      const tr = view.state.tr.insert(after, nodes);
       tr.setSelection(TextSelection.create(tr.doc, after + 1)).scrollIntoView();
       benchDispatch(view, tr);
     },
@@ -508,72 +518,59 @@ async function benchEdit(
     steps,
   );
 
-  // Card-cutting: re-cut the real card's actual formatting — underline →
-  // emphasis → highlight — each sweeping top→bottom across the body (positions
-  // are stable across mark-only edits), then condense.
-  const body = findSampleBody(view.state.doc, tagId);
-  const bf = body ? body.from : -1;
+  // Condense FIRST to make the card "cutting ready" — drops the blank spacer
+  // paragraphs and whitespace-cleans the body, exactly the cleanup a fresh paste
+  // needs before you can cut it.
+  const selectBody = (): void => {
+    const bodies = bodyParagraphs(view.state.doc, tagId);
+    if (bodies.length === 0) return;
+    const from = bodies[0]!.pos + 1;
+    const last = bodies[bodies.length - 1]!;
+    const to = last.pos + last.node.nodeSize - 1;
+    benchDispatch(
+      view,
+      view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to)).scrollIntoView(),
+    );
+  };
+  await measureStep(
+    'Condense (clean up the paste)',
+    () => {
+      selectBody();
+      condenseBranchC()(view.state, (tr) => benchDispatch(view, tr), view);
+    },
+    onProgress,
+    steps,
+  );
+
+  // Now cut the cleaned card: underline → emphasis → highlight, each sweeping
+  // top→bottom. Spans are re-derived per paragraph from the post-condense doc
+  // and stay valid across the mark-only sweeps.
+  const uSpans = computeSpans(view.state.doc, tagId, 'u');
+  const eSpans = computeSpans(view.state.doc, tagId, 'e');
+  const hSpans = computeSpans(view.state.doc, tagId, 'h');
   await measureSweep(
     'Underline (avg per mark)',
-    () =>
-      sweepMark(
-        view,
-        bf < 0 ? [] : runRanges(bf, (c) => c.includes('u')),
-        sch.marks['underline_mark']!.create(),
-      ),
+    () => sweepMark(view, uSpans, sch.marks['underline_mark']!.create()),
     onProgress,
     steps,
   );
   await measureSweep(
     'Emphasis (avg per mark)',
-    () =>
-      sweepMark(
-        view,
-        bf < 0 ? [] : runRanges(bf, (c) => c.includes('e')),
-        sch.marks['emphasis_mark']!.create(),
-      ),
+    () => sweepMark(view, eSpans, sch.marks['emphasis_mark']!.create()),
     onProgress,
     steps,
   );
   await measureSweep(
     'Highlight (avg per mark)',
-    () =>
-      sweepMark(
-        view,
-        bf < 0 ? [] : runRanges(bf, (c) => c.includes('h')),
-        sch.marks['highlight']!.create({ color: 'yellow' }),
-      ),
+    () => sweepMark(view, hSpans, sch.marks['highlight']!.create({ color: 'yellow' })),
     onProgress,
     steps,
   );
   await measureStep(
     'Shrink the card',
     () => {
-      const r = findSampleBody(view.state.doc, tagId);
-      if (r) {
-        benchDispatch(
-          view,
-          view.state.tr
-            .setSelection(TextSelection.create(view.state.doc, r.from, r.to))
-            .scrollIntoView(),
-        );
-      }
+      selectBody();
       runRibbon('smartShrink'); // Smart Shrink — unmarked text gets smaller
-    },
-    onProgress,
-    steps,
-  );
-  await measureStep(
-    'Condense the card',
-    () => {
-      const r = findSampleBody(view.state.doc, tagId);
-      if (r) {
-        benchDispatch(
-          view,
-          view.state.tr.setSelection(TextSelection.create(view.state.doc, r.from)).scrollIntoView(),
-        );
-      }
-      condenseBranchC()(view.state, (tr) => benchDispatch(view, tr), view);
     },
     onProgress,
     steps,
