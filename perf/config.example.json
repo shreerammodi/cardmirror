@@ -1,0 +1,48 @@
+{
+  "_comment": "Copy to perf/config.json and fill in coordinates (use `python3 perf/shared/drive.py coords`) and the doc path. A sequence is a list of steps run per trial; {\"mark\":true} flips the sync marker and starts a measured interval. Keep the marker window out of the content ROI.",
+  "fifo": "/tmp/cmperf.fifo",
+  "countdown": 5,
+  "between_trials_ms": 1200,
+
+  "sequences": {
+    "_open_warm_word_mac": "open dialog is Cmd+O; for cold launch use perf/word/mac/word_mac.sh instead",
+    "cardmirror_open_warm": [
+      { "key": ["command", "o"] }, { "sleep_ms": 700 },
+      { "type": "<DOC>" },         { "sleep_ms": 400 },
+      { "mark": true },
+      { "key": ["enter"] },        { "sleep_ms": 5000 }
+    ],
+    "word_open_warm": [
+      { "key": ["command", "o"] }, { "sleep_ms": 900 },
+      { "type": "<DOC>" },         { "sleep_ms": 500 },
+      { "mark": true },
+      { "key": ["enter"] },        { "sleep_ms": 6000 }
+    ],
+
+    "_scroll": "fixed wheel cadence; START mark, scroll burst, END mark. Same numbers for both apps.",
+    "cardmirror_scroll": [
+      { "move": [900, 600] }, { "sleep_ms": 300 },
+      { "mark": true },
+      { "scroll": { "clicks": -3, "count": 150, "interval_ms": 16 } },
+      { "mark": true }, { "sleep_ms": 500 }
+    ],
+    "word_scroll": [
+      { "move": [900, 600] }, { "sleep_ms": 300 },
+      { "mark": true },
+      { "scroll": { "clicks": -3, "count": 150, "interval_ms": 16 } },
+      { "mark": true }, { "sleep_ms": 500 }
+    ],
+
+    "_nav": "scroll to top, click a fixed far heading in the nav pane. Fill the click coords per app/layout.",
+    "cardmirror_nav": [
+      { "key": ["command", "up"] }, { "sleep_ms": 400 },
+      { "mark": true },
+      { "click": [120, 700] }, { "sleep_ms": 2500 }
+    ],
+    "word_nav": [
+      { "key": ["command", "up"] }, { "sleep_ms": 400 },
+      { "mark": true },
+      { "click": [150, 720] }, { "sleep_ms": 2500 }
+    ]
+  }
+}
