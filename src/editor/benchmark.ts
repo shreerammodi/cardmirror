@@ -15,31 +15,34 @@
  */
 
 import { TextSelection } from 'prosemirror-state';
-import type { Command } from 'prosemirror-state';
-import type { Node as ProseNode } from 'prosemirror-model';
+import type { Mark, Node as ProseNode } from 'prosemirror-model';
 import type { EditorView } from 'prosemirror-view';
 import { newHeadingId } from '../schema/index.js';
 import { preciseScrollIntoView } from './precise-scroll.js';
-import { applyCite, applyUnderline, applyEmphasis, applyHighlight } from './ribbon-commands.js';
 import { condenseBranchC } from './condense.js';
-import { applyPlainPasteFromText } from './paste-plugin.js';
 
-/** A long, realistic body so the card-cutting sweep is visible and meaningful. */
-const LONG_BODY =
-  'Recent scholarship converges on the conclusion that the proposed policy would ' +
-  'produce substantial and measurable benefits across multiple domains. Analysts ' +
-  'note that the mechanism operates through several reinforcing channels, each of ' +
-  'which has been documented independently in the peer-reviewed literature. First, ' +
-  'the intervention lowers transaction costs for the affected actors, which in turn ' +
-  'accelerates adoption and compounds over time. Second, the distributional effects ' +
-  'are progressive, concentrating gains among the populations least able to absorb ' +
-  'shocks under the status quo. Third, the historical record from comparable cases ' +
-  'suggests that implementation risks, while real, are manageable with modest ' +
-  'administrative investment. Critics raise concerns about unintended consequences, ' +
-  'but the best available evidence indicates those concerns are overstated and that ' +
-  'robust safeguards already exist. Taken together, the weight of the evidence ' +
-  'strongly favors action over continued delay, and the cost of inaction grows ' +
-  'larger with every passing year that the underlying problems are left unaddressed.';
+/**
+ * A real, long, formatted card from the corpus (a cut Russia-arms-sales card) as
+ * `[text, marks]` runs. Mark codes drive the card-cutting sweep — `u` underline,
+ * `e` emphasis, `h` highlight. The body is inserted raw, then re-cut to exactly
+ * this formatting, top→bottom, so the cutting demo is a real card, not nonsense.
+ */
+const SAMPLE_CARD: [string, string][] = [
+  ['But Storey notes that ', ''],
+  ['Russia’s arms sales to Southeast Asia have ', 'u'],
+  ['declined sharply', 'e'],
+  [' over the past seven years, dropping ', 'u'],
+  ['from ', 'uh'],
+  ['$1.2 billion in 2014', 'eh'],
+  [' to just ', 'uh'],
+  ['$89 million in 2021', 'eh'],
+  ['. What explains the fall', 'u'],
+  [
+    '? He adduces four reasons: the Western sanctions and export controls imposed on Russia following its annexation of Crimea in 2014; the pausing of Vietnam’s military modernization due to “concerns over Moscow’s ability to fulfill orders” combined with the government’s ongoing anti-corruption drive; the U.S. government’s 2017 passage of the Countering America’s Adversaries Through Sanctions Act, which gives Washington the power to impose sanctions against any nation dealing with Russia’s military industrial complex; and the “growing competition from American and European defense corporations, as well as relative newcomers from countries such as China and South Korea.”',
+    '',
+  ],
+];
+const SAMPLE_TEXT = SAMPLE_CARD.map((r) => r[0]).join('');
 
 const HEADING_NODES = new Set(['pocket', 'hat', 'block', 'tag']);
 
@@ -331,39 +334,34 @@ function lastBodyRange(doc: ProseNode, tagId: string): Range | null {
   return result;
 }
 
-/** Split a body range into N segments, each with a wide read span
- *  (underline/highlight) and a narrow emphasis span. */
-function segmentRanges(range: Range, n: number): { read: Range; emph: Range }[] {
-  const out: { read: Range; emph: Range }[] = [];
-  const len = range.to - range.from;
-  if (len < n * 4) return out;
-  const seg = len / n;
-  for (let i = 0; i < n; i++) {
-    const s = Math.floor(range.from + i * seg);
-    const sl = Math.floor(range.from + (i + 1) * seg) - s;
-    out.push({
-      read: { from: s + Math.floor(sl * 0.08), to: s + Math.floor(sl * 0.85) },
-      emph: { from: s + Math.floor(sl * 0.3), to: s + Math.floor(sl * 0.48) },
-    });
+/** Absolute ranges in the inserted body (content starting at `bodyFrom`) for the
+ *  runs whose mark code matches — used to re-cut the real card top→bottom. */
+function runRanges(bodyFrom: number, matches: (code: string) => boolean): Range[] {
+  const out: Range[] = [];
+  let off = 0;
+  for (const [text, code] of SAMPLE_CARD) {
+    if (text.length > 0 && matches(code)) {
+      out.push({ from: bodyFrom + off, to: bodyFrom + off + text.length });
+    }
+    off += text.length;
   }
   return out;
 }
 
-/** Apply `cmd` to each range top→bottom, with a brief visible delay between
- *  them; return the summed apply+paint time (the metric, excluding delays). */
-async function sweepMark(view: EditorView, ranges: Range[], cmd: Command): Promise<number> {
+/** Raw-addMark a span at each range top→bottom (the F9/F10/highlight result),
+ *  with a brief visible delay; return the summed apply+paint time (excluding
+ *  delays). scrollIntoView keeps the cutter on screen. */
+async function sweepMark(view: EditorView, ranges: Range[], mark: Mark): Promise<number> {
   let total = 0;
   for (const r of ranges) {
     if (r.to <= r.from) continue;
-    // scrollIntoView so the view follows the cutter top→bottom down the card.
-    view.dispatch(
-      view.state.tr.setSelection(TextSelection.create(view.state.doc, r.from, r.to)).scrollIntoView(),
-    );
     const t0 = performance.now();
-    cmd(view.state, view.dispatch.bind(view), view);
+    const tr = view.state.tr.addMark(r.from, r.to, mark);
+    tr.setSelection(TextSelection.create(tr.doc, r.from, r.to)).scrollIntoView();
+    view.dispatch(tr);
     await nextPaint();
     total += performance.now() - t0;
-    await sleep(45); // visible top-to-bottom sweep
+    await sleep(45);
   }
   return round1(total);
 }
@@ -377,8 +375,9 @@ async function benchEdit(
   onProgress?: ProgressFn,
 ): Promise<{ steps: EditStep[]; totalMs: number } | null> {
   const sch = view.state.schema;
-  const need = ['pocket', 'card', 'tag', 'cite_paragraph'];
-  if (need.some((n) => !sch.nodes[n]) || !sch.marks['cite_mark']) return null;
+  const need = ['pocket', 'card', 'tag', 'cite_paragraph', 'card_body'];
+  const needMarks = ['cite_mark', 'underline_mark', 'emphasis_mark', 'highlight'];
+  if (need.some((n) => !sch.nodes[n]) || needMarks.some((m) => !sch.marks[m])) return null;
   const steps: EditStep[] = [];
   const pocketId = newHeadingId();
   const tagId = newHeadingId();
@@ -460,56 +459,68 @@ async function benchEdit(
       const from = at + 2;
       const to = at + cite.content.size;
       if (to <= from) throw new Error('cite too short');
-      view.dispatch(
-        view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to)).scrollIntoView(),
-      );
-      applyCite()(view.state, view.dispatch.bind(view), view);
+      const tr = view.state.tr.addMark(from, to, sch.marks['cite_mark']!.create());
+      tr.setSelection(TextSelection.create(tr.doc, from, to)).scrollIntoView();
+      view.dispatch(tr);
     },
     onProgress,
     steps,
   );
 
   await measureStep(
-    'Paste a long card body',
+    'Paste a real card body',
     () => {
       const tg = findById(view.state.doc, tagId);
       if (!tg) throw new Error('tag missing');
       const at = tg.pos + tg.node.nodeSize;
       const cite = view.state.doc.nodeAt(at);
-      if (!cite) throw new Error('cite missing');
-      const end = at + cite.nodeSize - 1; // caret at end of the cite paragraph
-      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, end)));
-      applyPlainPasteFromText(view, LONG_BODY, {
-        condenseOnPaste: () => false,
-        paragraphIntegrity: () => false,
-        usePilcrows: () => false,
-        headingMode: () => 'respect',
-      });
+      if (!cite || cite.type.name !== 'cite_paragraph') throw new Error('cite missing');
+      // Insert as a new card_body block right AFTER the cite (below it, in the card).
+      const after = at + cite.nodeSize;
+      const cb = sch.nodes['card_body']!.create(null, sch.text(SAMPLE_TEXT));
+      const tr = view.state.tr.insert(after, cb);
+      tr.setSelection(TextSelection.create(tr.doc, after + 1)).scrollIntoView();
+      view.dispatch(tr);
     },
     onProgress,
     steps,
   );
 
-  // Card-cutting: underline → emphasis → highlight, each sweeping top→bottom
-  // through the pasted body (positions are stable across mark-only edits, so
-  // the segments computed once stay valid), then condense the card.
+  // Card-cutting: re-cut the real card's actual formatting — underline →
+  // emphasis → highlight — each sweeping top→bottom across the body (positions
+  // are stable across mark-only edits), then condense.
   const body = lastBodyRange(view.state.doc, tagId);
-  const segs = body ? segmentRanges(body, 7) : [];
+  const bf = body ? body.from : -1;
   await measureSweep(
     'Underline (top→bottom)',
-    () => sweepMark(view, segs.map((s) => s.read), applyUnderline()),
+    () =>
+      sweepMark(
+        view,
+        bf < 0 ? [] : runRanges(bf, (c) => c.includes('u')),
+        sch.marks['underline_mark']!.create(),
+      ),
     onProgress,
     steps,
   );
   await measureSweep(
     'Emphasis (top→bottom)',
-    () => sweepMark(view, segs.map((s) => s.emph), applyEmphasis()),
+    () =>
+      sweepMark(
+        view,
+        bf < 0 ? [] : runRanges(bf, (c) => c.includes('e')),
+        sch.marks['emphasis_mark']!.create(),
+      ),
     onProgress,
     steps,
   );
   await measureSweep(
     'Highlight (top→bottom)',
-    () => sweepMark(view, segs.map((s) => s.read), applyHighlight(() => 'yellow')),
+    () =>
+      sweepMark(
+        view,
+        bf < 0 ? [] : runRanges(bf, (c) => c.includes('h')),
+        sch.marks['highlight']!.create({ color: 'yellow' }),
+      ),
     onProgress,
     steps,
   );
