@@ -60,6 +60,11 @@ see `DETAILED_CHANGELOG.md`.
   toggled the comments pane off. It now disappears immediately with the
   annotation, like it already did when other annotations remained.
 
+- **Create-flashcard dialog buttons are now a matched pair.** The Cancel button
+  in the "create flashcard from selection" dialog was noticeably smaller than
+  Create; it now matches the manage screen's New card / Import / Export buttons,
+  so the two sit the same size side by side.
+
 ## 0.1.0-alpha.19 — 2026-06-22
 
 ### Added

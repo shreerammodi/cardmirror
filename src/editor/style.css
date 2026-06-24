@@ -8911,6 +8911,19 @@ body.pmd-multi-doc #word-count-btn {
 }
 .pmd-route-cancel:hover { color: var(--pmd-c-text); }
 
+/* In the create-flashcard dialog, size the Cancel button to match the manage
+   screen's New card / Import / Export buttons (.pmd-learn-manage-new), so it
+   reads the same size as the accent Create button it sits beside. */
+.pmd-learn-create-dialog .pmd-route-cancel {
+  padding: 0.35rem 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  font-family: inherit;
+  border-radius: 6px;
+  border-color: var(--pmd-c-border);
+  color: var(--pmd-c-text);
+}
+
 /* Text-prompt dialog — wider than the route dialog (needs room for
    a single-line input), with the input flush above an OK / Cancel
    row. Re-uses `pmd-route-overlay` + `pmd-route-dialog` for the
