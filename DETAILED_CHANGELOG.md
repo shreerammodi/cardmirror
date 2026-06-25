@@ -81,10 +81,14 @@ in each release, see `CHANGELOG.md`.
   are the cleaner's guardrails, so an ordinary outline-leveled Word doc isn't
   mis-structured. Verified on real send docs (one went from 0 detected tags / 94
   loose paragraphs to 11 tags + 7 blocks + 11 cards; another from 2 tags to 27).
-  Tests in `import/importer.test.ts`. Divergences from the cleaner (only relevant
-  to already-styled docs, which the cleaner itself handles): the tag bold test is
-  direct-run rather than `effectivelyBold`, and the outline level is direct or the
-  style's own rather than `basedOn`-resolved.
+  Tests in `import/importer.test.ts`. Outline level and bold are resolved through
+  each style's `basedOn` chain — once, in `parseStyles` (`StyleInfo` now carries
+  the effective `outlineLevel` + `bold`) — and the tag uses the cleaner's
+  `effectivelyBold` (direct run bold, else the run's char style or the paragraph
+  style), so a heading/tag that is one only through an inherited style is caught
+  too. The chain walk is once-per-style, never per-paragraph, so the per-paragraph
+  classification stays a plain property read with an early-out on no outline
+  level — the fast path for body text is unchanged.
 
 ## 0.1.0-alpha.20 — 2026-06-23
 

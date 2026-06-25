@@ -342,9 +342,14 @@ export interface StyleInfo {
   name: string | null;
   /** `w:type` attr: 'paragraph' | 'character' | 'table' | 'numbering'. */
   type: string | null;
-  /** Outline level from the style's `<w:pPr>/<w:outlineLvl>`, or null. Used to
-   *  place legacy heading styles at the right level. */
+  /** Effective outline level — the style's own `<w:pPr>/<w:outlineLvl>`, else
+   *  resolved through `basedOn` (or null). Used to place legacy heading styles at
+   *  the right level, and to recognize a heading/tag authored only via a style. */
   outlineLevel?: number | null;
+  /** Effective bold — the style's own `<w:rPr>/<w:b>`, else resolved through
+   *  `basedOn` (true / false / null). Used to recognize a tag whose bold comes
+   *  from its style chain rather than direct run formatting. */
+  bold?: boolean | null;
 }
 
 /** styleId → parsed style metadata, built from `word/styles.xml`. */

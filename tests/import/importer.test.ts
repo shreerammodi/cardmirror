@@ -113,6 +113,32 @@ describe('importer — outline-level heading promotion', () => {
     );
     expect(doc.firstChild!.type.name).toBe('block');
   });
+
+  it('promotes via an inherited (basedOn) outline level + bold', () => {
+    // "CustomX" sets neither outline level nor bold itself — it inherits both
+    // from Heading4 through basedOn, and the paragraph has no direct formatting.
+    // So this only works if the importer resolves effective outline/bold through
+    // basedOn (the un-promoted result would be a plain paragraph).
+    const styles =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/>` +
+      `<w:pPr><w:outlineLvl w:val="3"/></w:pPr><w:rPr><w:b/></w:rPr></w:style>` +
+      `<w:style w:type="paragraph" w:styleId="CustomX"><w:name w:val="Custom X"/>` +
+      `<w:basedOn w:val="Heading4"/></w:style></w:styles>`;
+    const card = importDoc(
+      bodyXml(
+        `<w:p><w:pPr><w:pStyle w:val="CustomX"/></w:pPr><w:r><w:t>Inherited tag</w:t></w:r></w:p>` +
+          `<w:p><w:r><w:t>Body</w:t></w:r></w:p>`,
+      ),
+      null,
+      null,
+      styles,
+    ).firstChild!;
+    expect(card.type.name).toBe('card');
+    expect(card.firstChild!.type.name).toBe('tag');
+    expect(card.firstChild!.textContent).toBe('Inherited tag');
+  });
 });
 
 describe('importer — analytic style fallback', () => {

@@ -199,11 +199,16 @@ function parseRels(relsXml: string): RelMap {
   return map;
 }
 
-/** Parse word/styles.xml into a styleId → {name, type} map. Only the
- *  fields the importer needs for style classification are kept; the rest
- *  of each `<w:style>` (rPr/pPr/basedOn/…) is ignored. */
+/** Parse word/styles.xml into a styleId → {name, type, outlineLevel, bold} map.
+ *  `outlineLevel` and `bold` are the EFFECTIVE values — resolved once here through
+ *  each style's `basedOn` chain (cycle-guarded), so a style that inherits its
+ *  outline level / bold from a base style carries them too, and the per-paragraph
+ *  classification stays a plain property read (no chain walking). */
 function parseStyles(stylesXml: string): StyleMap {
   const map: StyleMap = new Map();
+  // Per-style OWN outline / bold (tri-state) + basedOn parent, used to resolve
+  // the effective values below.
+  const raw = new Map<string, { ownOutline: number | null; ownBold: boolean | null; basedOn: string | null }>();
   const root = parseXml(stylesXml);
   const stylesEl = findChild(root, 'w:styles');
   if (!stylesEl) return map;
@@ -216,17 +221,53 @@ function parseStyles(stylesXml: string): StyleMap {
     const stChildren = childrenOf(st, 'w:style');
     const nameEl = findChild(stChildren, 'w:name');
     const name = nameEl ? (attrsOf(nameEl)['w:val'] ?? null) : null;
-    // Outline level (legacy heading styles carry it here, not on the paragraph).
-    let outlineLevel: number | null = null;
+    // Own outline level (legacy heading styles carry it here, not on the paragraph).
+    let ownOutline: number | null = null;
     const pPrEl = findChild(stChildren, 'w:pPr');
     if (pPrEl) {
       const olEl = findChild(childrenOf(pPrEl, 'w:pPr'), 'w:outlineLvl');
       if (olEl) {
         const n = parseInt(attrsOf(olEl)['w:val'] ?? '', 10);
-        if (Number.isFinite(n)) outlineLevel = n;
+        if (Number.isFinite(n)) ownOutline = n;
       }
     }
-    map.set(id, { id, name, type, outlineLevel });
+    // Own bold (tri-state) from the style's run properties.
+    let ownBold: boolean | null = null;
+    const rPrEl = findChild(stChildren, 'w:rPr');
+    if (rPrEl) {
+      const bEl = findChild(childrenOf(rPrEl, 'w:rPr'), 'w:b');
+      if (bEl) {
+        const v = attrsOf(bEl)['w:val'];
+        ownBold = v !== '0' && v !== 'false';
+      }
+    }
+    const basedOnEl = findChild(stChildren, 'w:basedOn');
+    const basedOn = basedOnEl ? (attrsOf(basedOnEl)['w:val'] ?? null) : null;
+    map.set(id, { id, name, type, outlineLevel: ownOutline, bold: ownBold });
+    raw.set(id, { ownOutline, ownBold, basedOn });
+  }
+  // Resolve effective outline level + bold through `basedOn`. Memoized; the stack
+  // guards against malformed cycles. Own value wins; else inherit from the base.
+  const memo = new Map<string, { outline: number | null; bold: boolean | null }>();
+  const resolve = (
+    id: string,
+    stack: Set<string>,
+  ): { outline: number | null; bold: boolean | null } => {
+    const cached = memo.get(id);
+    if (cached) return cached;
+    const r = raw.get(id);
+    if (!r || stack.has(id)) return { outline: null, bold: null };
+    stack.add(id);
+    const parent = r.basedOn ? resolve(r.basedOn, stack) : { outline: null, bold: null };
+    stack.delete(id);
+    const out = { outline: r.ownOutline ?? parent.outline, bold: r.ownBold ?? parent.bold };
+    memo.set(id, out);
+    return out;
+  };
+  for (const [id, info] of map) {
+    const eff = resolve(id, new Set());
+    info.outlineLevel = eff.outline;
+    info.bold = eff.bold;
   }
   return map;
 }
@@ -301,7 +342,12 @@ function parseParagraph(pNode: XmlNode, ctx: ImportContext): ParaInfo {
   // "Normal" with a direct <w:outlineLvl w:val="3"/> + 13pt bold) is promoted to
   // its structural node — see `outlineHeadingNode`.
   if (nodeType === 'paragraph') {
-    const promoted = outlineHeadingNode(pPr, pChildren, pStyle ? ctx.styles.get(pStyle) : undefined);
+    const promoted = outlineHeadingNode(
+      pPr,
+      pChildren,
+      pStyle ? ctx.styles.get(pStyle) : undefined,
+      ctx.styles,
+    );
     if (promoted) nodeType = promoted;
   }
 
@@ -988,11 +1034,12 @@ function paragraphOutline(pPr: XmlNode | null, info: StyleInfo | undefined): num
 // size / underline conjuncts are the cleaner's guardrails — they keep an
 // ordinary Word doc that merely uses outline levels from being mis-structured.
 
-/** Direct run bold (`<w:b/>` not turned off) — read from the raw `<w:rPr>`. */
-function runBold(rPr: XmlNode | null): boolean {
-  if (!rPr) return false;
+/** Direct run bold tri-state: true (`<w:b/>`), false (`<w:b w:val="0"/>`), or null
+ *  (not set on the run). */
+function runBoldState(rPr: XmlNode | null): boolean | null {
+  if (!rPr) return null;
   const b = findChild(childrenOf(rPr, 'w:rPr'), 'w:b');
-  if (!b) return false;
+  if (!b) return null;
   const v = attrsOf(b)['w:val'];
   return v !== '0' && v !== 'false';
 }
@@ -1011,20 +1058,50 @@ function runUnderlined(rPr: XmlNode | null): boolean {
   if (!u) return false;
   return (attrsOf(u)['w:val'] ?? 'single') !== 'none';
 }
+/** The run's character style id (`<w:rStyle>`), or null. */
+function runCharStyle(rPr: XmlNode | null): string | null {
+  if (!rPr) return null;
+  const rs = findChild(childrenOf(rPr, 'w:rPr'), 'w:rStyle');
+  return rs ? (attrsOf(rs)['w:val'] ?? null) : null;
+}
 
-/** The structural node a style-less paragraph's outline level + formatting imply,
+/** Effective bold of a paragraph — mirror of the cleaner's `effectivelyBold`: a
+ *  run is bold if it's directly bold, or (when it doesn't set bold itself) if its
+ *  character style or the paragraph style resolves bold. The style bolds are the
+ *  `basedOn`-resolved values precomputed in `parseStyles`, so this stays a few
+ *  property reads per run with no chain walking. */
+function paragraphEffectivelyBold(
+  pChildren: XmlNode[],
+  pInfo: StyleInfo | undefined,
+  styles: StyleMap,
+): boolean {
+  const pStyleBold = pInfo?.bold ?? false;
+  for (const c of pChildren) {
+    if (!('w:r' in c)) continue;
+    const rPr = findChild(childrenOf(c, 'w:r'), 'w:rPr');
+    const direct = runBoldState(rPr);
+    if (direct === true) return true;
+    if (direct === false) continue; // explicit bold-off on this run
+    const rStyle = runCharStyle(rPr);
+    const charBold = rStyle ? (styles.get(rStyle)?.bold ?? false) : false;
+    if (charBold || pStyleBold) return true;
+  }
+  return false;
+}
+
+/** The structural node a non-heading paragraph's outline level + formatting imply,
  *  or null to leave it a paragraph. Mirrors `style-cleaner.ts` levels 0–3 →
- *  pocket / hat / block / tag with the same bold/size/underline guards. Only
- *  consulted when style-based classification produced a plain `paragraph`.
- *
- *  Divergences (both only bite on docs that already carry custom styles, which
- *  the cleaner handles): the tag's bold is direct-run only — the importer has no
- *  `effectivelyBold` style resolution — and the outline level is direct or the
- *  style's own, not resolved through `basedOn`. */
+ *  pocket / hat / block / tag with the same guards: pocket / hat / block key off
+ *  DIRECT run bold + size (+ underline); the tag keys off effective bold (direct
+ *  run, the run's char style, or the paragraph style). The outline level and the
+ *  style bolds are `basedOn`-resolved in `parseStyles`, so a heading/tag that is
+ *  one only through an inherited style is caught too. Only consulted when
+ *  style-based classification produced a plain `paragraph`. */
 function outlineHeadingNode(
   pPr: XmlNode | null,
   pChildren: XmlNode[],
   info: StyleInfo | undefined,
+  styles: StyleMap,
 ): string | null {
   const outline = paragraphOutline(pPr, info);
   if (outline < 0 || outline > 3) return null;
@@ -1032,12 +1109,16 @@ function outlineHeadingNode(
     .filter((c) => 'w:r' in c)
     .map((r) => findChild(childrenOf(r, 'w:r'), 'w:rPr'));
   const anyRun = (pred: (rPr: XmlNode | null) => boolean): boolean => rPrs.some(pred);
-  if (outline === 0) return anyRun((r) => runBold(r) && runSizePt(r) === 26) ? 'pocket' : null;
-  if (outline === 1) return anyRun((r) => runBold(r) && runSizePt(r) === 22) ? 'hat' : null;
+  if (outline === 0)
+    return anyRun((r) => runBoldState(r) === true && runSizePt(r) === 26) ? 'pocket' : null;
+  if (outline === 1)
+    return anyRun((r) => runBoldState(r) === true && runSizePt(r) === 22) ? 'hat' : null;
   if (outline === 2)
-    return anyRun((r) => runBold(r) && runUnderlined(r) && runSizePt(r) === 16) ? 'block' : null;
-  // outline === 3 → Tag, gated on bold (the cleaner's effectivelyBold).
-  return anyRun(runBold) ? 'tag' : null;
+    return anyRun((r) => runBoldState(r) === true && runUnderlined(r) && runSizePt(r) === 16)
+      ? 'block'
+      : null;
+  // outline === 3 → Tag, gated on the cleaner's effectivelyBold.
+  return paragraphEffectivelyBold(pChildren, info, styles) ? 'tag' : null;
 }
 
 /** Decide how this document's legacy paragraph styles map to schema nodes.
