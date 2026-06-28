@@ -25,6 +25,7 @@ import {
   setTimerVisible,
   subscribeTimer,
 } from './timer-state.js';
+import { cycleTimerProfile, TIMER_PROFILE_LABELS } from './timer-profile.js';
 import { openSettings } from './settings-ui.js';
 import { isBenchmarkActive, setBenchmarkActive } from './benchmark.js';
 import { openReference } from './reference-ui.js';
@@ -1274,6 +1275,14 @@ const ribbonContext: RibbonContext = {
     const next = order[(order.indexOf(cur) + 1) % order.length]!;
     settings.set('theme', next);
     showToast(`Theme: ${next}`);
+  },
+  cycleTimerPreset: () => {
+    // Cycle the timer profile College → High School → Pomodoro (wrapping),
+    // applying its saved durations. Surface the timer so the change is visible
+    // and confirm via toast.
+    setTimerVisible(true);
+    const next = cycleTimerProfile();
+    showToast(`Timer preset: ${TIMER_PROFILE_LABELS[next]}`);
   },
   toggleParagraphIntegrity: () => {
     settings.set('paragraphIntegrity', !settings.get('paragraphIntegrity'));

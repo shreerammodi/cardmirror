@@ -18,6 +18,10 @@ see `DETAILED_CHANGELOG.md`.
   setting (color / text / both) now also styles the big display when a prep clock
   is showing — so it's clear at a glance that the time is prep, and which side.
 
+- **New "Cycle Timer Preset" command.** Bindable (unbound by default — set it
+  under Settings → Keybindings); it cycles the timer profile College → High
+  School → Pomodoro, applies that profile's durations, and surfaces the timer.
+
 - **Controls for formatting-gap bridging.** When you format a word next to an
   already-formatted word, the editor bridges the small gap between them so the
   styling is continuous. Two new Editing settings govern this: a toggle to turn
@@ -28,16 +32,16 @@ see `DETAILED_CHANGELOG.md`.
   body text — so a selection spanning both bridges in its body paragraphs and
   leaves its structural lines alone.
 
-- **Command bar: "fix", "repair", and "restore" find each other, as do "delete"
-  and "remove".** Searching the command bar for any of these words now also
-  surfaces commands named with an equivalent word — e.g. "restore" finds the
-  Repair commands, and "remove" finds the Delete Row / Column / Table commands.
-
-- **Command bar: "add" and "insert" find the same element commands.** Searching
-  "add table", "add row"/"add column", "add image", or "add received card" now
-  surfaces the corresponding Insert command (and vice versa). The create-type
-  commands — Add Quick Card, Add Comment, Add Note — are intentionally left out,
-  since they make something new rather than placing it.
+- **The command bar and settings search find more by synonym.** "fix", "repair",
+  and "restore" now find each other (e.g. "restore" surfaces the Repair commands),
+  as do "delete" and "remove" ("remove" finds the Delete Row / Column / Table
+  commands). "add" and "insert" find the same element commands — "add table",
+  "add row" / "add column", "add image", or "add received card" surface the
+  corresponding Insert command, and vice versa (the create-type commands — Add
+  Quick Card, Add Comment, Add Note — are intentionally left out, since they make
+  something new rather than placing it). And "timer profile" and "timer preset"
+  are interchangeable, each finding the Cycle Timer Preset command and the Timer
+  profile setting.
 
 - **Open a file by dragging it into the window.** Drag a `.docx`, `.cmir`, or
   `.cmir-journal` from your file manager onto any CardMirror window — the editor,

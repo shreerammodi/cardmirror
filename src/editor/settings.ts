@@ -1662,6 +1662,7 @@ export const SETTING_METADATA: SettingMeta[] = [
       "Picks which set of durations the timer is currently running on. Each profile remembers its own customizations, so changing values below saves to the active profile (no separate 'custom' option). Defaults: High school = 3/5/8 + 8 min prep, College = 3/6/9 + 10 min prep, Pomodoro = 25/15/5 + 0 prep.",
     kind: 'timerProfile',
     category: 'appearance',
+    aliases: ['timer preset', 'timer presets'],
   },
   {
     key: 'timerProfiles',

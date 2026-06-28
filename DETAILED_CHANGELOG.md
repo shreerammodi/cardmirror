@@ -7,6 +7,26 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **"Cycle Timer Preset" command + shared timer-profile module**
+  (`editor/timer-profile.ts` new, `editor/ribbon-commands.ts`,
+  `editor/ribbon-groups.ts`, `editor/index.ts`, `editor/settings-ui.ts`,
+  `editor/settings.ts`, `tests/editor/timer-profile.test.ts`). New bindable
+  `cycleTimerPreset` ribbon command — unbound by default, in the View group,
+  label "Cycle Timer Preset (College → High School → Pomodoro)". Wired through
+  `ctx.cycleTimerPreset` → `cycleTimerProfile()`: it advances the active
+  `timerProfile` College → High School → Pomodoro (wrapping), applies that
+  profile's saved speech presets + prep total to the live settings, refills the
+  prep clocks (`resetTimer`), makes the timer visible, and toasts the profile
+  label. The profile-switch logic moved into a new `timer-profile.ts`
+  (`applyTimerProfile` / `cycleTimerProfile` / `TIMER_PROFILE_LABELS`), which the
+  Settings profile picker (`buildTimerProfileEditor`) now also calls, so the two
+  can't drift. Aliases modeled on `cycleTheme`:
+  `switch`/`toggle`/`next`/`change timer preset`, plus `timer profile` and
+  `timer preset`; the `timerProfile` setting also gained
+  `aliases: ['timer preset', 'timer presets']` so settings search matches both
+  terms. (The first pass mistakenly cycled the three within-profile speech
+  presets via a `cycleSpeechPreset`; that was removed.)
+
 - **Timer: editable prep clocks, prep-aware display, capped/focus-stable
   durations** (`editor/timer-state.ts`, `editor/timer-ui.ts`, `editor/style.css`,
   `editor/settings.ts`, `editor/settings-ui.ts`,

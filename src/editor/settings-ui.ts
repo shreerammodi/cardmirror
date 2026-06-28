@@ -44,6 +44,7 @@ import { pushOverlay, popOverlay, isTopOverlay } from './overlay-stack.js';
 import { getInstallInfo } from './install-info.js';
 import { launchBenchmarkOverlay } from './benchmark-ui.js';
 import { resetTimer } from './timer-state.js';
+import { applyTimerProfile } from './timer-profile.js';
 import { showToast } from './toast.js';
 import { setIcon } from './icons';
 import {
@@ -2643,15 +2644,9 @@ function buildTimerProfileEditor(): HTMLElement {
     btn.textContent = o.label;
     btn.dataset['value'] = o.value;
     btn.addEventListener('click', () => {
-      settings.set('timerProfile', o.value);
-      const p = settings.get('timerProfiles')[o.value];
-      settings.set('timerSpeechPresets', p.speechPresets as never);
-      settings.set('timerPrepMinutes', p.prepMinutes);
-      // Re-fill the live prep clocks to the new profile's total
-      // — otherwise the buttons keep showing the previous
-      // profile's remaining. Profile switch is conceptually
-      // "set up a fresh round," so reset.
-      resetTimer(p.prepMinutes * 60 * 1000);
+      // Shared with the Cycle Timer Preset command — applies the profile's saved
+      // durations to the live settings and refills the prep clocks.
+      applyTimerProfile(o.value);
     });
     wrap.appendChild(btn);
   }

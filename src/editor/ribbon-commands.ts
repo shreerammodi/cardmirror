@@ -4464,6 +4464,9 @@ export type RibbonCommandId =
   // Cycle the theme setting light → dark → system → light. No default
   // binding; bind via Settings → Keybindings.
   | 'cycleTheme'
+  // Cycle the timer profile College → High School → Pomodoro (wraps),
+  // applying its durations. No default binding.
+  | 'cycleTimerPreset'
   | 'toggleParagraphIntegrity'
   | 'selectSpeechDoc'
   | 'goHome'
@@ -4618,6 +4621,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'applyFontColor',
   'openSettings',
   'cycleTheme',
+  'cycleTimerPreset',
   'toggleParagraphIntegrity',
   'selectSpeechDoc',
   'goHome',
@@ -4758,6 +4762,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   applyFontColor: 'Apply Font Color',
   openSettings: 'Open Settings',
   cycleTheme: 'Cycle Theme (Light → Dark → System)',
+  cycleTimerPreset: 'Cycle Timer Preset (College → High School → Pomodoro)',
   toggleParagraphIntegrity: 'Toggle Paragraph Integrity',
   selectSpeechDoc: 'Select Speech Document',
   goHome: 'Go to Home Screen',
@@ -4830,6 +4835,7 @@ export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly st
   openShortcutsReference: ['hotkeys', 'key bindings', 'shortcuts'],
   zoomReset: ['actual size'],
   cycleTheme: ['dark mode', 'light mode', 'toggle theme', 'switch theme', 'appearance'],
+  cycleTimerPreset: ['switch timer preset', 'toggle timer preset', 'next timer preset', 'change timer preset', 'timer profile', 'timer preset'],
   deleteCurrentHeading: ['delete card', 'delete heading', 'delete current card'], // "remove …" via the delete/remove synonym group
   saveSendDoc: ['send doc', 'export send doc', 'send version'],
   startFlowHost: ['warm flow', 'prewarm flow', 'flow connection', 'connect to flow', 'speed up flow'],
@@ -5021,6 +5027,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   applyFontColor: '',
   openSettings: '',
   cycleTheme: '',
+  cycleTimerPreset: '',
   toggleParagraphIntegrity: '',
   selectSpeechDoc: '',
   goHome: '',
@@ -5224,6 +5231,8 @@ export interface RibbonContext {
   openSettings: () => void;
   /** Cycle the theme setting light → dark → system → light. */
   cycleTheme: () => void;
+  /** Cycle the timer profile College → High School → Pomodoro (wraps). */
+  cycleTimerPreset: () => void;
   toggleParagraphIntegrity: () => void;
   selectSpeechDoc: () => void;
   goHome: () => void;
@@ -5314,6 +5323,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   lastFontColor: () => null,
   openSettings: () => {},
   cycleTheme: () => {},
+  cycleTimerPreset: () => {},
   toggleParagraphIntegrity: () => {},
   selectSpeechDoc: () => {},
   goHome: () => {},
@@ -5834,6 +5844,12 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return (_state, dispatch) => {
         if (!dispatch) return true;
         ctx.cycleTheme();
+        return true;
+      };
+    case 'cycleTimerPreset':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.cycleTimerPreset();
         return true;
       };
     case 'toggleParagraphIntegrity':
