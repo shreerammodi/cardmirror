@@ -7,6 +7,18 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Command-palette synonym groups (data-driven) + a delete/remove group**
+  (`editor/quick-card-search-ui.ts`, `editor/ribbon-commands.ts`). Replaced the
+  hardcoded fix↔repair check in `searchCommandSource`'s `haystack` with a
+  data-driven `SYNONYM_GROUPS` table — `[['fix','repair','restore'],
+  ['delete','remove']]` — expanded generically: a command whose label contains
+  any word in a group gains that group's other words as searchable terms. This
+  makes fix/repair/restore fully mutual and adds delete/remove. Trimmed the
+  now-redundant cross-verb aliases (`'delete links'` off `removeHyperlinks`,
+  `'remove card'` off `deleteCurrentHeading`), and the delete/remove group newly
+  covers the alias-less `deleteTableRow`/`Column`/`Table`. Command-search only
+  (the settings search still keys on aliases), matching prior scope.
+
 - **Formatting-gap bridging: structural-paragraph exemption + two settings**
   (`editor/ribbon-commands.ts`, `editor/settings.ts`, `editor/settings-ui.ts`,
   `tests/editor/formatting-gaps.test.ts`). The gap-fill/bookend bridge — both the

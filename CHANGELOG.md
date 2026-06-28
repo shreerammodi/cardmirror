@@ -19,6 +19,11 @@ see `DETAILED_CHANGELOG.md`.
   body text — so a selection spanning both bridges in its body paragraphs and
   leaves its structural lines alone.
 
+- **Command bar: "fix", "repair", and "restore" find each other, as do "delete"
+  and "remove".** Searching the command bar for any of these words now also
+  surfaces commands named with an equivalent word — e.g. "restore" finds the
+  Repair commands, and "remove" finds the Delete Row / Column / Table commands.
+
 ### Fixed
 
 - **Pasting over a selection inside a card no longer breaks the card.** Pasting a

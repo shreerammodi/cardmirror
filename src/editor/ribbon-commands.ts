@@ -4789,14 +4789,14 @@ export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly st
   smartShrink: ['smart shrink', 'deep shrink'],
   aiAskAboutSelection: ['question'],
   pasteAsText: ['paste without formatting', 'paste unformatted', 'paste text'],
-  removeHyperlinks: ['remove links', 'delete links', 'unlink'],
+  removeHyperlinks: ['remove links', 'unlink'], // "delete …" via the delete/remove synonym group
   applyShading: ['shading', 'text highlight color'],
   insertImage: ['add image', 'insert picture', 'photo'],
   goHome: ['start screen', 'welcome screen', 'dashboard'],
   openShortcutsReference: ['hotkeys', 'key bindings', 'shortcuts'],
   zoomReset: ['actual size'],
   cycleTheme: ['dark mode', 'light mode', 'toggle theme', 'switch theme', 'appearance'],
-  deleteCurrentHeading: ['delete card', 'delete heading', 'remove card', 'delete current card'],
+  deleteCurrentHeading: ['delete card', 'delete heading', 'delete current card'], // "remove …" via the delete/remove synonym group
   saveSendDoc: ['send doc', 'export send doc', 'send version'],
   startFlowHost: ['warm flow', 'prewarm flow', 'flow connection', 'connect to flow', 'speed up flow'],
   toggleVoice: ['voice control', 'voice mode', 'dictation', 'speech', 'microphone', 'start voice', 'stop voice'],

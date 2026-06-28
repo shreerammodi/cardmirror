@@ -340,21 +340,32 @@ function commandKeyDisplay(id: RibbonCommandId): string {
 
 /** Command source — any ribbon command (everything bindable), matched
  *  on its label; triggers the command on Enter. */
+/** Word-equivalence groups for command search: if a command's label contains
+ *  any word in a group, queries phrased with the OTHER words in that group also
+ *  match it (e.g. "Repair OCR/PDF Text" via "fix" / "restore"; "Remove
+ *  Hyperlinks" via "delete"; "Delete Row" via "remove"). Command-search only;
+ *  add a group to extend. */
+const SYNONYM_GROUPS: readonly (readonly string[])[] = [
+  ['fix', 'repair', 'restore'],
+  ['delete', 'remove'],
+];
+
 function searchCommandSource(query: string): PaletteResult[] {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
   // Searchable text = label + any aliases, so a query phrased like an
   // alias still matches. Ranking still prefers the label: an alias-only
   // hit (not in the label) sorts after label hits via the Infinity below.
-  // "Fix" and "repair" are treated as synonyms for each other: any command
-  // whose label contains one matches a query phrased with the other (e.g.
-  // "Repair OCR/PDF Text" is reachable via "fix", "Fix Formatting Gaps"
-  // via "repair").
+  // Expand each label by the other words in any synonym group it touches (see
+  // SYNONYM_GROUPS), so a query phrased with an equivalent word still matches.
   const haystack = (id: RibbonCommandId): string => {
     const aliases = RIBBON_COMMAND_ALIASES[id];
     const label = RIBBON_COMMAND_LABELS[id].toLowerCase();
     const synonyms: string[] = [];
-    if (label.includes('fix')) synonyms.push('repair');
-    if (label.includes('repair')) synonyms.push('fix');
+    for (const group of SYNONYM_GROUPS) {
+      if (group.some((w) => label.includes(w))) {
+        for (const w of group) if (!label.includes(w)) synonyms.push(w);
+      }
+    }
     const extra = [...(aliases ?? []), ...synonyms];
     return extra.length ? `${label} ${extra.join(' ')}` : label;
   };
