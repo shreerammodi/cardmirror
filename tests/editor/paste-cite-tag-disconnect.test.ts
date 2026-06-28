@@ -100,6 +100,21 @@ function fit(doc: PMNode, cursor: number, slice: Slice): EditorState | null {
   return tr ? state.apply(tr) : null;
 }
 
+// Paste OVER a range selection (from..to), not at a collapsed cursor.
+function fitRange(
+  doc: PMNode,
+  from: number,
+  to: number,
+  slice: Slice,
+): EditorState | null {
+  const base = EditorState.create({ doc, plugins: [absorbPlugin] });
+  const state = base.apply(
+    base.tr.setSelection(TextSelection.create(base.doc, from, to)),
+  );
+  const tr = tryPasteCardContent(state, slice);
+  return tr ? state.apply(tr) : null;
+}
+
 describe('card-paste matrix — into card_body', () => {
   it('body → merges inline at the cursor (no new block)', () => {
     const doc = makeDoc([cardWith(tag('T', 't1'), cardBody('Smith body'))]);
@@ -227,6 +242,127 @@ describe('card-paste matrix — boundaries', () => {
       base.tr.setSelection(TextSelection.create(base.doc, posInText(doc, 'a', 1))),
     );
     expect(tryPasteCardContent(state, slice)).toBeNull();
+  });
+});
+
+describe('card-paste matrix — paste OVER a selection (range)', () => {
+  // A range paste used to tear the card apart: tryPasteCardContent bailed on any
+  // non-collapsed selection, so the open-card slice fell to the split path and
+  // spawned a phantom empty-tag sibling. Card-fittable content must fit in place
+  // instead, dropping the selected text first — never breaking the card.
+
+  it('body over a partial card_body selection → replaces inline, card intact', () => {
+    const doc = makeDoc([cardWith(tag('T', 't1'), cardBody('Smith body'))]);
+    const after = fitRange(
+      doc,
+      posInText(doc, 'Smith body', 0),
+      posInText(doc, 'Smith body', 5), // select "Smith"
+      openCardSlice(cardBody('XX')),
+    )!;
+    expect(after).not.toBeNull();
+    expect(topLevelTypes(after.doc)).toEqual(['card']);
+    expect(childTypes(firstCard(after.doc))).toEqual(['tag', 'card_body']);
+    expect(firstCard(after.doc).firstChild!.attrs['id']).toBe('t1'); // tag intact
+    expect(firstOfType(after.doc, 'card_body').textContent).toBe('XX body');
+  });
+
+  it('cite over a partial card_body selection → cite added, card not torn', () => {
+    const doc = makeDoc([cardWith(tag('T', 't1'), cardBody('Smith body'))]);
+    const after = fitRange(
+      doc,
+      posInText(doc, 'Smith body', 2),
+      posInText(doc, 'Smith body', 5), // select "ith"
+      openCardSlice(citePara('C24')),
+    )!;
+    expect(after).not.toBeNull();
+    expect(topLevelTypes(after.doc)).toEqual(['card']);
+    const types = childTypes(firstCard(after.doc));
+    expect(types[0]).toBe('tag');
+    expect(types).toContain('cite_paragraph');
+    expect(firstCard(after.doc).firstChild!.attrs['id']).toBe('t1');
+    expect(firstOfType(after.doc, 'cite_paragraph').textContent).toBe('C24');
+  });
+
+  it('body over a FULL paragraph selection → overwrites it, card intact', () => {
+    const doc = makeDoc([
+      cardWith(tag('T', 't1'), cardBody('Replace me'), citePara('C')),
+    ]);
+    const after = fitRange(
+      doc,
+      posInText(doc, 'Replace me', 0),
+      posInText(doc, 'Replace me', 10), // the whole body
+      openCardSlice(cardBody('NEW')),
+    )!;
+    expect(after).not.toBeNull();
+    expect(topLevelTypes(after.doc)).toEqual(['card']);
+    expect(childTypes(firstCard(after.doc))).toEqual([
+      'tag', 'card_body', 'cite_paragraph',
+    ]);
+    expect(firstOfType(after.doc, 'card_body').textContent).toBe('NEW');
+    expect(firstCard(after.doc).firstChild!.attrs['id']).toBe('t1');
+  });
+
+  it('cite over a FULL card_body selection → becomes a cite, card intact', () => {
+    const doc = makeDoc([cardWith(tag('T', 't1'), cardBody('Replace me'))]);
+    const after = fitRange(
+      doc,
+      posInText(doc, 'Replace me', 0),
+      posInText(doc, 'Replace me', 10),
+      openCardSlice(citePara('C24')),
+    )!;
+    expect(after).not.toBeNull();
+    expect(childTypes(firstCard(after.doc))).toEqual(['tag', 'cite_paragraph']);
+    expect(firstOfType(after.doc, 'cite_paragraph').textContent).toBe('C24');
+  });
+
+  it('selection spanning two blocks of the SAME card → fits, one card survives', () => {
+    const doc = makeDoc([
+      cardWith(tag('T', 't1'), cardBody('AAA'), citePara('BBB')),
+    ]);
+    const after = fitRange(
+      doc,
+      posInText(doc, 'AAA', 1),
+      posInText(doc, 'BBB', 2),
+      openCardSlice(cardBody('X')),
+    )!;
+    expect(after).not.toBeNull();
+    expect(topLevelTypes(after.doc)).toEqual(['card']); // still exactly ONE card
+    expect(firstCard(after.doc).firstChild!.type.name).toBe('tag');
+    expect(firstCard(after.doc).firstChild!.attrs['id']).toBe('t1');
+  });
+
+  it('a tag-led paste over a selection still bails → split path breaks the card', () => {
+    const doc = makeDoc([cardWith(tag('T', 't1'), cardBody('Smith body'))]);
+    const slice = new Slice(Fragment.fromArray([tag('New', 'n1')]), 0, 0);
+    const base = EditorState.create({ doc, plugins: [absorbPlugin] });
+    const state = base.apply(
+      base.tr.setSelection(
+        TextSelection.create(
+          base.doc,
+          posInText(doc, 'Smith body', 0),
+          posInText(doc, 'Smith body', 5),
+        ),
+      ),
+    );
+    expect(tryPasteCardContent(state, slice)).toBeNull();
+  });
+
+  it('a selection spanning two DIFFERENT cards bails (not silently merged)', () => {
+    const doc = makeDoc([
+      cardWith(tag('A', 'a1'), cardBody('aaa')),
+      cardWith(tag('B', 'b1'), cardBody('bbb')),
+    ]);
+    const base = EditorState.create({ doc, plugins: [absorbPlugin] });
+    const state = base.apply(
+      base.tr.setSelection(
+        TextSelection.create(
+          base.doc,
+          posInText(doc, 'aaa', 1),
+          posInText(doc, 'bbb', 2),
+        ),
+      ),
+    );
+    expect(tryPasteCardContent(state, openCardSlice(cardBody('X')))).toBeNull();
   });
 });
 

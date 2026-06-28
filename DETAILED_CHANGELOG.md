@@ -5,6 +5,26 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
+## Unreleased
+
+- **Pasting card content over a range selection no longer breaks the card**
+  (`editor/paste-plugin.ts`, `tests/editor/paste-cite-tag-disconnect.test.ts`).
+  `tryPasteCardContent` previously bailed on any non-collapsed selection
+  (`sel.from !== sel.to → return null`), so pasting fittable content (a
+  cite / body / undertag, which serialize as a single OPEN `card` slice) over a
+  selection fell through to `tryPasteSplitContainer`; that path saw the open-card
+  lead and split the destination card — detaching the tag and spawning a phantom
+  empty-tag sibling. The range case now deletes the selection first, then runs
+  the existing card-paste matrix at the resulting cursor. `fitBlocks` was
+  refactored to operate on a caller-supplied transaction (so the delete and the
+  fit are one transaction), and a new `rangeFitsInOneContainer` guard restricts
+  in-place fitting to selections that stay within a single card's content slots
+  (or all at doc level); a selection crossing into a tag/heading or spanning two
+  cards still falls through to the default/split path. A structural lead
+  (tag / analytic / heading / whole closed card) still bails before the range
+  logic, so it correctly starts a new card. Covered by 7 new range-selection
+  tests in the card-paste matrix suite.
+
 ## 0.1.0-beta.2 — 2026-06-25
 
 - **Rebindable single-press doc-cycle commands for three-pane mode**

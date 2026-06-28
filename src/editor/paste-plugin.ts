@@ -677,8 +677,13 @@ const CARD_CONTENT_SLOTS = new Set<string>([
  *    edges so there's no stray blank line).
  *  - An EMPTY target block is OVERWRITTEN.
  *  - OUTSIDE a card, content drops in loose (body → `paragraph`).
+ *  - Pasting OVER a range selection collapses it first (the selected text is
+ *    dropped), then the same matrix runs at the cursor — so pasting over a
+ *    paragraph / selection inside a card never tears the card apart either.
  * Returns null for a `tag` / `analytic` / heading / whole closed `card` lead, so
- * the split path handles it — those SHOULD start a new card.
+ * the split path handles it — those SHOULD start a new card. Also null when a
+ * range selection crosses a structural boundary (into a tag/heading, or between
+ * two cards), leaving that rarer case to the default/split path.
  *
  * Exported for tests.
  */
@@ -709,24 +714,64 @@ export function tryPasteCardContent(
   if (!fittable) return null;
 
   const sel = state.selection;
-  if (!(sel instanceof TextSelection) || sel.from !== sel.to) return null;
-  const $from = sel.$from;
+  if (!(sel instanceof TextSelection)) return null;
 
-  // Inside a card / analytic_unit?
+  // Inside a card / analytic_unit? (decided from the selection anchor).
   let inCard = false;
-  for (let d = $from.depth; d >= 1; d--) {
-    if (STRUCTURAL_CONTAINERS.has($from.node(d).type.name)) {
+  for (let d = sel.$from.depth; d >= 1; d--) {
+    if (STRUCTURAL_CONTAINERS.has(sel.$from.node(d).type.name)) {
       inCard = true;
       break;
     }
   }
+
+  // A RANGE selection — pasting OVER a paragraph / selection — must collapse to a
+  // cursor FIRST, then fit. Otherwise PM's default replace of the open-card slice
+  // over the range tears the card apart (a phantom empty-tag sibling). Only do
+  // this when the whole selection stays in card-content textblocks of a SINGLE
+  // container; a selection that reaches into a tag/heading or spans two cards
+  // falls through to the default/split path so it isn't silently mangled.
+  const tr = state.tr;
+  if (sel.from !== sel.to) {
+    if (!rangeFitsInOneContainer(sel.$from, sel.$to, inCard)) return null;
+    tr.delete(sel.from, sel.to);
+  }
+  const $from = tr.selection.$from;
+
   // Outside a card → drop loose; body becomes a plain paragraph.
-  if (!inCard) return fitBlocks(state, blocks, $from, 'paragraph');
+  if (!inCard) return fitBlocks(tr, blocks, $from, 'paragraph');
 
   // Cursor must be in a card-content slot (not the tag / analytic head).
   if (!CARD_CONTENT_SLOTS.has($from.parent.type.name)) return null;
 
-  return fitBlocks(state, blocks, $from, 'card_body');
+  return fitBlocks(tr, blocks, $from, 'card_body');
+}
+
+/** Start position of the enclosing `card` / `analytic_unit`, or -1 at the doc
+ *  root. Two positions with the same value live in the same container. */
+function enclosingContainerStart($pos: ResolvedPos): number {
+  for (let d = $pos.depth; d >= 1; d--) {
+    if (STRUCTURAL_CONTAINERS.has($pos.node(d).type.name)) return $pos.before(d);
+  }
+  return -1;
+}
+
+/** A range paste is fit in place only when both ends sit in card-content
+ *  textblocks of the SAME card (or both at the doc root, outside any card).
+ *  Anything crossing a structural boundary — into a tag/heading, or from one
+ *  card into another — is left to the default/split path so containers are
+ *  never merged or torn. */
+function rangeFitsInOneContainer(
+  $from: ResolvedPos,
+  $to: ResolvedPos,
+  inCard: boolean,
+): boolean {
+  const inSlot = (p: ResolvedPos): boolean =>
+    inCard
+      ? CARD_CONTENT_SLOTS.has(p.parent.type.name)
+      : p.parent.type.name === 'paragraph';
+  if (!inSlot($from) || !inSlot($to)) return false;
+  return enclosingContainerStart($from) === enclosingContainerStart($to);
 }
 
 /**
@@ -737,17 +782,20 @@ export function tryPasteCardContent(
  * coalescing empty edges. An EMPTY target is overwritten (filled), not split.
  * The cursor lands at the END of the pasted content, matching the in-card / F2
  * paste paths (so the user keeps typing after what they pasted).
+ *
+ * Operates on a caller-supplied `tr` whose selection is the (now collapsed)
+ * insertion cursor — for a range paste the caller has already deleted the
+ * selection, so `tr.selection` is the resulting cursor and `$from` resolves it.
  */
 function fitBlocks(
-  state: EditorState,
+  tr: Transaction,
   blocks: PMNode[],
   $from: ResolvedPos,
   bodyType: 'card_body' | 'paragraph',
 ): Transaction {
-  const sel = state.selection;
+  const sel = tr.selection;
   const Bt = $from.parent.type.name;
   const Bempty = $from.parent.content.size === 0;
-  const tr = state.tr;
   // The destination's own bodyType textblock absorbs body text too (e.g. a
   // plain paragraph at the doc level behaves like a card_body inside a card).
   const absorbsBody = (t: string): boolean =>

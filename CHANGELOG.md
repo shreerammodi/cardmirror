@@ -5,6 +5,17 @@ changes in each release, written for users of the editor. For
 in-depth rationale and implementation context behind each entry,
 see `DETAILED_CHANGELOG.md`.
 
+## Unreleased
+
+### Fixed
+
+- **Pasting over a selection inside a card no longer breaks the card.** Pasting a
+  cite, body, or undertag copied from inside a card on top of selected text in a
+  card used to tear the card apart — detaching its tag and leaving a stray
+  empty-tag card behind. The paste now replaces the selected text and fits the
+  content into the card with its structure intact. Pasting a tag, analytic,
+  heading, or whole card over a selection still starts a new card, as before.
+
 ## 0.1.0-beta.2 — 2026-06-25
 
 ### Added
