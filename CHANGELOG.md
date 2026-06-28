@@ -77,6 +77,12 @@ see `DETAILED_CHANGELOG.md`.
   the number you were trying to type. They now stand down whenever a modal is up
   or a text field is focused.
 
+- **AI operations now also lock styling and marks in the passage they're working
+  on.** While an AI operation runs on a passage, the editor already refused typed
+  edits there; it now also refuses style and mark changes (highlight, underline,
+  font size, named styles, etc.) to that passage, so the operation's content
+  can't shift under it mid-run.
+
 ## 0.1.0-beta.2 — 2026-06-25
 
 ### Added

@@ -77,6 +77,24 @@ describe('edit coordinator leases', () => {
     expect(coordinatorBlocks(view.state, straddle)).toBe(true);
   });
 
+  it('blocks a length-neutral mark / style change inside a lease', () => {
+    const view = fakeView('hello world', 'second');
+    const lease = claimRegion(view, { from: 14, to: 20 }, { label: 'test' })!;
+    const um = schema.marks['underline_mark']!;
+
+    // Adding a direct mark inside the lease doesn't change length, but it's
+    // still an edit to the region — blocked.
+    expect(coordinatorBlocks(view.state, view.state.tr.addMark(15, 19, um.create()))).toBe(true);
+
+    // Seed a mark via the lease's own bypass write, then removing it inside the
+    // lease is blocked too.
+    lease.apply(view.state.tr.addMark(14, 20, um.create()));
+    expect(coordinatorBlocks(view.state, view.state.tr.removeMark(15, 19, um))).toBe(true);
+
+    // The same mark applied OUTSIDE the lease is allowed.
+    expect(coordinatorBlocks(view.state, view.state.tr.addMark(2, 6, um.create()))).toBe(false);
+  });
+
   it('filterTransaction drops a user edit inside a lease', () => {
     const view = fakeView('hello world', 'second');
     claimRegion(view, { from: 14, to: 20 }, { label: 'test' });

@@ -19,9 +19,10 @@
  *     `lease.region()` at apply time instead of stale offsets, so other
  *     AI ops and user edits elsewhere shift it correctly.
  *   - Edits *inside* a lease → blocked. `filterTransaction` rejects any
- *     user transaction that changes content length inside a live lease
- *     (the op's own writes carry a bypass meta). This keeps an op's
- *     content plan valid — nobody can retype inside the region mid-flight.
+ *     user transaction that changes the region's content — text, inline
+ *     marks, or node attrs — inside a live lease (the op's own writes carry
+ *     a bypass meta). This keeps an op's content plan valid: nobody can
+ *     retype, re-style, or re-mark inside the region mid-flight.
  *
  * Because leases remap, disjoint ops run concurrently; overlapping claims
  * are rejected (`claimRegion` returns null and the caller aborts). When a
@@ -92,10 +93,19 @@ export function coordinatorBlocks(state: EditorState, tr: Transaction): boolean 
 function leaseTouched(tr: Transaction, lease: LeaseRecord): boolean {
   const from = lease.positions[0]!;
   const to = lease.positions[1]!;
-  const f = tr.mapping.map(from, 1);
-  const t = tr.mapping.map(to, -1);
+  const rf = tr.mapping.mapResult(from, 1);
+  const rt = tr.mapping.mapResult(to, -1);
+  // A boundary deleted out from under the region → touched.
+  if (rf.deleted || rt.deleted) return true;
+  const f = rf.pos;
+  const t = rt.pos;
+  // Content length changed inside the region → touched (fast path).
   if (t - f !== to - from) return true;
-  return tr.mapping.mapResult(from, 1).deleted || tr.mapping.mapResult(to, -1).deleted;
+  // Same length: still touched if the region's CONTENT changed — inline marks,
+  // node attrs, or same-length text. Length/position mapping alone can't see a
+  // mark or style application (those produce identity step maps), so compare the
+  // region's slice before vs. after.
+  return !tr.before.slice(from, to).eq(tr.doc.slice(f, t));
 }
 
 export const editCoordinatorPlugin = new Plugin<CoordState>({

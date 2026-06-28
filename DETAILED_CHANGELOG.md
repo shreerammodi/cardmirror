@@ -186,6 +186,20 @@ in each release, see `CHANGELOG.md`.
   suppressed under an overlay or with a focused input, resumes once the overlay
   closes) plus an `isAnyOverlayOpen` unit test.
 
+- **The AI edit coordinator blocks length-neutral edits (marks / styles / attrs)
+  inside a live lease** (`editor/ai/edit-coordinator.ts`,
+  `tests/editor/edit-coordinator.test.ts`). `leaseTouched` only detected
+  content-length changes and boundary deletions, so an add/remove-mark or style
+  application inside a lease — which produces identity step maps (no length
+  change) — slipped through and was applied mid-operation. After the
+  length/boundary fast paths, it now compares the region's slice before vs after
+  (`tr.before.slice(from, to).eq(tr.doc.slice(f, t))`) and blocks any
+  difference — inline marks, node attrs, or same-length text. Edits *outside* the
+  lease still only remap it (the region's content is unchanged, so the slices
+  compare equal), preserving concurrent disjoint ops. Covered by a test that
+  add/remove of a mark inside a lease is blocked while the same mark outside is
+  allowed.
+
 ## 0.1.0-beta.2 — 2026-06-25
 
 - **Rebindable single-press doc-cycle commands for three-pane mode**
