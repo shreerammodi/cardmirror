@@ -52,6 +52,7 @@ import { lockHighlighting } from './create-reference.js';
 import { showToast } from './toast.js';
 import { getElectronHost, getHost } from './host/index.js';
 import { classifyChar, isWordChar } from './word-break.js';
+import { moveContainerUp, moveContainerDown } from './move-container.js';
 import { settings } from './settings.js';
 import {
   selectSimilar,
@@ -4340,6 +4341,8 @@ export type StructuralRibbonCommandId =
 
 export type RibbonCommandId =
   | StructuralRibbonCommandId
+  | 'moveContainerUp'
+  | 'moveContainerDown'
   | 'toggleBold'
   | 'toggleItalic'
   | 'toggleStrikethrough'
@@ -4503,6 +4506,8 @@ export const STRUCTURAL_RIBBON_COMMAND_IDS: StructuralRibbonCommandId[] = [
 
 export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   ...STRUCTURAL_RIBBON_COMMAND_IDS,
+  'moveContainerUp',
+  'moveContainerDown',
   'toggleBold',
   'toggleItalic',
   'toggleStrikethrough',
@@ -4642,6 +4647,8 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   setTag: 'Apply Tag Style',
   setAnalytic: 'Apply Analytic Style',
   setUndertag: 'Apply Undertag Style',
+  moveContainerUp: 'Move Container Up',
+  moveContainerDown: 'Move Container Down',
   toggleBold: 'Bold',
   toggleItalic: 'Italic',
   toggleStrikethrough: 'Strikethrough',
@@ -4817,6 +4824,8 @@ export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly st
   addColumnAfter: ['add column right'],
   insertReceivedAtCursor: ['add received card at cursor'],
   insertReceivedAtEnd: ['add received card at end'],
+  moveContainerUp: ['move up', 'move card up', 'move section up', 'reorder up', 'shift up'],
+  moveContainerDown: ['move down', 'move card down', 'move section down', 'reorder down', 'shift down'],
   goHome: ['start screen', 'welcome screen', 'dashboard'],
   openShortcutsReference: ['hotkeys', 'key bindings', 'shortcuts'],
   zoomReset: ['actual size'],
@@ -4857,6 +4866,8 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   setTag: 'F7',
   setAnalytic: 'Mod-F7',
   setUndertag: 'Mod-F8',
+  moveContainerUp: 'Mod-Alt-ArrowUp',
+  moveContainerDown: 'Mod-Alt-ArrowDown',
   toggleBold: 'Mod-b',
   toggleItalic: 'Mod-i',
   toggleStrikethrough: '',
@@ -5323,6 +5334,8 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
     case 'setTag': return setTag();
     case 'setAnalytic': return setAnalytic();
     case 'setUndertag': return setUndertag();
+    case 'moveContainerUp': return moveContainerUp();
+    case 'moveContainerDown': return moveContainerDown();
     case 'toggleBold': return toggleBold();
     case 'toggleItalic': return shadowAwareToggleMark(schema.marks['italic']!);
     case 'toggleStrikethrough': return shadowAwareToggleMark(schema.marks['strikethrough']!);

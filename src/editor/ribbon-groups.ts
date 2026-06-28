@@ -108,6 +108,8 @@ export const RIBBON_GROUPS: RibbonGroup[] = [
       'selectCurrentHeading',
       'deleteCurrentHeading',
       'copyCurrentHeading',
+      'moveContainerUp',
+      'moveContainerDown',
     ],
   },
   {

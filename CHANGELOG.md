@@ -37,6 +37,14 @@ see `DETAILED_CHANGELOG.md`.
   Desktop only; other file types are ignored, and dragging cards around the
   editor is unaffected.
 
+- **Move a card or section up/down in the outline.** New **Move Container Up** /
+  **Move Container Down** commands (default **⌘/Ctrl-Alt-↑ / ↓**) grab the
+  cursor's smallest enclosing outline item — a card / analytic unit, or a heading
+  and its whole section — and move it one spot among same-level items in the
+  navigation pane. Cards reorder among cards, blocks among blocks, and so on;
+  moving past the edge of a section flows into the adjacent one. Rebindable in
+  Settings (listed under Editing utilities).
+
 ### Changed
 
 - **Saving a quick card now captures whole cards and sections.** Add Quick Card

@@ -7,6 +7,26 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Move-container commands: reorder the cursor's outline node up/down**
+  (`editor/move-container.ts` (new), `editor/ribbon-commands.ts`,
+  `editor/ribbon-groups.ts`, `tests/editor/move-container.test.ts`,
+  `tests/editor/ribbon-groups.test.ts`). `moveContainerUp` / `moveContainerDown`
+  find the deepest heading whose `computeHeadingRange` encloses the cursor (the
+  card / analytic unit, or a pocket/hat/block section) and move that range one
+  spot among same-level top-level items. Mechanism: each top-level child carries
+  an outline level (card / analytic = 4, block = 3, hat = 2, pocket = 1; loose
+  content = deepest); the move skips items *deeper* than the grabbed level (a
+  sibling's contents travel as a unit) and lands beside the first item at that
+  level or shallower — so a card hops a shallower block heading in one step
+  (entering/leaving the section) while a block hops a whole sibling block section.
+  Boundaries flow (reparenting); no-op when there's no same-level-or-shallower
+  neighbor; the cursor stays in the moved container so the key repeats. Bound by
+  default to `Mod-Alt-ArrowUp` / `Mod-Alt-ArrowDown` (distinct from the
+  single-modifier `Ctrl/Alt-Arrow` caret nav; search aliases move/reorder
+  up/down), placed in the Editing-utilities ribbon group. Also added a
+  ribbon-groups↔registry coverage test — a command missing from a group
+  previously only crashed at boot, not in the suite.
+
 - **Same-type structural re-press: uniform reset of indent + font-size +
   font-color** (`editor/ribbon-commands.ts`, `tests/editor/ribbon-commands.test.ts`).
   Centralized the cleared direct marks into `REAPPLY_CLEAR_MARK_NAMES =
