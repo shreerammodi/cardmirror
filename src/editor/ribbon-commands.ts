@@ -210,25 +210,45 @@ function stripPromotionMarksOnFragment(fragment: Fragment): Fragment {
   return Fragment.fromArray(out);
 }
 
-/** Return a copy of a textblock node with every direct `font_size`
- *  mark removed from its inline content. Returns the same node
- *  reference when it carries no font_size mark, so callers can cheaply
- *  detect a no-op. */
-function clearFontSizeOnNode(node: PMNode): PMNode {
-  const fontSize = schema.marks['font_size'];
-  if (!fontSize) return node;
-  let changed = false;
+/** Direct character-formatting marks cleared when a structural style is
+ *  re-pressed on a block that's already that type — resetting it toward the
+ *  style's canonical look. `indent` is reset alongside these; `spacing` is
+ *  intentionally preserved. */
+const REAPPLY_CLEAR_MARK_NAMES = ['font_size', 'font_color'] as const;
+
+/** Mark types for `REAPPLY_CLEAR_MARK_NAMES` that exist in the schema. */
+function reapplyClearMarkTypes(): MarkType[] {
+  return REAPPLY_CLEAR_MARK_NAMES.map((n) => schema.marks[n]).filter(
+    (m): m is MarkType => !!m,
+  );
+}
+
+/** Return a copy of a textblock with its `indent` attr reset to 0 and every
+ *  direct font-size / font-color mark stripped from its inline content (type,
+ *  spacing, and other attrs preserved). Returns the same node reference when
+ *  nothing changes, so callers can cheaply detect a no-op. */
+function clearReapplyFormatting(node: PMNode): PMNode {
+  const markTypes = reapplyClearMarkTypes();
+  let contentChanged = false;
   const out: PMNode[] = [];
   node.content.forEach((inline) => {
-    if (fontSize.isInSet(inline.marks)) {
-      changed = true;
-      out.push(inline.mark(fontSize.removeFromSet(inline.marks)));
+    let marks = inline.marks;
+    for (const mt of markTypes) if (mt.isInSet(marks)) marks = mt.removeFromSet(marks);
+    if (marks !== inline.marks) {
+      contentChanged = true;
+      out.push(inline.mark(marks));
     } else {
       out.push(inline);
     }
   });
-  if (!changed) return node;
-  return node.copy(Fragment.fromArray(out));
+  const indentChanged = (node.attrs['indent'] ?? 0) !== 0;
+  if (!contentChanged && !indentChanged) return node;
+  const attrs = indentChanged ? { ...node.attrs, indent: 0 } : node.attrs;
+  return node.type.create(
+    attrs,
+    contentChanged ? Fragment.fromArray(out) : node.content,
+    node.marks,
+  );
 }
 
 /**
@@ -237,12 +257,13 @@ function clearFontSizeOnNode(node: PMNode): PMNode {
  * only sees the real PM selection — which `selectAllOfStyle` collapses — so a
  * shadow that spans many paragraphs (e.g. every tag in the doc) couldn't be
  * re-styled at all. Re-applying a structural style to a block that is ALREADY
- * that type is, by design, a no-op on structure that just clears stray direct
- * `font_size` marks (the same-type re-press behavior, mirroring
- * `stripIndentAtDepth(..., { clearFontSize: true })`). This does exactly that
- * across every same-type block the shadow covers, in one transaction — the
- * intended way to scrub stray sizes (often imported from .docx) off all tags:
- * right-click the ribbon style button to select them, left-click to re-apply.
+ * that type is, by design, a no-op on structure that just resets it toward the
+ * style's canonical look — clearing its `indent` and stray direct font-size /
+ * font-color marks (the same-type re-press behavior, mirroring
+ * `stripIndentAtDepth`). This does exactly that across every same-type block the
+ * shadow covers, in one transaction — the intended way to scrub stray sizes /
+ * colors (often imported from .docx) off all tags: right-click the ribbon style
+ * button to select them, left-click to re-apply. `spacing` is preserved.
  *
  * Only fires for a shadow selection (`fromShadow`) whose blocks already match
  * `targetType`; a shadow of a different style, or a real selection, falls
@@ -256,25 +277,32 @@ function bulkReapplyStructuralOnShadow(
 ): boolean {
   const op = getOperatingRanges(state);
   if (!op.fromShadow || op.ranges.length === 0) return false;
-  const fontSize = schema.marks['font_size'];
-  if (!fontSize) return false;
-  const clears: { from: number; to: number }[] = [];
+  const markTypes = reapplyClearMarkTypes();
+  const targets: { pos: number; node: PMNode; from: number; to: number }[] = [];
   for (const range of op.ranges) {
     state.doc.nodesBetween(range.from, range.to, (node, pos) => {
       if (node.isTextblock && node.type.name === targetType) {
-        const from = Math.max(range.from, pos + 1);
-        const to = Math.min(range.to, pos + node.nodeSize - 1);
-        if (from < to) clears.push({ from, to });
+        targets.push({
+          pos,
+          node,
+          from: Math.max(range.from, pos + 1),
+          to: Math.min(range.to, pos + node.nodeSize - 1),
+        });
       }
       return true;
     });
   }
-  if (clears.length === 0) return false;
+  if (targets.length === 0) return false;
   if (!dispatch) return true;
   const tr = state.tr;
-  // removeMark steps don't change positions, so original coords stay valid
-  // across the loop — no mapping needed.
-  for (const c of clears) tr.removeMark(c.from, c.to, fontSize);
+  // setNodeMarkup / removeMark steps don't change positions, so original coords
+  // stay valid across the loop — no mapping needed.
+  for (const t of targets) {
+    if ((t.node.attrs['indent'] ?? 0) !== 0) {
+      tr.setNodeMarkup(t.pos, null, { ...t.node.attrs, indent: 0 });
+    }
+    if (t.from < t.to) for (const mt of markTypes) tr.removeMark(t.from, t.to, mt);
+  }
   // Keep the shadow alive so further bulk ops can chain off the same matches.
   tr.setMeta(META_OPERATING_ON_SHADOW, true);
   dispatch(tr);
@@ -282,43 +310,30 @@ function bulkReapplyStructuralOnShadow(
 }
 
 /**
- * Same-type re-press helper: strip the `indent` attr off the node at
- * `depth` while preserving its type and every other attr. Returns
- * true unconditionally — the keystroke is consumed either way.
- * Used by every heading shortcut command's already-this-type branch
- * so re-pressing the shortcut clears indentation while leaving the
- * heading style itself intact.
- *
- * When `clearFontSize` is set, the same gesture also strips direct
- * `font_size` marks off the node's content — re-pressing a structural
- * shortcut on a paragraph that's already that type resets it to the
- * style's canonical size (tag / analytic / pocket / hat / block).
+ * Same-type re-press helper: reset the structural block at `depth` toward its
+ * style's canonical look — clear its `indent` attr and strip direct font-size /
+ * font-color marks off its content — while preserving the type, `spacing`, and
+ * every other attr. Returns true unconditionally (the keystroke is consumed).
+ * Used by every heading / undertag shortcut's already-this-type branch.
  */
 function stripIndentAtDepth(
   state: EditorState,
   dispatch: ((tr: Transaction) => void) | undefined,
   depth: number,
-  opts?: { clearFontSize?: boolean },
 ): boolean {
+  if (!dispatch) return true;
   const $from = state.selection.$from;
   const node = $from.node(depth);
-  const hasIndent = (node.attrs['indent'] ?? 0) !== 0;
-  const clearFontSize = opts?.clearFontSize ?? false;
-  if (!hasIndent && !clearFontSize) return true;
-  if (!dispatch) return true;
+  const pos = $from.before(depth);
   let tr = state.tr;
-  if (hasIndent) {
-    tr = tr.setNodeMarkup($from.before(depth), null, { ...node.attrs, indent: 0 });
+  if ((node.attrs['indent'] ?? 0) !== 0) {
+    tr = tr.setNodeMarkup(pos, null, { ...node.attrs, indent: 0 });
   }
-  if (clearFontSize) {
-    const fontSize = schema.marks['font_size'];
-    if (fontSize) {
-      const start = $from.before(depth) + 1;
-      tr = tr.removeMark(start, start + node.content.size, fontSize);
-    }
-  }
-  // No-op (already canonical, no indent): consume the key without
-  // dispatching an empty transaction that would burn an undo step.
+  const start = pos + 1;
+  const end = start + node.content.size;
+  for (const mt of reapplyClearMarkTypes()) tr = tr.removeMark(start, end, mt);
+  // No-op (already canonical): consume the key without dispatching an empty
+  // transaction that would burn an undo step.
   if (!tr.docChanged) return true;
   dispatch(tr);
   return true;
@@ -344,7 +359,7 @@ export function setHeading(typeName: HeadingTypeName): Command {
       const parent = $from.parent;
       const pname = parent.type.name;
       if (pname === typeName) {
-        return stripIndentAtDepth(state, dispatch, 1, { clearFontSize: true });
+        return stripIndentAtDepth(state, dispatch, 1);
       }
       if (!DOC_LEVEL_CONVERTIBLE.has(pname)) return false;
       if (!dispatch) return true;
@@ -423,7 +438,7 @@ export function setTag(): Command {
     }
 
     if ($from.depth === 2 && $from.parent.type.name === 'tag') {
-      return stripIndentAtDepth(state, dispatch, 2, { clearFontSize: true });
+      return stripIndentAtDepth(state, dispatch, 2);
     }
 
     if (
@@ -485,7 +500,7 @@ export function setAnalytic(): Command {
       $from.node(1).type.name === 'analytic_unit' &&
       $from.node(1).firstChild === $from.parent
     ) {
-      return stripIndentAtDepth(state, dispatch, 2, { clearFontSize: true });
+      return stripIndentAtDepth(state, dispatch, 2);
     }
 
     if (
@@ -4222,7 +4237,8 @@ function transformDocChild(
       // gesture is a no-op, and treating it as touched dissolved the
       // container — orphaning the cite/body that followed (audit
       // 2026-06-10 P1#4). Re-pressing the shortcut on a same-type head
-      // still clears its direct font_size marks, mirroring the cursor
+      // still resets it toward canonical (clears indent + direct font-size /
+      // font-color marks; see clearReapplyFormatting), mirroring the cursor
       // re-press, but leaves the container intact.
       const sameType = isSameTypeTarget(g, opts);
       const gTouched = inSel && !sameType;
@@ -4230,18 +4246,18 @@ function transformDocChild(
         hitTouched = true;
         liftedChildren.push(asTransformed(g, opts));
       } else if (hitTouched) {
-        liftedChildren.push(liftCardChild(inSel && sameType ? clearFontSizeOnNode(g) : g));
+        liftedChildren.push(liftCardChild(inSel && sameType ? clearReapplyFormatting(g) : g));
       } else {
-        const kept = inSel && sameType ? clearFontSizeOnNode(g) : g;
+        const kept = inSel && sameType ? clearReapplyFormatting(g) : g;
         if (kept !== g) preChanged = true;
         preChildren.push(kept);
       }
     });
 
     if (liftedChildren.length === 0) {
-      // No container break. If a same-type head had its font_size
-      // cleared in place, rebuild the container with the cleaned
-      // children; otherwise pass the original through untouched.
+      // No container break. If a same-type head had its formatting reset in
+      // place, rebuild the container with the cleaned children; otherwise pass
+      // the original through untouched.
       out.push(preChanged ? child.copy(Fragment.fromArray(preChildren)) : child);
       return;
     }

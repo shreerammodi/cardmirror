@@ -7,6 +7,21 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Same-type structural re-press: uniform reset of indent + font-size +
+  font-color** (`editor/ribbon-commands.ts`, `tests/editor/ribbon-commands.test.ts`).
+  Centralized the cleared direct marks into `REAPPLY_CLEAR_MARK_NAMES =
+  ['font_size', 'font_color']` and routed all three re-press paths through it:
+  `clearFontSizeOnNode` → `clearReapplyFormatting` (tag / analytic via
+  `computeStructuralReplacement`) now also resets `indent`; `stripIndentAtDepth`
+  (pocket / hat / block / undertag) drops its `clearFontSize` option and always
+  clears font_size + font_color (so undertag now clears font_size, previously
+  omitted); `bulkReapplyStructuralOnShadow` (the right-click select-all-of-style
+  path) extended to match (indent + both marks). `spacing` is never touched.
+  Replaces the prior inconsistency (tag/analytic kept indent; undertag kept
+  font_size; none cleared font_color). The re-press test suite was rewritten to
+  assert the full per-style matrix (indent→0, font_size gone, font_color gone,
+  spacing preserved).
+
 - **Mod+A no longer selects the whole GUI when focus isn't in a text box**
   (`editor/editable-target.ts` (new), `editor/index.ts`, `editor/home-screen.ts`,
   `tests/editor/editable-target.test.ts`). With nothing editable focused (e.g.

@@ -59,6 +59,14 @@ see `DETAILED_CHANGELOG.md`.
   the dropzone shelf toggle. Quick cards still work while hidden, and the command
   bar still opens with its keyboard shortcut.
 
+- **Re-pressing a structural style now consistently resets indent, font size, and
+  font color.** Pressing a Pocket / Hat / Block / Tag / Analytic / Undertag
+  shortcut on text that's already that style resets it toward the style's
+  canonical look — clearing the paragraph indent, any direct font-size override,
+  and any direct font-color override — while leaving line spacing alone.
+  Previously this was inconsistent: tags and analytics didn't clear indent,
+  undertags didn't clear font size, and none cleared font color.
+
 ### Fixed
 
 - **Ctrl/Cmd+A no longer selects the whole interface.** When CardMirror was

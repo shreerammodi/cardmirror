@@ -1118,72 +1118,91 @@ describe('structural apply on a Ctrl-Shift-Down selection (boundary at next-para
   });
 });
 
-describe('re-pressing a structural shortcut clears direct font_size marks', () => {
+describe('re-pressing a structural style resets indent + font-size + font-color (keeps spacing)', () => {
   const FONT_SIZE = schema.marks['font_size']!;
-  function sized(text: string, halfPoints = 28) {
-    return schema.text(text, [FONT_SIZE.create({ halfPoints })]);
+  const FONT_COLOR = schema.marks['font_color']!;
+  const SPACING = { 'w:after': '240' };
+  /** Text carrying a direct font_size AND font_color mark. */
+  function styled(text: string) {
+    return schema.text(text, [
+      FONT_SIZE.create({ halfPoints: 28 }),
+      FONT_COLOR.create({ color: 'FF0000' }),
+    ]);
   }
-  function hasFontSize(node: import('prosemirror-model').Node): boolean {
+  function has(node: import('prosemirror-model').Node, type: typeof FONT_SIZE): boolean {
     let found = false;
     node.descendants((n) => {
-      if (FONT_SIZE.isInSet(n.marks)) found = true;
+      if (type.isInSet(n.marks)) found = true;
       return !found;
     });
     return found;
   }
+  const hasFontSize = (n: import('prosemirror-model').Node) => has(n, FONT_SIZE);
+  const hasFontColor = (n: import('prosemirror-model').Node) => has(n, FONT_COLOR);
 
-  it('F4–F6 on a same-type heading strips its font_size marks', () => {
+  it('F4–F6 on a same-type heading clears indent + font-size + font-color, keeps spacing', () => {
     const doc = makeDoc([
-      schema.nodes['pocket']!.create({ id: 'p1' }, sized('hello')),
+      schema.nodes['pocket']!.create({ id: 'p1', indent: 720, spacing: SPACING }, styled('hello')),
     ]);
-    expect(hasFontSize(doc)).toBe(true);
     const state = cursorIn(doc, (n) => n.type.name === 'pocket', 1);
     const next = apply(state, setHeading('pocket'));
     expect(next).not.toBeNull();
-    expect(next!.doc.firstChild!.type.name).toBe('pocket');
-    expect(next!.doc.firstChild!.attrs['id']).toBe('p1');
-    expect(next!.doc.firstChild!.textContent).toBe('hello');
+    const head = next!.doc.firstChild!;
+    expect(head.type.name).toBe('pocket');
+    expect(head.attrs['id']).toBe('p1');
+    expect(head.attrs['indent']).toBe(0);
+    expect(head.attrs['spacing']).toEqual(SPACING); // spacing preserved
     expect(hasFontSize(next!.doc)).toBe(false);
+    expect(hasFontColor(next!.doc)).toBe(false);
   });
 
-  it('F7 on a tag cursor strips its font_size marks', () => {
+  it('F7 on a tag clears indent (new) + font-size + font-color, keeps the card', () => {
     const doc = makeDoc([
-      cardWith(schema.nodes['tag']!.create({ id: 't1' }, sized('claim'))),
+      cardWith(schema.nodes['tag']!.create({ id: 't1', indent: 720, spacing: SPACING }, styled('claim'))),
     ]);
     const state = cursorIn(doc, (n) => n.type.name === 'tag', 1);
     const next = apply(state, setTag());
     expect(next).not.toBeNull();
-    expect(next!.doc.firstChild!.firstChild!.type.name).toBe('tag');
-    expect(next!.doc.firstChild!.firstChild!.textContent).toBe('claim');
+    expect(next!.doc.firstChild!.type.name).toBe('card');
+    const tagNode = next!.doc.firstChild!.firstChild!;
+    expect(tagNode.type.name).toBe('tag');
+    expect(tagNode.textContent).toBe('claim');
+    expect(tagNode.attrs['indent']).toBe(0);
+    expect(tagNode.attrs['spacing']).toEqual(SPACING);
     expect(hasFontSize(next!.doc)).toBe(false);
+    expect(hasFontColor(next!.doc)).toBe(false);
   });
 
-  it('Mod-F7 on an analytic cursor strips its font_size marks', () => {
+  it('Mod-F7 on an analytic clears indent (new) + font-size + font-color, keeps the analytic_unit', () => {
     const doc = makeDoc([
-      analyticUnit(schema.nodes['analytic']!.create({ id: 'a1' }, sized('point'))),
+      analyticUnit(schema.nodes['analytic']!.create({ id: 'a1', indent: 720 }, styled('point'))),
     ]);
     const state = cursorIn(doc, (n) => n.type.name === 'analytic', 1);
     const next = apply(state, setAnalytic());
     expect(next).not.toBeNull();
-    expect(next!.doc.firstChild!.firstChild!.type.name).toBe('analytic');
-    expect(next!.doc.firstChild!.firstChild!.textContent).toBe('point');
+    expect(next!.doc.firstChild!.type.name).toBe('analytic_unit');
+    const an = next!.doc.firstChild!.firstChild!;
+    expect(an.type.name).toBe('analytic');
+    expect(an.attrs['indent']).toBe(0);
     expect(hasFontSize(next!.doc)).toBe(false);
+    expect(hasFontColor(next!.doc)).toBe(false);
   });
 
-  it('also clears indent and font_size together in one keystroke', () => {
+  it('undertag re-press clears indent + font-size (new) + font-color', () => {
     const doc = makeDoc([
-      schema.nodes['hat']!.create({ id: 'h1', indent: 720 }, sized('label')),
+      schema.nodes['undertag']!.create({ indent: 720 }, styled('note')),
     ]);
-    const state = cursorIn(doc, (n) => n.type.name === 'hat', 1);
-    const next = apply(state, setHeading('hat'));
+    const state = cursorIn(doc, (n) => n.type.name === 'undertag', 1);
+    const next = apply(state, setUndertag());
     expect(next).not.toBeNull();
     expect(next!.doc.firstChild!.attrs['indent']).toBe(0);
     expect(hasFontSize(next!.doc)).toBe(false);
+    expect(hasFontColor(next!.doc)).toBe(false);
   });
 
-  it('a selection inside a same-type tag clears font_size but keeps the card intact', () => {
+  it('a selection inside a same-type tag resets it but keeps the card intact', () => {
     const doc = makeDoc([
-      cardWith(schema.nodes['tag']!.create({ id: 't1' }, sized('aggression likely'))),
+      cardWith(schema.nodes['tag']!.create({ id: 't1', indent: 720 }, styled('aggression likely'))),
     ]);
     const base = EditorState.create({ doc });
     // Select a word inside the tag (does not span the whole node).
@@ -1196,18 +1215,10 @@ describe('re-pressing a structural shortcut clears direct font_size marks', () =
     expect(card.type.name).toBe('card');
     expect(card.firstChild!.type.name).toBe('tag');
     expect(card.firstChild!.attrs['id']).toBe('t1');
+    expect(card.firstChild!.attrs['indent']).toBe(0);
     expect(card.firstChild!.textContent).toBe('aggression likely');
     expect(hasFontSize(next!.doc)).toBe(false);
-  });
-
-  it('undertag re-press leaves font_size untouched (not in the clear list)', () => {
-    const doc = makeDoc([
-      schema.nodes['undertag']!.create(null, sized('note')),
-    ]);
-    const state = cursorIn(doc, (n) => n.type.name === 'undertag', 1);
-    const next = apply(state, setUndertag());
-    // No indent, no clear → consumed as a no-op; font_size preserved.
-    expect(next === null || hasFontSize(next.doc)).toBe(true);
+    expect(hasFontColor(next!.doc)).toBe(false);
   });
 });
 
