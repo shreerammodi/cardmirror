@@ -356,17 +356,20 @@ function smallestEnclosingHeadingText(state: EditorState): string {
   return text;
 }
 
-/** Add Quick Card: save the current selection as a named, tagged
- *  snippet. Requires a non-empty selection. Name pre-fills with the
- *  smallest enclosing heading; the (name, tag-set) uniqueness rule is
- *  enforced via the dialog's inline validator. */
+/** Add Quick Card: save the current selection — or the cursor's enclosing
+ *  card / section when there's no selection — as a named, tagged snippet.
+ *  Routes through `takeSendSlice`, mirroring the send-to commands: an explicit
+ *  selection is normalized to whole structural units and re-highlighted as
+ *  feedback, so a quick card is always a clean structural unit and never a
+ *  half-card or stray fragment. Name pre-fills with the smallest enclosing
+ *  heading; the (name, tag-set) uniqueness rule is enforced via the dialog's
+ *  inline validator. */
 async function runAddQuickCard(sourceView: EditorView): Promise<void> {
-  const { selection, doc } = sourceView.state;
-  if (selection.empty) {
-    showToast('Select some text to save as a quick card.');
+  const slice = takeSendSlice(sourceView);
+  if (!slice) {
+    showToast('Put the cursor in a card or section, or select one, to save as a quick card.');
     return;
   }
-  const slice = doc.slice(selection.from, selection.to);
   const result = await openQuickCardAdd({
     initialName: smallestEnclosingHeadingText(sourceView.state),
     existingTags: distinctTags(quickCardsStore.list()),

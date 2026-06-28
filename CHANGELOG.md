@@ -24,6 +24,16 @@ see `DETAILED_CHANGELOG.md`.
   surfaces commands named with an equivalent word — e.g. "restore" finds the
   Repair commands, and "remove" finds the Delete Row / Column / Table commands.
 
+### Changed
+
+- **Saving a quick card now captures whole cards and sections.** Add Quick Card
+  used to save exactly your raw selection — which could be half a card or a stray
+  fragment. It now snaps the selection to the whole cards/sections it covers
+  (re-highlighting them so you see what's saved), and you can save with no
+  selection at all — it captures the card or section your cursor is in. This
+  matches how sending to the dropzone, a starred recipient, or the speech doc
+  already works.
+
 ### Fixed
 
 - **Pasting over a selection inside a card no longer breaks the card.** Pasting a

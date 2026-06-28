@@ -7,6 +7,17 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Quick-card creation routed through `takeSendSlice`** (`editor/index.ts`).
+  `runAddQuickCard` previously took a raw `doc.slice(selection.from, selection.to)`
+  after only a non-empty-selection check, so a partial/arbitrary selection
+  produced a structurally-broken quick card. It now calls `takeSendSlice(source
+  View)` — the same path the send-to dropzone / starred / speech commands use —
+  which normalizes an explicit selection to whole structural units (and
+  re-highlights it as feedback), or captures the cursor's enclosing card/section
+  when the selection is empty; returns null (→ toast) when there's nothing
+  structural. No new tests: the normalization is already covered by
+  `send-normalize.test.ts`; this is a thin wiring swap.
+
 - **Command-palette synonym groups (data-driven) + a delete/remove group**
   (`editor/quick-card-search-ui.ts`, `editor/ribbon-commands.ts`). Replaced the
   hardcoded fix↔repair check in `searchCommandSource`'s `haystack` with a
