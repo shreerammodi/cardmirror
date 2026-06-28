@@ -983,6 +983,7 @@ function flushHeavyUpdateNow(record: DocRecord): void {
     record.heavyUpdateTimer = null;
   }
   record.navPanel.update(record.view.state.doc);
+  record.navPanel.setCaretHeading(record.view.state.selection.from);
   record.owner.refreshWordCount();
 }
 
@@ -2347,6 +2348,10 @@ function buildDocRecord(
           );
           try {
             record.navPanel.update(view.state.doc);
+            // Re-apply against the rebuilt entries (fresh positions) so a
+            // structural edit doesn't leave the wrong heading lit (parity with
+            // single-doc, index.ts).
+            record.navPanel.setCaretHeading(view.state.selection.from);
           } catch (e) {
             console.warn(
               `[cardmirror] wc: navPanel.update THREW: ${e instanceof Error ? e.stack ?? e.message : String(e)}`,
@@ -2379,6 +2384,13 @@ function buildDocRecord(
       if (getActiveView() === view) {
         setActiveView(view);
       }
+      // Caret-tracking for this pane's nav: highlight the heading whose section
+      // contains the cursor (parity with single-doc, index.ts). Gated on the
+      // caret position changing so it's cheap; per-pane, so each pane tracks its
+      // own cursor.
+      if (prevState.selection.from !== next.selection.from) {
+        record.navPanel.setCaretHeading(next.selection.from);
+      }
     },
   });
 
@@ -2386,6 +2398,9 @@ function buildDocRecord(
   // (`localMaxLevel`). Each section's 1/2/3/4 buttons act locally.
   const navPanel = new NavigationPanel(navEl, { localMaxLevel: true });
   navPanel.attach(view);
+  // Initial caret-heading highlight so a freshly-mounted pane reflects the
+  // cursor before the first selection change (parity with index.ts).
+  navPanel.setCaretHeading(view.state.selection.from);
 
   const dragSurface = new EditorDragSurface();
   dragSurface.attach(view, editorEl);

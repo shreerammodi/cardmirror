@@ -77,6 +77,12 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **The navigation pane now follows the cursor in three-pane mode.** Clicking or
+  moving the cursor in a document highlights the heading it lands in in the nav
+  pane — that already worked in single-pane view, and now works in each pane of
+  the multi-pane workspace too (each pane tracks its own cursor), including right
+  after a pane opens and after structural edits like moving a card.
+
 - **Ctrl/Cmd+A no longer selects the whole interface.** When CardMirror was
   focused but you hadn't clicked into the document (e.g. just after alt-tabbing
   back), Ctrl/Cmd+A selected the entire GUI. It now selects everything within

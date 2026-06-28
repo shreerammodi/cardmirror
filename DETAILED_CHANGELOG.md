@@ -7,6 +7,18 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Multi-pane nav pane tracks the caret** (`editor/multi-pane-shell.ts`).
+  Single-doc highlights the caret's heading via `navPanel.setCaretHeading` in its
+  `dispatchTransaction` (plus a re-apply after each outline rebuild); the
+  per-pane dispatch never did, so the three-pane nav didn't follow the cursor.
+  Added, mirroring single-doc: (1) `record.navPanel.setCaretHeading(next.
+  selection.from)` on caret-position change in the per-pane `dispatchTransaction`;
+  (2) an initial `setCaretHeading` right after `navPanel.attach`; (3) a re-apply
+  after each `navPanel.update(doc)` (the debounced heavy-update flush and
+  `flushHeavyUpdateNow`) — since `render()` rebuilds entries, this keeps a
+  structural edit from leaving the wrong heading lit. Per-pane, so each pane
+  tracks its own cursor.
+
 - **Move-container commands: reorder the cursor's outline node up/down**
   (`editor/move-container.ts` (new), `editor/ribbon-commands.ts`,
   `editor/ribbon-groups.ts`, `tests/editor/move-container.test.ts`,
