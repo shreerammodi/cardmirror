@@ -494,6 +494,12 @@ export interface Settings {
   /** Word-style smart quotes: as you type a straight ' or ", curl it to the
    *  right direction based on the preceding character. Off by default. */
   smartQuotes: boolean;
+  /** Custom dash autoformat — when you type `---`, replace it (on the third
+   *  hyphen) with a chosen dash output (en/em dash, with or without surrounding
+   *  spaces). Backspace right after reverts to the literal `---`. Off by
+   *  default. */
+  customDashEnabled: boolean;
+  customDashStyle: 'en' | 'en-spaced' | 'em' | 'em-spaced';
   /** Microphone for voice control (MediaDeviceInfo.deviceId).
    *  Empty string = system default. Desktop only. */
   voiceInputDeviceId: string;
@@ -1035,6 +1041,11 @@ export const VOICE_DASH_STYLES: ReadonlyArray<Settings['voiceDashStyle']> = [
   'double', 'double-spaced', 'triple', 'triple-spaced',
 ];
 
+/** Output options for the custom dash remapping. */
+export const CUSTOM_DASH_STYLES: ReadonlyArray<Settings['customDashStyle']> = [
+  'en', 'en-spaced', 'em', 'em-spaced',
+];
+
 const DEFAULTS: Settings = {
   navWidth: 300,
   navMaxLevel: 3,
@@ -1088,6 +1099,8 @@ const DEFAULTS: Settings = {
   flashcardDueDot: true,
   editorSpellcheck: false,
   smartQuotes: false,
+  customDashEnabled: false,
+  customDashStyle: 'em',
   voiceInputDeviceId: '',
   voiceAutoSleepSeconds: 60,
   voiceDashStyle: 'em',
@@ -1237,6 +1250,7 @@ export interface SettingMeta {
     | 'toggle'
     | 'number'
     | 'defaultZoomPct'
+    | 'customDash'
     | 'level'
     | 'readers'
     | 'displaySizes'
@@ -1891,6 +1905,15 @@ export const SETTING_METADATA: SettingMeta[] = [
     aliases: ['curly quotes', 'smart quotes', 'autocorrect quotes', 'typographic quotes'],
   },
   {
+    key: 'customDashEnabled',
+    label: 'Custom dash',
+    description:
+      'As you type, replace "---" with a dash of your choice (en or em dash, with or without surrounding spaces). The replacement happens on the third hyphen; press Backspace right after to revert to the literal "---". Off by default.',
+    kind: 'customDash',
+    category: 'editing',
+    aliases: ['dash', 'em dash', 'en dash', 'triple dash', 'autocorrect dash'],
+  },
+  {
     key: 'paragraphIntegrity',
     label: 'F3 condense: preserve paragraph integrity',
     description:
@@ -2505,6 +2528,10 @@ function sanitize(s: Settings): Settings {
     flashcardDueDot: s.flashcardDueDot === false ? false : true,
     editorSpellcheck: !!s.editorSpellcheck,
     smartQuotes: !!s.smartQuotes,
+    customDashEnabled: !!s.customDashEnabled,
+    customDashStyle: CUSTOM_DASH_STYLES.includes(s.customDashStyle as Settings['customDashStyle'])
+      ? (s.customDashStyle as Settings['customDashStyle'])
+      : 'em',
     voiceInputDeviceId: typeof s.voiceInputDeviceId === 'string' ? s.voiceInputDeviceId : '',
     voiceAutoSleepSeconds:
       typeof s.voiceAutoSleepSeconds === 'number' && s.voiceAutoSleepSeconds >= 0

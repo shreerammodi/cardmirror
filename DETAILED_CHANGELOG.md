@@ -7,6 +7,22 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Custom dash autoformat** (`editor/custom-dash-plugin.ts` new,
+  `editor/settings.ts`, `editor/settings-ui.ts`, `editor/index.ts`,
+  `tests/editor/custom-dash.test.ts`). New `customDashPlugin()` (pushed in
+  `buildEditorPlugins` next to `smartQuotesPlugin`), gated on `customDashEnabled`
+  + `customDashStyle` (`'en' | 'en-spaced' | 'em' | 'em-spaced'`, default `'em'`;
+  spaced variants add a regular space each side). `handleTextInput` converts on
+  the THIRD hyphen — when the typed `-` completes `---` (two hyphens immediately
+  before within the textblock), it replaces all three with the configured output
+  in one `insertText` and stamps a `converted` meta. `handleKeyDown` Backspace
+  reverts that output back to the literal `---` within the one-transaction undo
+  window (the same plugin-state pattern as the smart-quotes revert). Settings UI:
+  a custom `customDash` kind rendering a checkbox + an output dropdown (disabled
+  until checked) in the Editing category. Converting on the third hyphen rather
+  than deferring to the next character is why only `---` is offered — a `--` rule
+  would have to fire on the second hyphen and could never coexist with `---`.
+
 - **Configurable preset filename prefixes + overwrite guard in fixed-folder
   mode** (`editor/settings.ts`, `editor/save-as-ui.ts`, `editor/index.ts`,
   `apps/desktop/src/main.ts`, `tests/editor/settings-backup.test.ts`). New string

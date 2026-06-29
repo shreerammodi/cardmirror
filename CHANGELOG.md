@@ -9,6 +9,11 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Custom dash autoformat.** Settings → Editing → "Custom dash" turns a typed
+  `---` into an en or em dash (with or without surrounding spaces) the moment you
+  type the third hyphen. Press Backspace right after to revert to the literal
+  `---`. Off by default.
+
 - **Custom filename prefixes for preset saves.** Settings → General now lets you
   change the **Send Doc / Read Doc / Marked Doc** filename prefixes (defaults
   `SEND_` / `READ_` / `MARKED_`; leave one empty for no prefix). They apply to

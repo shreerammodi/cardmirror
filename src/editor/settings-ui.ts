@@ -717,6 +717,10 @@ class SettingsModal {
       row.appendChild(text);
       row.appendChild(buildDefaultZoomEditor());
       return row;
+    } else if (meta.kind === 'customDash') {
+      row.appendChild(text);
+      row.appendChild(buildCustomDashEditor());
+      return row;
     } else if (meta.kind === 'voiceInputDevice') {
       row.appendChild(text);
       row.appendChild(buildVoiceInputDeviceEditor());
@@ -2350,6 +2354,46 @@ function buildVoiceInputDeviceEditor(): HTMLElement {
 }
 
 /** Generic editor for plain numeric settings (kind: 'number'). */
+/** The four dash outputs the custom-dash remapping can target. */
+const CUSTOM_DASH_OPTIONS: ReadonlyArray<[Settings['customDashStyle'], string]> = [
+  ['en', '– en dash'],
+  ['en-spaced', ' – en dash (spaced)'],
+  ['em', '— em dash'],
+  ['em-spaced', ' — em dash (spaced)'],
+];
+
+/** A checkbox enabling the `---` remapping + an output dropdown that's disabled
+ *  until the checkbox is on. */
+function buildCustomDashEditor(): HTMLElement {
+  const row = document.createElement('label');
+  row.className = 'pmd-multi-doc-layout-mode-row';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = settings.get('customDashEnabled');
+  const labelText = document.createElement('span');
+  labelText.className = 'pmd-multi-doc-layout-mode-row-label';
+  labelText.textContent = 'Replace --- with';
+  const select = document.createElement('select');
+  select.className = 'pmd-body-font-select';
+  for (const [value, text] of CUSTOM_DASH_OPTIONS) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = text;
+    opt.selected = value === settings.get('customDashStyle');
+    select.appendChild(opt);
+  }
+  select.disabled = !cb.checked;
+  cb.addEventListener('change', () => {
+    settings.set('customDashEnabled', cb.checked);
+    select.disabled = !cb.checked;
+  });
+  select.addEventListener('change', () => {
+    settings.set('customDashStyle', select.value as Settings['customDashStyle']);
+  });
+  row.append(cb, labelText, select);
+  return row;
+}
+
 /** Clamped 50–200% / step-10 number input for the default document zoom. */
 function buildDefaultZoomEditor(): HTMLElement {
   const input = document.createElement('input');
