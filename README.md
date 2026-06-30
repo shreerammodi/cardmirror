@@ -71,7 +71,7 @@ launch CardMirror like any other app.
 
 ### Linux
 
-Two options for any distro:
+Two options for installation, depending upon distribution:
 
 - **AppImage** (works on every modern distro): download
   `cardmirror-x.x.x.AppImage`. In a terminal, in the download
@@ -80,13 +80,13 @@ Two options for any distro:
   chmod +x cardmirror-x.x.x.AppImage
   ./cardmirror-x.x.x.AppImage
   ```
-  Or double-click after `chmod +x` if your file manager supports
-  launching AppImages.
+  For most graphical desktop environments with modern file managers, you should
+  be able to run the AppImage by double-clicking after the `chmod +x` command.
 
-- **Arch / Manjaro** — use the AUR:
+- **Arch and Arch-based distributions** — use the AUR:
   ```sh
   yay -S cardmirror-bin
-  # or with paru: paru -S cardmirror-bin
+  # yay can be replaced with other AUR managers such as paru
   ```
   Or grab `cardmirror-x.x.x.pacman` from the release directly and:
   ```sh
@@ -193,11 +193,14 @@ open one already pointing at the CardMirror folder.
 - **Windows** — open File Explorer in the folder, click the address
   bar, type `cmd`, press Enter.
 - **Linux** — right-click inside the folder and pick *Open Terminal
-  Here* (Nautilus / Dolphin / Thunar all offer it).
+  Here* (Nautilus / Dolphin / Thunar all offer it), or open in terminal and
+  `cd` to the filepath.
 
-Sanity check: type `ls` (macOS / Linux) or `dir` (Windows) and
-press Enter. You should see `package.json`, `README.md`, `src`,
-`apps`. If you don't, your terminal is one folder too high up.
+To make sure you're in the right directory, type `ls` (macOS / Linux) 
+or `dir` (Windows) and press Enter. You should see `package.json`, 
+`README.md`, `src`, `apps`. If you don't, your terminal is likely one 
+folder too high up — verify your current folder with the `pwd` command
+(macOS / Linux / Windows PowerShell) or by typing `echo %cd%` (Windows, non-PowerShell).
 
 ### 4. Install dependencies
 
