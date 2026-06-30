@@ -317,30 +317,31 @@ behaves — `respect` (the default; leaves headings separate, merges only
 body runs), `strict` (refuses to touch a selection that includes
 structure), or `demolish` (flattens everything touched).
 
-### Repair paragraph integrity
+**Paste and Destructively Condense** (desktop; unbound by default — assign a
+key in Settings → Keybindings) rolls two steps into one: it pastes the
+clipboard's plain text and immediately runs a destructive condense (Alt-F3)
+over just what you pasted, merging its paragraphs into a single block. It's the
+quick way to drop in a quote you want condensed on arrival. Desktop only, since
+the web edition can't read the clipboard on a keypress.
 
-When a card's body has collapsed into one run — a PDF that lost its breaks,
-or text pasted as a single block — **Repair Paragraph Integrity** rebuilds
-the paragraphs one break at a time. Put your cursor in the card (or select
-it) and run the command; a small bar opens and a green box outlines the card
-it's working on.
+### Smart quotes, dashes, and quote flipping
 
-Type a phrase that should *begin* a paragraph. As you type, every occurrence
-of it in the card's body is highlighted in green. Once you've typed enough
-that exactly **one** occurrence matches, the bar flashes green and shows a
-check — press **Enter** to drop a paragraph break right before that phrase.
-The box clears so you can type the next paragraph's opening phrase, and so on.
+CardMirror ships a few opt-in typing aids. The two autoformatters are off by
+default and reversible with a single **Backspace** right after they fire:
 
-Press **Ctrl-Enter** instead of Enter to break *and* mark that paragraph to be
-**indented** — it gets a green bar in the left margin. The indent isn't applied
-right away; it lands when you exit, on whatever that paragraph has become by
-then. So if you later split it again, only the final paragraph (up to the next
-break) is indented, not the rest of the card. Press **Esc** to apply any
-pending indents and leave the workflow.
+- **Smart quotes** (Settings → Editing → "Smart quotes") curl a straight `'` or
+  `"` to the right direction as you type — opening after a space, dash, bracket,
+  or the start of a line; closing (and the apostrophe) otherwise — so `don't`
+  and `(he said "hi")` come out right.
 
-It only searches the card's body (not the tag), so you can't accidentally
-break a heading. The command ships without a default shortcut — assign one in
-Settings → Keybindings.
+- **Custom dash** (Settings → Editing → "Custom dash") turns a typed `---` into
+  an en or em dash, with or without surrounding spaces (your choice), the moment
+  you type the third hyphen.
+
+- **Flip Quote Direction** (a command, unbound by default) flips every curly
+  quote in your selection to its opposite direction, keeping the formatting.
+  It's the manual fix for the cases smart quotes — like Word — guess wrong, such
+  as a leading apostrophe in `'tis` or `'90s` that should curl the other way.
 
 ### Shrink (Mod-8)
 
@@ -441,6 +442,16 @@ that actually carry a cite — bare analytics stay analytics), **Fix
 Formatting Gaps**, and **Remove Hyperlinks**. **Select Similar
 Formatting** selects everything that matches the cursor's styles.
 
+When you apply formatting to a word right next to an already-formatted word,
+CardMirror automatically bridges the small gap between them so the styling reads
+as continuous. Two Settings → Editing controls govern this: a toggle to turn the
+automatic bridging on or off (the manual **Fix Formatting Gaps** command above is
+unaffected), and a choice of which gaps it bridges — **whitespace and
+punctuation** (the default) or **whitespace only**. Bridging happens only in body
+text, never inside structural lines (tags, analytics, headings, undertags) — so a
+selection spanning both bridges its body paragraphs and leaves its structure
+alone.
+
 From the **Card** menu's Excerpt section, **Extract Undertag** takes your
 selection inside a card and drops it as a new undertag beneath the tag
 (below any existing undertags), leaving the original text in place — handy
@@ -450,6 +461,31 @@ the excerpt is quoted.
 
 Verbatim's other bulk cleanup macros (AutoNumberTags, ReformatAllCites,
 ConvertToDefaultStyles, and the rest) aren't in CardMirror.
+
+### Repair paragraph integrity
+
+When a card's body has collapsed into one run — a PDF that lost its breaks,
+or text pasted as a single block — **Repair Paragraph Integrity** rebuilds
+the paragraphs one break at a time. Put your cursor in the card (or select
+it) and run the command; a small bar opens and a green box outlines the card
+it's working on.
+
+Type a phrase that should *begin* a paragraph. As you type, every occurrence
+of it in the card's body is highlighted in green. Once you've typed enough
+that exactly **one** occurrence matches, the bar flashes green and shows a
+check — press **Enter** to drop a paragraph break right before that phrase.
+The box clears so you can type the next paragraph's opening phrase, and so on.
+
+Press **Ctrl-Enter** instead of Enter to break *and* mark that paragraph to be
+**indented** — it gets a green bar in the left margin. The indent isn't applied
+right away; it lands when you exit, on whatever that paragraph has become by
+then. So if you later split it again, only the final paragraph (up to the next
+break) is indented, not the rest of the card. Press **Esc** to apply any
+pending indents and leave the workflow.
+
+It only searches the card's body (not the tag), so you can't accidentally
+break a heading. The command ships without a default shortcut — assign one in
+Settings → Keybindings.
 
 ---
 
@@ -554,6 +590,17 @@ create an invalid structure don't light up, and bad drops are refused):
 
 In the [multi-doc workspace](#7-the-multi-doc-workspace), dragging across
 panes copies the content into the other document.
+
+### Moving cards and sections
+
+To reorder by keyboard, put your cursor in a card or section and press
+**Mod-Alt-↑** or **Mod-Alt-↓** — the **Move Container Up** / **Move Container
+Down** commands. CardMirror grabs the smallest outline item enclosing your
+cursor — a card or analytic unit, or a heading together with its whole section —
+and slides it one spot among its same-level neighbors in the navigation pane.
+Cards reorder among cards, blocks among blocks, and so on; nudging past the edge
+of a section carries the item into the adjacent one. Both commands are rebindable
+under Settings → Keybindings (listed with the Editing utilities).
 
 ### Spellcheck
 
@@ -742,6 +789,36 @@ send it. It's off by default because re-counting on every selection
 change can lag on very large files; with it off, use the **Σ** button to
 get a selection's read time on demand.
 
+### The speech and prep timer
+
+The ribbon's **timer** button shows or hides a compact timer panel for running
+speeches and prep in a round. Left to right it holds **Reset** (↻, which resets
+every clock), the big **time display**, **Start / Pause** (▶), three **speech
+preset** buttons, and the **Aff** and **Neg** prep clocks.
+
+- **Speech timer.** Click a preset to load that length — the presets come from
+  the active timer profile (College, High School, or Pomodoro) — then Start /
+  Pause to run it down. It can flash red near the end (Settings → Appearance →
+  "Flash timer when countdown is low").
+
+- **Prep clocks.** Click **Aff** or **Neg** to run that side's prep; each keeps
+  its own remaining balance and only counts down while it's the running clock, so
+  you can switch sides freely. When a prep clock is loaded, the big display takes
+  on that side's styling — the **Prep button label style** setting (text `A:` /
+  `N:`, color, or both) now also marks the display, so it's clear at a glance that
+  the time shown is prep, and whose.
+
+- **Edit a clock.** While a clock is **paused**, click the big display to type a
+  new time — handy if you started or stopped a beat late. For a prep clock the
+  edit is saved to that side's prep balance, so it sticks when you switch clocks
+  and back (until you Reset).
+
+- **Switching profiles.** The **Cycle Timer Preset** command (unbound by default
+  — assign a key under Settings → Keybindings) cycles the profile College → High
+  School → Pomodoro, applies that profile's durations, and pops the timer into
+  view. You can also set the profile, edit each profile's speech durations and
+  per-side prep total, and choose the compact layout under Settings → Appearance.
+
 ### Send-to-speech and the dropzone
 
 Assemble a speech document by sending cards into it:
@@ -767,6 +844,18 @@ When it's time to share a speech with the judge or opponent, use the
 [Saving and file formats](#14-saving-and-file-formats) — a clean copy
 with comments, analytics, and undertags stripped — either through Save As
 or in one keystroke with **Save Send Doc (Mod-Alt-S)**.
+
+### Saving marked cards
+
+To hand over only the cards you actually read, place a reading marker in each
+one and use **Save Marked Cards** — it pulls just those cards out and saves them
+on their own, in your default format. Two ways in: a **Marked Doc** button in the
+Save As dialog, and a **Save Marked Cards** command (default **Mod-Alt-M**,
+rebindable) that saves silently to a destination you choose under Settings →
+*Marked Cards destination* (the source file's folder, or a fixed folder), using
+the `MARKED_` filename prefix and your default format — mirroring Save Send Doc.
+It keeps cards only (analytics and headings are dropped); if nothing is marked,
+it does nothing and tells you so.
 
 ### Card sharing (Send and Receive pills)
 
@@ -1127,6 +1216,15 @@ dictation errors (it doesn't change command recognition).
 
 ## 14. Saving and file formats
 
+### Opening files
+
+Open a working file with **File → Open**, or from the Home screen's recents. On
+desktop you can also **drag a `.docx`, `.cmir`, or `.cmir-journal`** from your
+file manager onto any CardMirror window — the editor, the navigation pane, or the
+home screen — to open it, exactly like File → Open (including the unsaved-changes
+prompt, and focusing a copy that's already open). Other file types are ignored,
+and dragging cards around inside the editor is unaffected.
+
 ### Two formats
 
 - **`.cmir`** — CardMirror's native format. Lossless, and required for
@@ -1209,6 +1307,13 @@ copy:
 no dialog. Two Settings → General options control where it goes (the
 source file's folder, or a fixed folder you pick).
 
+The filename prefixes for the preset saves — **Send Doc**, **Read Doc**, and
+**Marked Doc** (defaults `SEND_`, `READ_`, `MARKED_`) — are configurable under
+Settings → General; change any of them, or leave one empty for no prefix. They
+apply to both the Save As preset buttons and the one-keystroke Save Send Doc /
+[Save Marked Cards](#saving-marked-cards) commands, gated on the existing
+"Prefix preset saves" toggle.
+
 ### Crash recovery
 
 **(Desktop only.)** CardMirror journals your work as you go, so if it's
@@ -1274,13 +1379,22 @@ Workflow and document behavior.
 - **Default file format for new documents** — the format the Save As
   dialog defaults to for a doc you haven't saved yet. Existing files
   always re-save in their own format.
-- **Prefix preset saves with SEND_ / READ_** — when on, the Save As Send
-  Doc / Read Doc presets prepend `SEND_` / `READ_` to the filename.
+- **Prefix preset saves** — when on, the Save As Send Doc / Read Doc /
+  Marked Doc presets and the silent Save Send Doc / Save Marked Cards commands
+  prepend a filename prefix.
+- **Send Doc / Read Doc / Marked Doc filename prefix** — the prefix each
+  preset uses (defaults `SEND_` / `READ_` / `MARKED_`); change any, or leave one
+  empty for no prefix.
 - **Send Doc destination** *(desktop)* — whether Save Send Doc writes
   beside the source file or into a fixed folder
   (see [Saving a send doc](#saving-a-send-doc)).
 - **Send Doc folder** *(desktop)* — the fixed folder used when the
   destination above is "Fixed folder."
+- **Marked Cards destination** *(desktop)* — whether Save Marked Cards writes
+  beside the source file or into a fixed folder (see
+  [Saving marked cards](#saving-marked-cards)).
+- **Marked Cards folder** *(desktop)* — the fixed folder used when the Marked
+  Cards destination is "Fixed folder."
 - **Seed new speech docs with a Pocket heading** — when on, New Speech
   Document opens with a Pocket carrying the speech's name; off starts
   blank.
@@ -1364,9 +1478,16 @@ Behavior of the cutting and condense commands
   Undertag pulls in double quotes.
 - **Condense after Paste Text (F2)** — run your default condense
   automatically on pasted text.
+- **Smart quotes** — curl a straight `'` / `"` to the right direction as you
+  type; Backspace right after reverts. Off by default.
+- **Custom dash** — turn a typed `---` into an en or em dash (spaced or
+  unspaced) on the third hyphen; Backspace right after reverts. Off by default.
 - **Skip mid-text confirm when inserting quick cards** — insert a quick
   card immediately even mid-sentence, skipping the confirm step (see
   [Quick Cards](#6-quick-cards)).
+- **Show quick card buttons** — show the Quick Cards ribbon cluster (off by
+  default; quick cards still work while hidden, and the command bar still opens
+  by shortcut).
 - **Condense: heading handling** — how selection condense treats
   headings, cites, and undertags: Strict (block it), Respect (keep them
   separate, default), or Demolish (merge everything).
@@ -1378,6 +1499,12 @@ Behavior of the cutting and condense commands
   should leave at Normal size.
 - **F9 toggle-off also clears direct formatting** — toggling underline
   off also strips direct formatting in the range.
+- **Bridge formatting across gaps automatically** — when you format a word
+  next to an already-formatted one, close the small gap so the styling reads as
+  continuous (the manual Fix Formatting Gaps command is unaffected). Body text
+  only.
+- **Bridge formatting across** — which gaps the automatic bridging closes:
+  whitespace and punctuation (default), or whitespace only.
 - **Create Reference uses Gray-50% text** — render a Reference's body
   text in gray; the heading line stays black.
 - **Translation** — backend (MyMemory / Anthropic / Google Cloud
@@ -1416,6 +1543,15 @@ remove one, **↺** to restore its default. A few window-level shortcuts
   on, or always off.
 - **Steady text cursor (no blinking)** — stop the text cursor blinking and
   show a steady caret instead. Off by default.
+- **Default document zoom** — the body-text zoom level documents open at, and
+  reset to on reload (zoom is per-editor and no longer persists). 50–200%,
+  100% by default.
+- **Screen reader support** *(desktop)* — let screen readers and other
+  assistive technology read CardMirror. **Off by default**: a current Chromium
+  bug crashes the window (white screen, lost work) while building the
+  accessibility tree, so CardMirror disables it to stay stable. Turn it on only
+  if you rely on a screen reader — it re-activates the known crash — and restart
+  CardMirror to apply.
 - **Override highlight color in display** — render highlights in your
   chosen colors regardless of what's stored on the mark (display-only).
 - **Highlight override colors** — up to three ordered colors; the
@@ -1450,12 +1586,17 @@ everyone, apply direct formatting in the document itself).
   also forces readable contrast on highlighted and shaded text
   automatically. A **Steady text cursor (no blinking)** option (off by
   default) replaces the blinking caret with a steady one.
-- **Zoom.** **Mod-=** / **Mod--** zoom the document; the status bar shows
-  the level (click to reset). You can also pinch on a trackpad or hold
-  Ctrl and scroll, once you turn that on under Settings → General →
-  **Pinch / Ctrl+Scroll to zoom** (off by default). **(Desktop only:)**
-  **Mod-Alt-=** / **Mod-Alt--** scale the whole interface, not just the
-  document.
+- **Zoom.** **Mod-=** / **Mod--** zoom the document text; the status bar
+  shows the level (click to reset). Zoom is **per editor** — it applies only
+  to the document you're in, so you can zoom one document in while another
+  stays out, independently per pane in the three-pane workspace. It doesn't
+  sync across windows or persist; instead documents open at a default you can
+  set (Settings → Accessibility → **Default document zoom**, 100% by default)
+  and reset to it on reload. You can also pinch on a trackpad or hold Ctrl and
+  scroll, once you turn that on under Settings → General → **Pinch /
+  Ctrl+Scroll to zoom** (off by default). **(Desktop only:)** **Mod-Alt-=** /
+  **Mod-Alt--** scale the whole interface uniformly across windows, not just
+  the document.
 
 ---
 
@@ -1485,6 +1626,7 @@ All defaults; rebind any of them in **Settings → Keyboard shortcuts**.
 | Mod-Alt-8 | Smart Shrink |
 | Alt-F8 | Copy previous cite |
 | Tab / Shift-Tab | Indent / Outdent |
+| Mod-Alt-Up / Mod-Alt-Down | Move container (card / section) up / down |
 
 ### Moving and selecting
 On macOS, use **Alt/Option** in place of **Ctrl**. Add **Shift** to any of
@@ -1523,6 +1665,7 @@ these to extend the selection.
 |----------|--------|
 | Mod-S / Mod-Shift-S | Save / Save As |
 | Mod-Alt-S | Save Send Doc |
+| Mod-Alt-M | Save Marked Cards |
 | Mod-= / Mod-- | Zoom in / out |
 | Mod-Alt-= / Mod-Alt-- / Mod-Alt-0 | Interface scale up / down / reset (desktop) |
 
