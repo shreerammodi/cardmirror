@@ -370,6 +370,14 @@ export interface Settings {
    *  native blinking caret is hidden and a steady custom caret is drawn
    *  in its place. */
   disableCursorBlink: boolean;
+  /** Desktop only. When true, Chromium builds the renderer accessibility tree
+   *  so screen readers / assistive tech work — at the cost of re-exposing a
+   *  known Chromium crash (blink::AXBlockFlowData::ComputeNeighborOnLine). OFF
+   *  by default, which appends `--disable-renderer-accessibility` at startup.
+   *  The authoritative value lives in a main-process pref file (read before the
+   *  renderer exists); this mirror exists only so the settings UI can show it.
+   *  Changing it requires an app restart. */
+  accessibilityTreeEnabled: boolean;
   /** Windows/Verbatim Flow: when true, the persistent PowerShell host
    *  that talks to Excel is started at app launch, so the first Send to
    *  Flow is fast instead of paying the cold start. */
@@ -1069,6 +1077,7 @@ const DEFAULTS: Settings = {
   commentsColumnWidth: 320,
   reduceMotion: 'auto',
   disableCursorBlink: false,
+  accessibilityTreeEnabled: false,
   flowHostOnLaunch: false,
   overrideHighlightColor: false,
   overrideHighlightSlots: ['#ffff00'],
@@ -1251,6 +1260,7 @@ export interface SettingMeta {
     | 'number'
     | 'defaultZoomPct'
     | 'customDash'
+    | 'accessibilityRenderer'
     | 'level'
     | 'readers'
     | 'displaySizes'
@@ -1811,6 +1821,16 @@ export const SETTING_METADATA: SettingMeta[] = [
     kind: 'toggle',
     category: 'accessibility',
     aliases: ['caret', 'cursor blink', 'blinking cursor', 'non-blinking'],
+  },
+  {
+    key: 'accessibilityTreeEnabled',
+    label: 'Screen reader support',
+    description:
+      'Let screen readers and other assistive technology read CardMirror. OFF by default: a current Chromium bug crashes the whole window (white screen, lost work) while building the accessibility tree, so we disable it to keep CardMirror stable. Turn this on only if you rely on a screen reader — it re-activates the known crash. Takes effect after restarting CardMirror.',
+    kind: 'accessibilityRenderer',
+    category: 'accessibility',
+    electronOnly: true,
+    aliases: ['screen reader', 'accessibility', 'a11y', 'narrator', 'nvda', 'jaws', 'voice access'],
   },
   {
     key: 'overrideHighlightColor',
@@ -2475,6 +2495,7 @@ function sanitize(s: Settings): Settings {
     reduceMotion:
       s.reduceMotion === 'on' || s.reduceMotion === 'off' ? s.reduceMotion : 'auto',
     disableCursorBlink: s.disableCursorBlink === true,
+    accessibilityTreeEnabled: s.accessibilityTreeEnabled === true,
     flowHostOnLaunch: s.flowHostOnLaunch === true,
     overrideHighlightColor: !!s.overrideHighlightColor,
     overrideHighlightSlots: sanitizeColorSlots(

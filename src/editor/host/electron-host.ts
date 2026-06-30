@@ -311,6 +311,17 @@ interface ElectronAPI {
   /** Open the OS file manager at the crash-dumps folder (mirrors
    *  Help → Open Crash Dumps Folder). */
   openCrashDumpsFolder(): Promise<void>;
+  /** Renderer accessibility tree toggle. Default off — works around a known
+   *  Chromium AX-serialization crash. Machine-local pref; changing it needs an
+   *  app restart (`relaunchApp`). `isAccessibilitySupportActive` reports whether
+   *  an assistive-tech / UI-Automation client is currently connected. */
+  getAccessibilityTreeEnabled(): Promise<boolean>;
+  setAccessibilityTreeEnabled(enabled: boolean): Promise<void>;
+  /** The state actually applied this session (may differ from the saved pref
+   *  until a restart). */
+  getAccessibilityTreeApplied(): Promise<boolean>;
+  isAccessibilitySupportActive(): Promise<boolean>;
+  relaunchApp(): Promise<void>;
   /** Chromium page-zoom factor for this window (1.0 = 100%).
    *  Synchronous renderer-side call into Electron's `webFrame`. */
   setZoomFactor(factor: number): void;
@@ -845,6 +856,26 @@ export class ElectronHost implements Host {
 
   async openCrashDumpsFolder(): Promise<void> {
     await api().openCrashDumpsFolder();
+  }
+
+  async getAccessibilityTreeEnabled(): Promise<boolean> {
+    return api().getAccessibilityTreeEnabled();
+  }
+
+  async setAccessibilityTreeEnabled(enabled: boolean): Promise<void> {
+    await api().setAccessibilityTreeEnabled(enabled);
+  }
+
+  async getAccessibilityTreeApplied(): Promise<boolean> {
+    return api().getAccessibilityTreeApplied();
+  }
+
+  async isAccessibilitySupportActive(): Promise<boolean> {
+    return api().isAccessibilitySupportActive();
+  }
+
+  async relaunchApp(): Promise<void> {
+    await api().relaunchApp();
   }
 
   /** Page-zoom factor for this window. Same mechanism as the

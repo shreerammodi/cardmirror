@@ -30,6 +30,10 @@ import { autoUpdater } from 'electron-updater';
 import { registerVoiceIpc } from './voice/ipc';
 import { registerFlowIpc } from './flow-bridge.js';
 import { registerPairingIpc } from './pairing-ipc.js';
+import {
+  readAccessibilityTreeEnabled,
+  writeAccessibilityTreeEnabled,
+} from './accessibility-pref.js';
 import { promises as fs, realpathSync } from 'node:fs';
 import * as path from 'node:path';
 import { gzipSync, gunzipSync } from 'node:zlib';
@@ -159,6 +163,29 @@ crashReporter.start({
   submitURL: '',
   uploadToServer: false,
 });
+
+// Default the renderer accessibility tree OFF. Electron 42 / Chromium 148 has a
+// deterministic crash in Blink's accessibility serialization
+// (blink::AXBlockFlowData::ComputeNeighborOnLine — a CHECK in the new
+// AXBlockFlowIterator line-navigation code) that fires whenever an assistive-tech
+// / UI-Automation client (screen reader, Windows Voice Access, Live Captions, …)
+// turns the accessibility tree on. Symbolicated from real crash dumps; not fixed
+// on current Chromium trunk. `--disable-renderer-accessibility` stops Chromium
+// building/serializing the tree, which removes the crash path entirely.
+//
+// Users who genuinely need a screen reader can opt back in via Settings (machine-
+// local pref read here; the toggle prompts a restart since Chromium reads switches
+// at startup). Fail-safe: any read failure leaves the switch ON (tree disabled).
+// MUST run before `app.whenReady()`.
+let rendererAccessibilityEnabled = false;
+try {
+  rendererAccessibilityEnabled = readAccessibilityTreeEnabled(app.getPath('userData'));
+} catch {
+  rendererAccessibilityEnabled = false;
+}
+if (!rendererAccessibilityEnabled) {
+  app.commandLine.appendSwitch('disable-renderer-accessibility');
+}
 
 interface FileFilter {
   name: string;
@@ -493,6 +520,33 @@ ipcMain.handle('host:trigger-auto-update-check', async () => {
  *  the Help → Open Crash Dumps Folder menu item. */
 ipcMain.handle('host:open-crash-dumps', async () => {
   await shell.openPath(app.getPath('crashDumps'));
+});
+
+// Renderer accessibility tree toggle (see the `--disable-renderer-accessibility`
+// block above). The pref is machine-local and read at startup; these let the
+// settings UI show + change it. Changing it needs a restart to take effect.
+ipcMain.handle('host:get-accessibility-tree-enabled', () =>
+  readAccessibilityTreeEnabled(app.getPath('userData')),
+);
+ipcMain.handle('host:set-accessibility-tree-enabled', (_event, enabled: unknown) => {
+  writeAccessibilityTreeEnabled(app.getPath('userData'), enabled === true);
+});
+// The state ACTUALLY APPLIED this session (the value read at startup, which
+// decides whether `--disable-renderer-accessibility` was appended). May differ
+// from the saved pref until the next restart — the settings UI uses this to show
+// "currently on/off" and whether a restart is pending.
+ipcMain.handle('host:get-accessibility-tree-applied', () => rendererAccessibilityEnabled);
+// Whether Chromium currently reports an assistive-tech / UI-Automation client as
+// active. True here means this machine would hit the AX crash if the tree were
+// enabled — surfaced in Settings so the user understands why it's off.
+ipcMain.handle('host:is-accessibility-support-active', () =>
+  app.isAccessibilitySupportEnabled(),
+);
+// Full app relaunch — used by the accessibility toggle so the Chromium switch
+// (read only at process start) actually takes effect.
+ipcMain.handle('host:relaunch-app', () => {
+  app.relaunch();
+  app.exit(0);
 });
 
 /** Open a URL in the user's default OS browser. Used by the
@@ -2347,7 +2401,18 @@ void app.whenReady().then(() => {
     electron: process.versions.electron,
     chrome: process.versions.chrome,
     occlusionSwitchDisabled: false,
+    // Accessibility crash workaround telemetry (local log only): whether we
+    // disabled the renderer AX tree this launch, and whether Chromium reports an
+    // assistive-tech / UIA client active (i.e. this machine would hit the AX
+    // crash if the tree were enabled). Lets a pasted log confirm the trigger.
+    rendererAccessibilityTreeDisabled: !rendererAccessibilityEnabled,
+    accessibilitySupportActive: app.isAccessibilitySupportEnabled(),
     logPath: path.join(app.getPath('userData'), 'cross-window-debug.log'),
+  });
+  // Log if an assistive-tech client connects mid-session — another confirmation
+  // signal for the AX crash trigger.
+  app.on('accessibility-support-changed', (_event, enabled) => {
+    xlog('accessibility-support-changed', { enabled });
   });
   // macOS only — see the note at the other setApplicationMenu call. Windows/Linux
   // get no native menu bar so it can't swallow Alt-key editor shortcuts.

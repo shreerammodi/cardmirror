@@ -781,6 +781,10 @@ class SettingsModal {
       row.appendChild(text);
       row.appendChild(buildReduceMotionEditor());
       return row;
+    } else if (meta.kind === 'accessibilityRenderer') {
+      row.appendChild(text);
+      row.appendChild(buildAccessibilityRendererEditor());
+      return row;
     } else if (meta.kind === 'timerProfile') {
       row.appendChild(text);
       row.appendChild(buildTimerProfileEditor());
@@ -2883,6 +2887,113 @@ function buildIconSetEditor(): HTMLElement {
       btn.setAttribute('aria-pressed', btn.dataset['value'] === cur ? 'true' : 'false');
     }
   }
+  refresh();
+  const unsub = settings.subscribe(refresh);
+  onDetached(wrap, () => unsub());
+  return wrap;
+}
+
+/** Desktop-only toggle for Chromium's renderer accessibility tree (screen-reader
+ *  support). Default off because building that tree currently crashes the window
+ *  (a Chromium AX bug). The authoritative value is a main-process pref read at
+ *  startup; this reads/writes it via the electron host and prompts a restart,
+ *  since the `--disable-renderer-accessibility` switch only applies at process
+ *  start. The synced `accessibilityTreeEnabled` setting is a display mirror, kept
+ *  reconciled to the pref here. */
+function buildAccessibilityRendererEditor(): HTMLElement {
+  const wrap = document.createElement('div');
+
+  // Off / On segmented control, visually consistent with the other multi-option
+  // settings (theme, icon set, reduce motion).
+  const seg = document.createElement('div');
+  seg.className = 'pmd-theme-editor';
+  const options: { value: boolean; label: string }[] = [
+    { value: false, label: 'Off' },
+    { value: true, label: 'On' },
+  ];
+  const electron = getElectronHost();
+
+  function applyChange(enabled: boolean): void {
+    if (enabled === !!settings.get('accessibilityTreeEnabled')) return; // no change
+    settings.set('accessibilityTreeEnabled', enabled as never);
+    if (!electron) return;
+    void electron.setAccessibilityTreeEnabled(enabled).then(() => {
+      // The Chromium switch only applies at process start, so this needs a full
+      // app restart. Offer to do it now; otherwise it applies next launch.
+      const restartNow = window.confirm(
+        `Screen reader support will turn ${enabled ? 'on' : 'off'} after CardMirror restarts.\n\nRestart now?`,
+      );
+      if (restartNow) {
+        void electron.relaunchApp();
+      } else {
+        showToast(
+          `Restart CardMirror to ${enabled ? 'enable' : 'disable'} screen reader support.`,
+        );
+      }
+    });
+  }
+
+  for (const o of options) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pmd-theme-editor-btn';
+    btn.textContent = o.label;
+    btn.dataset['value'] = String(o.value);
+    btn.addEventListener('click', () => applyChange(o.value));
+    seg.appendChild(btn);
+  }
+  wrap.appendChild(seg);
+
+  // Restart-pending notice: shown only when the selection differs from what's
+  // actually applied this session (compares the saved choice to the value
+  // main read at startup), so the user knows a restart is still needed.
+  const status = document.createElement('div');
+  status.className = 'pmd-settings-row-desc';
+  wrap.appendChild(status);
+  let appliedState: boolean | null = null;
+
+  // Dynamic hint: whether an assistive-tech client is currently active on this
+  // device (i.e. enabling support would re-activate the known crash).
+  const hint = document.createElement('div');
+  hint.className = 'pmd-settings-row-desc';
+  wrap.appendChild(hint);
+
+  function refresh(): void {
+    const cur = !!settings.get('accessibilityTreeEnabled');
+    for (const btn of seg.querySelectorAll<HTMLButtonElement>('.pmd-theme-editor-btn')) {
+      btn.setAttribute('aria-pressed', btn.dataset['value'] === String(cur) ? 'true' : 'false');
+    }
+    // Only surface a status when a restart is pending (the selection differs
+    // from what's applied this session); stay quiet when they already match.
+    status.textContent =
+      appliedState !== null && appliedState !== cur
+        ? cur
+          ? 'Restart CardMirror to turn screen reader support on.'
+          : 'Restart CardMirror to turn screen reader support off.'
+        : '';
+  }
+
+  if (electron) {
+    // Reconcile the displayed value with the authoritative main-process pref.
+    void electron.getAccessibilityTreeEnabled().then((enabled) => {
+      if (!!settings.get('accessibilityTreeEnabled') !== enabled) {
+        settings.set('accessibilityTreeEnabled', enabled as never);
+      }
+      refresh();
+    });
+    // The state actually applied this session (drives the "Currently on/off" +
+    // "restart to apply" status above).
+    void electron.getAccessibilityTreeApplied().then((a) => {
+      appliedState = a;
+      refresh();
+    });
+    void electron.isAccessibilitySupportActive().then((active) => {
+      hint.textContent = active
+        ? 'An accessibility tool is active on this device — turning support on would re-activate the known crash.'
+        : '';
+    });
+  }
+
   refresh();
   const unsub = settings.subscribe(refresh);
   onDetached(wrap, () => unsub());

@@ -71,6 +71,19 @@ describe('settings import (replaceAll)', () => {
     expect(s.get('keyboardMacros')).toEqual([]);
   });
 
+  it('accessibilityTreeEnabled: defaults off and only an explicit boolean true sticks', () => {
+    // Mirrors the main-process pref's fail-safe: anything but `true` reads as off,
+    // so a restored/garbled backup can never silently re-enable the AX crash path.
+    const def = new SettingsStore();
+    expect(def.get('accessibilityTreeEnabled')).toBe(false); // default
+    const garbage = new SettingsStore();
+    garbage.replaceAll({ accessibilityTreeEnabled: 'yes' } as never);
+    expect(garbage.get('accessibilityTreeEnabled')).toBe(false);
+    const on = new SettingsStore();
+    on.replaceAll({ accessibilityTreeEnabled: true } as never);
+    expect(on.get('accessibilityTreeEnabled')).toBe(true);
+  });
+
   it('fileSearchFormats: defaults to both, accepts cmir/docx, rejects garbage', () => {
     const s = new SettingsStore();
     expect(s.get('fileSearchFormats')).toBe('both'); // default

@@ -5,6 +5,44 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
+## Unreleased
+
+- **Renderer accessibility tree disabled by default to work around a Chromium
+  accessibility crash** (`apps/desktop/src/main.ts`,
+  `apps/desktop/src/accessibility-pref.ts`, `apps/desktop/src/preload.ts`,
+  `editor/host/electron-host.ts`, `editor/settings.ts`, `editor/settings-ui.ts`,
+  `tests/desktop/accessibility-pref.test.ts`,
+  `tests/editor/settings-backup.test.ts`). Crash dumps from two independent
+  Windows users (seven dumps total) symbolicated to a byte-identical, deterministic
+  `CHECK` failure in Blink's accessibility serialization —
+  `blink::AXBlockFlowData::ComputeNeighborOnLine`, reached via `RunAccessibilitySteps
+  → AXObjectCacheImpl::SerializeUpdatesAndEvents → ui::AXTreeSerializer →
+  AXObject::SerializeInlineTextBox → SerializeLineAttributes →
+  AXInlineTextBox::NeighboringOnLineWithAXBlockFlowIterator`. The path runs only when
+  an assistive-tech / UI-Automation client (screen reader, Windows Voice Access, …)
+  turns on the `kInlineTextBoxes` AX mode, and it trips over the dense, overlapping
+  highlight/underline run structure of debate cards (the triggering 1AC had 311
+  paragraphs but 2,582 runs / 825 highlights / 1,478 underlines). The bug is in
+  the new `AXBlockFlowIterator` line-navigation code and is unfixed on current
+  Chromium trunk (Electron 42.2.0 = Chromium 148; the one related fix,
+  crbug `461193182`, is already included and covers a different case). CardMirror
+  isn't on an old Chromium, so an Electron bump won't help.
+
+  `main` now appends `--disable-renderer-accessibility` at startup unless a
+  machine-local pref opts back in (`{userData}/accessibility-pref.json`,
+  `apps/desktop/src/accessibility-pref.ts`; fail-safe — anything but an explicit
+  `true` reads as disabled, so a missing/corrupt/restored-backup file can never
+  silently re-expose the crash). The switch is read before `app.whenReady()`
+  (Chromium reads switches at process start). New **Settings → Accessibility →
+  "Screen reader support"** is an Off/On segmented control (matching the reduce-motion
+  / theme controls) that writes the pref via IPC and offers an immediate relaunch;
+  it shows a "restart pending" notice only when the selection differs from the state
+  actually applied this session (`host:get-accessibility-tree-applied` exposes the
+  startup value). The boot log records `rendererAccessibilityTreeDisabled` and
+  `accessibilitySupportActive` so a pasted log confirms whether the trigger is
+  present on a given machine. Default-off is the fix; opting in re-activates the
+  known crash and the setting says so.
+
 ## 0.1.0-beta.3 — 2026-06-29
 
 - **Nav-pane caret-tracking no longer flickers to the next heading while typing**

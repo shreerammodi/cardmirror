@@ -95,6 +95,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   /** Open the OS file manager at the crash-dumps folder. */
   openCrashDumpsFolder: () => ipcRenderer.invoke('host:open-crash-dumps'),
 
+  /** Renderer accessibility tree toggle (default off — works around a known
+   *  Chromium AX crash). Reads/writes a machine-local pref; changing it needs an
+   *  app restart. `isAccessibilitySupportActive` reports whether an assistive-tech
+   *  client is currently connected. */
+  getAccessibilityTreeEnabled: () =>
+    ipcRenderer.invoke('host:get-accessibility-tree-enabled') as Promise<boolean>,
+  setAccessibilityTreeEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('host:set-accessibility-tree-enabled', enabled) as Promise<void>,
+  getAccessibilityTreeApplied: () =>
+    ipcRenderer.invoke('host:get-accessibility-tree-applied') as Promise<boolean>,
+  isAccessibilitySupportActive: () =>
+    ipcRenderer.invoke('host:is-accessibility-support-active') as Promise<boolean>,
+  relaunchApp: () => ipcRenderer.invoke('host:relaunch-app') as Promise<void>,
+
   /** Open a URL in the user's default OS browser (via shell.openExternal).
    *  Main filters to http(s) + mailto so file:// URLs can't escape. */
   openExternal: (url: string) => ipcRenderer.invoke('host:open-external', url),

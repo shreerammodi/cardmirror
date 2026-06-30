@@ -48,8 +48,4 @@ export function installCardCutterGate(): void {
     reflect();
     showToast(now ? 'Card cutter enabled' : 'Card cutter disabled');
   });
-
-  // First-time discoverability for the curious: a one-line console
-  // hint, printed once per session.
-  console.log("%c[cardmirror] experimental: __cardcutter('on') to enable the AI card cutter.", 'color:#888');
 }

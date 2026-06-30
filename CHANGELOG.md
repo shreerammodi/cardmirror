@@ -5,6 +5,27 @@ changes in each release, written for users of the editor. For
 in-depth rationale and implementation context behind each entry,
 see `DETAILED_CHANGELOG.md`.
 
+## Unreleased
+
+### Added
+
+- **Screen reader support setting.** Settings → Accessibility → "Screen reader
+  support" turns the browser accessibility tree on or off. It's **off by default**
+  to avoid a crash (see Fixed below); switch it on if you use a screen reader or
+  other assistive technology. The change takes effect after you restart CardMirror,
+  and the setting tells you when a restart is still pending.
+
+### Fixed
+
+- **White screen and lost work when an accessibility tool was running.** On some
+  machines with a screen reader, Windows Voice Access, or similar assistive
+  technology active, CardMirror could crash — the editor turned solid white and
+  unsaved work was lost. The cause is a bug in the underlying browser engine
+  (Chromium) while it builds accessibility data for heavily-highlighted cards.
+  CardMirror now keeps that accessibility data off by default, which avoids the
+  crash; re-enable it under Settings → Accessibility if you rely on a screen
+  reader.
+
 ## 0.1.0-beta.3 — 2026-06-29
 
 ### Added
