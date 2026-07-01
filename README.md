@@ -93,6 +93,27 @@ Two options for installation, depending upon distribution:
   sudo pacman -U cardmirror-x.x.x.pacman
   ```
 
+### Web app (Chromebook & browser)
+
+No download needed — open the
+[live web app](https://ant981228.github.io/cardmirror/) in a Chromium browser
+(Chrome, Edge, or ChromeOS) and click the **Install** button in the address bar
+to run CardMirror in its own window, offline, updating itself on relaunch. On a
+Chromebook this is the way to run it — no desktop build required.
+
+Installed, the web app does most of what the desktop editions do: **save in
+place** and autosave (it asks once for permission to edit each file),
+one-keystroke **Paste Text**, **multiple windows** (New Document / New Speech
+Document open their own window) with the dropzone, Quick Cards, and send-to-speech
+kept in sync across them, the **three-pane workspace**, and single-file **Clean /
+Convert / Compress** tools on the home screen.
+
+Still desktop-only: background file-library search, folder-wide bulk operations,
+Send to Verbatim Flow, voice control, and card sharing. Firefox and Safari run the
+editor but lack the File System Access API, so there Save falls back to a
+download. See **[Desktop vs. web](./MANUAL.md#desktop-vs-web)** in the manual for
+the full breakdown.
+
 ### Updates
 
 **Help → Check for Updates…** checks manually: it tells you you're

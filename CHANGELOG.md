@@ -9,36 +9,38 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
-- **Install CardMirror as an app (web edition).** The web version is now an
-  installable PWA — on Chrome / ChromeOS, use the browser's Install button to run
-  it in its own window, offline. The desktop editions are unchanged.
+- **The web edition is now an installable app (PWA).** On Chrome, Edge, and
+  ChromeOS you can install CardMirror straight from the browser (the address-bar
+  **Install** button) and run it in its own window — and much of what used to be
+  desktop-only now works there too.
 
-- **Save in place on the web.** On Chromium browsers (Chrome / Edge / ChromeOS),
-  opening a file and pressing Save now writes back to the *same* file instead of a
-  Save-As every time, and the autosave toggle works there too (via the File System
-  Access API). Your browser asks once to allow editing the file the first time you
-  save it. Firefox / Safari keep the download / Save-As behavior.
+  **What the installed web app can do:**
 
-- **Paste Text (F2) reads the clipboard directly on the web.** On Chromium, F2 —
-  or the ribbon's **Paste Text** button — now pastes the clipboard as plain text in
-  one keystroke (the browser asks once for clipboard access, then remembers it). If
-  access is denied it falls back to the previous "next Ctrl/Cmd+V pastes as text"
-  behavior, and the button lights up with a cue.
+  - **Install and run offline** in its own window, and **update itself** — it
+    picks up the latest version when you relaunch.
+  - **Save in place.** Open a file, press Save, and it writes back to the *same*
+    file (autosave works too) instead of a Save-As every time — via the browser's
+    File System Access API. It asks once for permission to edit the file, and it
+    won't let you open the same file in two windows at once.
+  - **One-keystroke plain paste.** **Paste Text (F2)** and **Paste and
+    Destructively Condense** read the clipboard directly (the browser asks once).
+  - **Multiple windows.** In the installed app, **New Document** and **New Speech
+    Document** open a separate window, and **Send to Speech** can reach a speech
+    document open in another window. The dropzone, your Quick Cards, and the
+    speech-doc designation all stay in sync across windows and tabs. The
+    **Three-pane workspace** works as well — including switching between one
+    window per document and three-pane — with a single three-pane window at a
+    time.
+  - **File tools on the home screen** — **Clean**, **Convert** (`.docx` ↔
+    `.cmir`), and **Compress** — one file at a time.
+  - **⌘/Ctrl-R no longer reloads** the app by accident.
 
-- **Multi-tab sharing on the web.** With CardMirror open in more than one browser
-  tab, the **dropzone shelf** and your **Quick Cards** library now sync across
-  them, and **Send to Speech** can deliver a card to the speech document open in
-  another tab (mark a doc as the speech doc in one tab, send to it from another).
-  The dropzone stays a scratch shelf — it clears once you fully close the app —
-  while Quick Cards persist. (Quick Cards also moved to roomier browser storage,
-  so a large library no longer risks hitting the old size limit.)
-
-- **Multiple windows in the installed web app.** When CardMirror is installed as an
-  app (PWA), **New Document** and **New Speech Document** now open in a separate
-  window instead of replacing what's in the current one — so you can keep several
-  documents open at once and send a card to a speech document in another window, the
-  way the desktop editions work. (In an ordinary browser tab, use the Three-pane
-  workspace for multiple documents.)
+  **What still needs a desktop edition:** the background **file-library search**,
+  **folder-wide** clean / convert / compress, **Send to Verbatim Flow**, **voice
+  control**, **card sharing**, and the native menu bar. The dropzone remains a
+  scratch shelf that empties when you fully close the app (Quick Cards persist).
+  Firefox and Safari don't support the File System Access API, so there Save
+  falls back to a download and the file tools download their output.
 
 ## 0.1.0-beta.4 — 2026-06-29
 

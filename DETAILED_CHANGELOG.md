@@ -101,6 +101,74 @@ in each release, see `CHANGELOG.md`.
   a file opened into a spawned window loses its `FileSystemFileHandle` (Save-As only),
   since the handle isn't yet threaded through the spawn payload.
 
+- **Web edition: cross-window coordination + multi-pane mode-switch**
+  (`src/editor/window-coordination.ts` (new), `index.ts`, `multi-pane-shell.ts`,
+  `settings-ui.ts`). A single persistent BroadcastChannel per window
+  (`installWindowCoordination`) is the browser counterpart to Electron's main
+  process: it tracks live peers (hello / here / bye) and answers coordination
+  requests, with every handler ignoring its own `WINDOW_ID` (a channel delivers to
+  same-window instances too). The multi-pane mode switch now manages the other
+  windows the way desktop does through main. One-window-per-doc → three-pane: the
+  initiating window broadcasts please-close and collects each peer's `{uid,dirty}`
+  (their journals ride in the shared journal store; only the uid list travels,
+  folded into the mode-switch marker), and each peer journals + self-closes via
+  `closeSelfWithFallback` — `window.close()` from a message handler has no user
+  activation and is usually blocked, so a window that can't close covers its stale
+  content with a "moved" overlay instead. Three-pane → one-window-per-doc can't
+  reopen the other docs in their own windows (opening a window needs a user
+  gesture, and the post-reload spawn runs during boot; browsers also cap ~1
+  `window.open` per gesture), so `reduceToFocusedForModeSwitch` keeps the focused
+  doc and closes the rest through the pane's existing save / discard flow (Cancel
+  aborts the switch); Settings closes first so those prompts appear over the
+  workspace. Singleton enforcement: a window booting into three-pane asks whether
+  an older three-pane window is already open (by `openedAt`, ties by id) and, if
+  so, bounces a browser-spawned duplicate (Cmd+N / app icon) via
+  `closeSelfWithFallback` rather than opening a second workspace. All of it no-ops
+  on Electron and degrades to nothing without BroadcastChannel.
+
+- **Web edition: cross-window same-file guard + handle-preserving journals**
+  (`window-coordination.ts`, `index.ts`, `multi-pane-shell.ts`,
+  `host/browser-host.ts`, `host/types.ts`). Opening a file already open in another
+  window is now refused on the web (the desktop path-registry check,
+  `openPathCheck`, was Electron-only): `isFileOpenInAnotherWindow` routes Electron
+  → `openPathCheck`, web → a BroadcastChannel query that broadcasts the handle and
+  resolves true if a peer matches it via `FileSystemFileHandle.isSameEntry`,
+  short-circuiting when this window is alone. For that to survive a three-pane mode
+  switch (or crash recovery), web journals now PRESERVE the `FileSystemFileHandle`
+  — `JournalEntry.handle` widened to `unknown`, the two `writeJournal` callers pass
+  it through, and the browser `writeJournal` stores it (handles ARE
+  structured-cloneable into IndexedDB; the prior code wrongly forced `handle:
+  null`, so a mode-switched doc came back with no file identity). The restored
+  handle carries `prompt` permission, which is fine: `isSameEntry` needs no grant
+  and in-place save re-requests on first write.
+
+- **Web edition: single-file document tools** (`src/editor/web-file-tools.ts`
+  (new), `clean-ui.ts`, `bulk-convert-ui.ts`, `bulk-compress-ui.ts`,
+  `home-screen.ts`, `index.ts`, `style.css`). The Clean / Bulk convert / Bulk
+  compress home-screen tools were Electron-only (folder-recursive I/O) and absent
+  on web. Single-file web versions run each transform on one picked file:
+  `cleanDocumentBytes` (Clean), `convertBytes` in the extension-inferred direction
+  (Convert, `.docx` ↔ `.cmir`), and `parseNative` + `serializeNative` preserving
+  threads + docId (Compress — `.cmir` is gzip-wrapped, so a round-trip
+  recompresses). A shared `runWebFileTool` drives pick → validate → a two-phase
+  progress modal → Save. The modal's spinner is a compositor-driven `transform:
+  rotate` animation, so it keeps turning even while the CPU-bound transform blocks
+  the main thread; and the actual save is deferred to a Save button on the "ready"
+  step, because `showSaveFilePicker` throws without a user gesture and the original
+  click's activation is long gone once the transform finishes. Output goes through
+  `host.saveAs` (File System Access picker on Chromium, download elsewhere); the
+  home-screen copy is host-aware (single file vs. folder batch).
+
+- **Web edition: Paste and Destructively Condense; disable the reload shortcut**
+  (`src/editor/ribbon-availability.ts`, `index.ts`). `pasteCondensed` already read
+  the clipboard through the shared `readClipboardText` (Electron IPC or the async
+  Clipboard API) but its ribbon / palette visibility was still hard-gated to
+  Electron; it's now shown wherever a clipboard read is available. Separately, the
+  browser build disables the reload shortcut (`Mod+R` / `F5`) with a capture-phase
+  `keydown` + `preventDefault`, matching the desktop build's removed reload
+  accelerator — an accidental reload would discard the in-memory session, while
+  programmatic reloads (the mode switch) are unaffected.
+
 ## 0.1.0-beta.4 — 2026-06-29
 
 - **Discontinuous (Ctrl/Cmd) selection** (`editor/word-selection-plugin.ts`,

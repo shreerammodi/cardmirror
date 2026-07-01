@@ -60,10 +60,29 @@ You can run CardMirror two ways:
 - **Desktop app** (recommended for tournaments). Fully offline, reads and
   writes files directly on your disk, supports autosave and crash
   recovery, and can search your file library.
-- **Web preview** (good for trying it out, or working from a Chromebook
-  or locked-down school machine). Same editor, but limited by the
-  browser: no background file search, one window at a time, and pasting
-  plain text needs an extra step (see [Paste Text](#paste-text-f2)).
+- **Web edition** (good for trying it out, or working from a Chromebook
+  or locked-down school machine). The same editor in a browser — and on
+  Chromium browsers you can **install it as an app** for most of the
+  desktop experience.
+
+**Installing as an app (Chrome / Edge / ChromeOS).** Open the web edition
+and click the **Install** button in the address bar to run CardMirror in
+its own window, offline, updating itself when you relaunch — on a
+Chromebook this is how to run it. Installed, the web app can **save in
+place** and autosave (the browser asks once for permission to edit each
+file), read the clipboard for **[Paste Text](#paste-text-f2)** in one
+keystroke, open **multiple windows** (New Document and New Speech Document
+each open their own window, with the dropzone, Quick Cards, and
+send-to-speech kept in sync across them), use the
+**[three-pane workspace](#7-the-multi-doc-workspace)**, and run the
+single-file **Clean / Convert / Compress** tools from the home screen. It
+won't reload on an accidental **Mod-R**, and it won't let you open the
+same file in two windows at once.
+
+Still desktop-only, in any browser: the background file-library search,
+folder-wide bulk operations, Send to Verbatim Flow, voice control, and
+card sharing. And in **Firefox and Safari** the editor runs but can't
+save in place — there Save downloads a copy, as it always has.
 
 Features that work in only one edition are marked **(desktop only)** or
 **(web only)** throughout.
@@ -287,11 +306,14 @@ subscript also have shortcuts: **Mod-Shift-=** and **Mod-=**).
 
 Use **F2** instead of Ctrl/Cmd-V when pasting card text from a webpage or
 PDF — it strips the source's styles, which otherwise bloat your file and
-clutter the outline. On desktop, F2 pastes immediately. **(Web only:)**
-browsers won't let an app read the clipboard on a keypress, so in the web
-edition F2 *arms* plain paste — the status bar shows a pill, and your next
-Ctrl/Cmd-V pastes as plain text. If **Condense on paste** is on
-(Settings → Editing), the pasted text is condensed as it lands.
+clutter the outline. On the desktop app and in Chromium browsers (Chrome /
+Edge / ChromeOS) F2 pastes immediately — the web edition reads the
+clipboard directly, asking once for clipboard permission and then
+remembering it. **(Web only:)** where the browser won't grant clipboard
+access — including Firefox and Safari — F2 falls back to *arming* plain
+paste: the status bar shows a pill, and your next Ctrl/Cmd-V pastes as
+plain text. If **Condense on paste** is on (Settings → Editing), the
+pasted text is condensed as it lands.
 
 ### Condense, pilcrows, and case
 
@@ -1231,9 +1253,10 @@ and dragging cards around inside the editor is unaffected.
   autosave and crash recovery. Use it for your working files. Files are
   saved compressed (roughly 10× smaller than before) and open just as fast;
   older uncompressed files still open and shrink the next time you save them.
-  To shrink a whole existing library at once, use **Bulk compress** on the
-  Home screen (desktop) — it compresses every `.cmir` in a folder in place,
-  skipping ones already done. *(A temporary migration helper.)*
+  To shrink existing files, use **Bulk compress** on the Home screen — on
+  desktop it compresses every `.cmir` in a folder in place, skipping ones
+  already done; the web edition does one file at a time. *(A temporary
+  migration helper.)*
 - **`.docx`** — Word/Verbatim format. Use it to share. CardMirror writes
   docx that's indistinguishable from Verbatim's own output; some
   CardMirror-only extras (private notes, AI notes, flashcards) are left
@@ -1241,7 +1264,7 @@ and dragging cards around inside the editor is unaffected.
 
 ### Cleaning .docx styles ("stylepox")
 
-**(Desktop only.)** As cards get copied between documents, junk styles
+As cards get copied between documents, junk styles
 hitchhike along — files end up with hundreds or thousands of redundant,
 malformed styles that bloat the file, slow Word to a crawl, can break
 Verbatim's macros, and eventually hit Word's hard cap of 4,085 styles.
@@ -1252,6 +1275,11 @@ Verbatim's macros, and eventually hit Word's hard cap of 4,085 styles.
   into the right styles;
 - restores Verbatim's style names and aliases so macros work; and
 - strips hyperlinks and other invisible cruft.
+
+**On the web**, Clean does one file at a time: pick a `.docx` and it saves a
+`cleaned_` copy (a spinner runs while it works, then you choose where to save).
+The rest of this section — cleaning a whole folder, the destination and filename
+options, and the protected-styles list — is **desktop only**.
 
 Point it at a single file or a whole folder (it recurses) and a destination —
 or leave the destination blank to write each cleaned copy next to its original.
