@@ -4133,3 +4133,10 @@ export function openSettings(target?: SettingsTarget): void {
   if (!singleton) singleton = new SettingsModal();
   singleton.open(target);
 }
+
+/** Close the Settings modal if it's open (idempotent). Used before the web
+ *  mode-switch prompts to save/close each doc, so those per-slot prompts appear
+ *  over the workspace — not over the Settings pane the toggle was flipped in. */
+export function closeSettings(): void {
+  singleton?.close();
+}

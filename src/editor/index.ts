@@ -26,7 +26,7 @@ import {
   subscribeTimer,
 } from './timer-state.js';
 import { cycleTimerProfile, TIMER_PROFILE_LABELS } from './timer-profile.js';
-import { openSettings } from './settings-ui.js';
+import { openSettings, closeSettings } from './settings-ui.js';
 import { isBenchmarkActive, setBenchmarkActive } from './benchmark.js';
 import { openReference } from './reference-ui.js';
 import {
@@ -6780,6 +6780,10 @@ async function handleModeSwitch(newValue: boolean): Promise<void> {
       // Web → one-per-window: the browser can't reopen the other docs in their
       // own windows, so close them here (prompting to save unsaved ones) and
       // keep the focused doc, which the reload reopens in the single-doc window.
+      // Close Settings first so each doc's save/discard prompt appears over the
+      // workspace (with its pane focused), not over the Settings pane the toggle
+      // was flipped in.
+      closeSettings();
       const reduced = await multiDocReduceToFocused();
       if (!reduced) {
         // User cancelled a save prompt — abort the switch; stay in three-pane.
