@@ -102,7 +102,7 @@ to run CardMirror in its own window, offline, updating itself on relaunch. On a
 Chromebook this is the way to run it — no desktop build required.
 
 Installed, the web app does most of what the desktop editions do: **save in
-place** and autosave (it asks once for permission to edit each file),
+place** and autosave (it may ask for permission to edit each file),
 one-keystroke **Paste Text**, **multiple windows** (New Document / New Speech
 Document open their own window) with the dropzone, Quick Cards, and send-to-speech
 kept in sync across them, the **three-pane workspace**, and single-file **Clean /
