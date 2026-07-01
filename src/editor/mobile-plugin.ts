@@ -80,10 +80,6 @@ export function setMobileUnitSelection(view: EditorView, unit: UnitRange | null)
   );
 }
 
-export function getMobileUnitSelection(view: EditorView): { from: number; to: number } | null {
-  return mobileKey.getState(view.state)?.selected ?? null;
-}
-
 /** Node decorations over every top-level node in the selected range —
  *  one box for a card, heading line + subtree nodes for a section. */
 function selectionDecorations(doc: PMNode, sel: { from: number; to: number }): DecorationSet {

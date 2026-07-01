@@ -11,7 +11,6 @@
  */
 
 import { Plugin, PluginKey } from 'prosemirror-state';
-import type { Transaction } from 'prosemirror-state';
 import { Decoration, DecorationSet, type EditorView } from 'prosemirror-view';
 
 interface Range {
@@ -58,13 +57,6 @@ export const repairHighlightPlugin = new Plugin<DecorationSet>({
     },
   },
 });
-
-/** Attach a "flash this just-applied range" meta to a transaction that is
- *  about to be dispatched (the same tr that inserts the replacement).
- *  `range` is in the transaction's RESULT coordinates. */
-export function withRepairFlash(tr: Transaction, range: Range): Transaction {
-  return tr.setMeta(repairHighlightKey, { type: 'add', range });
-}
 
 /** Replace the whole flash layer at once (reduced-motion path). */
 export function setRepairFlashes(view: EditorView, ranges: Range[]): void {

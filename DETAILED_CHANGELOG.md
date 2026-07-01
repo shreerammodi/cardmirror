@@ -51,6 +51,29 @@ acceptance).
   doc), so the very largest docs keep a small synchronous blip per pause —
   the dominant ~70% (compression) is what moved off-thread.
 
+- **Dead-export sweep: 17 unreferenced exported symbols deleted, 5
+  annotated as spec references** (audit H-3; ten files across src/ +
+  apps/desktop). A repo-wide reference scan (re-verified fresh before each
+  deletion; every symbol occurred exactly once — its own declaration)
+  found 23 exported symbols nothing imports or calls. Git archaeology
+  sorted them: one true refactor orphan (`personaInitials` — its caller
+  was removed in 92cd31b, which cleaned the import but not the export);
+  the rest were born unreferenced as speculative API symmetry
+  (`subscribePins`/`isManualPinned` + the whole pins-store listener
+  apparatus, `removeFlashcardRangeTr`, `getMobileUnitSelection`,
+  `isMultiPaneActive`, `withRepairFlash`, `clearSimilarSelection`,
+  `setSpeechDocResolver`, `DEFAULT_FILE_OBJECT_KINDS`,
+  `isBodyTextblock`/`isStructuralTextblock`, `findChildren`,
+  `textEl`/`rootNamespaces`, `ensureId`, `voiceSessionInfo`). Deliberate
+  keepers: `cardCutterEngineLoaded` (the card-cutter experiment is live —
+  untouched by decision), and word-break.ts's five unit-boundary
+  functions, now under an explicit "spec reference implementations"
+  banner — their doc comments claimed they served Ctrl+Arrow caret
+  movement, but the live caret code walks `classifyChar` directly; the
+  comments now say so instead of misleading. Zero shipped-byte change
+  (tree-shaking already dropped them); this is maintenance-rot and
+  stale-documentation cleanup.
+
 - **jszip dropped; the .docx container now runs on fflate**
   (`src/ooxml/docx.ts`, `src/editor/bulk-convert-ui.ts`,
   `tests/round-trip/structural-validity.test.ts`, `package.json`,

@@ -30,9 +30,6 @@ interface PinsBlob {
   usage: Record<string, UsageEntry>;
 }
 
-type Listener = () => void;
-const listeners = new Set<Listener>();
-
 function read(): PinsBlob {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -58,18 +55,7 @@ function write(blob: PinsBlob): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
   } catch {
     /* quota / disabled storage — non-fatal, pins just won't persist */
-  }
-  for (const fn of listeners) fn();
-}
-
-export function subscribePins(fn: Listener): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-}
-
-export function isManualPinned(path: string): boolean {
-  return read().manualPins.includes(path);
-}
+  }}
 
 /** Toggle a manual pin; returns the new pinned state. */
 export function toggleManualPin(path: string): boolean {

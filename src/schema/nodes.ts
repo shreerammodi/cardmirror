@@ -81,14 +81,6 @@ function readIndentFromStyle(dom: HTMLElement): number {
   return Math.max(0, Math.round(parseFloat(m[1]!) * 15));
 }
 
-/** Generate a fresh ID at construction time if none provided. */
-export function ensureId(attrs: Record<string, unknown> | null): { id: string } {
-  if (attrs && typeof attrs['id'] === 'string' && attrs['id']) {
-    return { id: attrs['id'] };
-  }
-  return { id: newHeadingId() };
-}
-
 /**
  * Block-level content legal at the doc root. Note: `tag` and `analytic`
  * are *not* in this list — tags only appear as the required first child

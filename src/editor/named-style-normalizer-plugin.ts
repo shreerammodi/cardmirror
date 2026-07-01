@@ -92,14 +92,6 @@ export const namedStyleNormalizerPlugin: Plugin = new Plugin({
   },
 });
 
-export function isBodyTextblock(node: PMNode): boolean {
-  return BODY_TEXTBLOCKS.has(node.type.name);
-}
-
-export function isStructuralTextblock(node: PMNode): boolean {
-  return STRUCTURAL_TEXTBLOCKS.has(node.type.name);
-}
-
 /**
  * Apply the same body-vs-structural underline rule to a static doc
  * tree (no transactions involved). Used by the importer so freshly-

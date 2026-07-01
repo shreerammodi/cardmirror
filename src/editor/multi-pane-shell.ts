@@ -2482,12 +2482,6 @@ function makeSpeechBlankDoc(title: string): PMNode {
  *  enough. */
 let shell: MultiPaneShell | null = null;
 
-/** Whether multi-pane mode is currently active. Single-doc mode
- *  returns false. */
-export function isMultiPaneActive(): boolean {
-  return shell !== null;
-}
-
 /** Focus the slot at `idx` (0/1/2). No-op in single-doc mode, or
  *  when the target slot has no docs loaded. Used by the
  *  `focusSlotN` ribbon commands. */

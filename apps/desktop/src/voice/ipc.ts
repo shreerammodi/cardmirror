@@ -530,8 +530,3 @@ export function registerVoiceIpc(): void {
     else if (op === 'paste') event.sender.paste();
   });
 }
-
-/** Test/diagnostic hook: is a session live, and for which webContents? */
-export function voiceSessionInfo(): { active: boolean; ownerWebContentsId: number | null } {
-  return { active: worker !== null, ownerWebContentsId };
-}

@@ -42,11 +42,6 @@ export function el(name: string, attrs: Record<string, string | number | undefin
   return `${open}${children}</${name}>`;
 }
 
-/** Format an element with text content only. */
-export function textEl(name: string, attrs: Record<string, string | number | undefined>, text: string): string {
-  return el(name, attrs, escText(text));
-}
-
 function formatAttrs(attrs: Record<string, string | number | undefined>): string {
   const pairs: string[] = [];
   for (const [k, v] of Object.entries(attrs)) {
@@ -65,14 +60,3 @@ export const W_NS = {
   xmlnsW: 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
   xmlnsW14: 'http://schemas.microsoft.com/office/word/2010/wordml',
 } as const;
-
-/** Format the namespace attrs for the document root element. */
-export function rootNamespaces(): string {
-  return [
-    'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"',
-    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"',
-    'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"',
-    'xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"',
-    'mc:Ignorable="w14"',
-  ].join(' ');
-}

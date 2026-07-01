@@ -275,10 +275,3 @@ export function installSpeechDocResolver(host: Host): void {
       ? new ElectronSpeechDocResolver(host as ElectronHost)
       : new WebSpeechDocResolver();
 }
-
-/** Swap in a custom resolver. Mainly an escape hatch for tests; in
- *  normal use, `installSpeechDocResolver` is what callers
- *  reach for. */
-export function setSpeechDocResolver(next: SpeechDocResolver): void {
-  resolver = next;
-}

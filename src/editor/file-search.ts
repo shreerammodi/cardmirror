@@ -51,11 +51,6 @@ export const FILE_OBJECT_KIND_BADGES: Record<FileObjectKind, string> = {
   analytic: 'ANL',
 };
 
-/** Default within-file object set. Cites are off by default — a tag is
- *  already findable by its cite (see `searchFileObjects`), so standalone
- *  CITE rows are redundant; users can re-enable them in Settings. */
-export const DEFAULT_FILE_OBJECT_KINDS: FileObjectKind[] = ['block', 'tag'];
-
 /** A `.cmir` file discovered under the search root. */
 export interface FileEntry {
   /** Absolute path (open target). */

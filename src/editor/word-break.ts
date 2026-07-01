@@ -122,6 +122,16 @@ export function normalizeForMatch(s: string): { text: string; map: number[] } {
   return { text, map };
 }
 
+// ─── Spec reference implementations (no live callers) ──────────────
+// The four unit-boundary functions below plus `trimTrailingSpace` are
+// the reference implementations of the word-break spec's Layer 1 and
+// Layer 3 operations (`word-selection-behavior.md`), kept so the spec
+// has runnable, testable definitions. The editor's live code paths
+// (word-selection keymap/plugin, find/replace, ribbon) reimplement
+// their boundary walks directly on `classifyChar`/`isWordChar` and do
+// NOT import these. Kept deliberately (audit 2026-07-01) — if you wire
+// one into product code, delete this banner.
+
 /** The base unit (without trailing-space absorption) containing
  *  the character at index `idx` in `text`. Returns `{ from, to }`
  *  with `to` exclusive. `idx` must satisfy `0 <= idx < text.length`;
@@ -163,10 +173,12 @@ export function queryUnitAtIndex(
   return { from: u.from, to: end };
 }
 
-/** Find the start of the next unit boundary AT OR AFTER `pos`.
- *  Used for Ctrl+Right caret movement: `pos` is the caret's
- *  current index; the destination is the start of the next unit.
- *  Returns `text.length` when no further boundary exists. */
+/** Find the start of the next unit boundary AT OR AFTER `pos` —
+ *  the spec's Ctrl+Right destination (`pos` is the caret's current
+ *  index; the destination is the start of the next unit). The live
+ *  Ctrl+Right implementation walks `classifyChar` directly rather
+ *  than calling this. Returns `text.length` when no further
+ *  boundary exists. */
 export function nextUnitBoundary(text: string, pos: number): number {
   const n = text.length;
   if (pos >= n) return n;
@@ -178,10 +190,12 @@ export function nextUnitBoundary(text: string, pos: number): number {
   return i;
 }
 
-/** Find the start of the unit at OR BEFORE `pos`, going backward.
- *  Used for Ctrl+Left caret movement: returns the leftmost index
- *  of the unit that contains the character to the left of the
- *  caret. Returns 0 when the caret is at the very start. */
+/** Find the start of the unit at OR BEFORE `pos`, going backward —
+ *  the spec's Ctrl+Left destination: the leftmost index of the unit
+ *  containing the character to the left of the caret. The live
+ *  Ctrl+Left implementation walks `classifyChar` directly rather
+ *  than calling this. Returns 0 when the caret is at the very
+ *  start. */
 export function prevUnitBoundary(text: string, pos: number): number {
   if (pos <= 0) return 0;
   // Look at the char to the left of the caret.

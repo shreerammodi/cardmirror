@@ -195,12 +195,6 @@ export function upsertFlashcardRangeTr(
   return state.tr.setMeta(learnHighlightKey, { type: 'upsert', range }).setMeta('addToHistory', false);
 }
 
-/** Drop ONE resolved range by cardId (annotation deleted). Doc-neutral +
- *  out of undo history. */
-export function removeFlashcardRangeTr(state: EditorState, cardId: string): Transaction {
-  return state.tr.setMeta(learnHighlightKey, { type: 'remove', cardId }).setMeta('addToHistory', false);
-}
-
 /** Emphasize the active annotation's range in the doc (or clear it with
  *  null). Doc-neutral + out of undo history. */
 export function setActiveAnnotationRangeTr(

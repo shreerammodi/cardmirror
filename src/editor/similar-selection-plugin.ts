@@ -572,22 +572,6 @@ export function selectSimilar(effectivePt: EffectivePtResolver): Command {
   };
 }
 
-/** Programmatically clear the shadow selection. Exposed so the
- *  keybinding editor / menu can offer a "Clear similar selection"
- *  action if desired later. */
-export function clearSimilarSelection(): Command {
-  return (state, dispatch) => {
-    const ps = similarSelectionKey.getState(state);
-    if (!ps) return false;
-    if (ps.matches.length === 0 && !ps.scope && ps.mode === 'idle') {
-      return false;
-    }
-    if (!dispatch) return true;
-    dispatch(state.tr.setMeta(META_KEY, { type: 'clear' } as Meta));
-    return true;
-  };
-}
-
 /**
  * Set the shadow selection to `ranges` (merged, empty dropped) and collapse the
  * PM cursor inside the first one, so `getOperatingRanges` returns the shadow and

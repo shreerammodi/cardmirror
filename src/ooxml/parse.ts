@@ -62,14 +62,6 @@ export function findChild(nodes: XmlNode[], tag: string): XmlNode | null {
   return null;
 }
 
-/**
- * From a list of order-preserved nodes, return all children with the
- * given tag name (in order).
- */
-export function findChildren(nodes: XmlNode[], tag: string): XmlNode[] {
-  return nodes.filter((n) => tag in n);
-}
-
 /** Extract attributes from a node. */
 export function attrs(node: XmlNode): Record<string, string> {
   return node[':@'] ?? {};
