@@ -1610,6 +1610,12 @@ remove one, **↺** to restore its default. A few window-level shortcuts
   second, the rest to the last.
 - **Override shading color in display** — the same, for shading marks.
 - **Shading override colors** — the colors used for the above.
+- **Show highlight & shading names in the status bar** — the status bar
+  reports the actual stored color names for the text at your cursor
+  (e.g. `Hl: Yellow · Sh: none`). Highlight hues often carry meaning in
+  shared files; this gives you that meaning as text — useful if colors
+  are hard to tell apart, or alongside the overrides above. Works in the
+  three-pane workspace too (it follows the focused pane).
 - **Color overrides** — override any interface color (and document text);
   your picks win over the built-in themes and presets.
 - **Interface font** — the font for the app's interface (ribbon, dialogs,

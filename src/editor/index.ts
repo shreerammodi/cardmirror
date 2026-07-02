@@ -3312,15 +3312,20 @@ for (const [btn, delta] of [
   });
 }
 
-/** Update the status-bar cursor-color readout. Visible only when
- *  at least one of the highlight / shading display overrides is
- *  on — the readout reports the ACTUAL stored colors on the run
- *  at the cursor, NOT the rendered override colors, so the user
- *  can tell what's encoded in the doc while the override hides
- *  it from view. */
+/** Update the status-bar cursor-color readout. It reports the ACTUAL
+ *  stored colors on the run at the cursor, NOT the rendered colors.
+ *  Two audiences: (a) the display overrides hide the stored colors, so
+ *  the readout reveals what's encoded while an override is on; (b) the
+ *  standalone `showCursorColorNames` accessibility toggle — highlight
+ *  hues carry meaning in shared files, and this exposes that meaning
+ *  as text for users who can't reliably tell the hues apart.
+ *  Multi-pane: `view` is the focused pane's view (setActiveView), and
+ *  the pane dispatch re-runs setActiveView per focused-pane
+ *  transaction, so the readout tracks the caret there too. */
 function refreshCursorColorDisplay(): void {
-  const highlightOn = settings.get('overrideHighlightColor');
-  const shadingOn = settings.get('overrideShadingColor');
+  const namesOn = settings.get('showCursorColorNames');
+  const highlightOn = settings.get('overrideHighlightColor') || namesOn;
+  const shadingOn = settings.get('overrideShadingColor') || namesOn;
   if (!highlightOn && !shadingOn) {
     cursorColorDisplay.hidden = true;
     return;

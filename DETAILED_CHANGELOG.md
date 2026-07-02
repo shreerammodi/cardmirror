@@ -7,6 +7,20 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Accessibility: standalone "Show highlight & shading names in the status
+  bar" toggle** (`settings.ts`, `index.ts`, `MANUAL.md`). The status-bar
+  cursor-color readout (actual stored highlight/shading names via
+  `highlightColorLabel`) existed but was gated on the display overrides —
+  the exact mechanism a colorblind user needs, locked behind an unrelated
+  setting. New `showCursorColorNames` toggle shows it independently; each
+  part (Hl/Sh) renders if its override OR the toggle is on. This is the
+  chosen mitigation for the top hazard in the color-semantics audit (the 15
+  OOXML hues carry author meaning and collapse under red-green deficiency).
+  No new refresh wiring needed: the settings subscription already re-runs
+  the readout, and multi-pane was already live because the pane dispatch
+  re-runs setActiveView (which refreshes all status-bar chrome) per
+  focused-pane transaction — the readout reads the focused pane's view.
+
 - **Multi-pane chip: focused-chip hover glyphs are theme-invariant**
   (`src/editor/style.css`). Hovering the focused chip's outline/expand
   buttons flipped the glyph to `--pmd-c-text-strong` — black in light mode

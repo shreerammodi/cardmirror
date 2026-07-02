@@ -13,6 +13,11 @@ see `DETAILED_CHANGELOG.md`.
   100 results at once (up from 50), and when there are more, the last row
   tells you — click **show more**, or just keep arrowing down past the end,
   to reveal the next hundred.
+- **See highlight colors by name.** A new Accessibility setting, **Show
+  highlight & shading names in the status bar**, reports the stored color
+  names for the text at your cursor (e.g. `Hl: Yellow`) — so a file's
+  color-coding conventions are readable as text even when the hues are hard
+  to tell apart. Works in the three-pane workspace too.
 
 ### Changed
 

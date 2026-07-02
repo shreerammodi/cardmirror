@@ -311,6 +311,12 @@ export interface Settings {
   /** 1–3 hex/rgba colors mirroring `overrideHighlightSlots` for
    *  shading marks. */
   overrideShadingSlots: string[];
+  /** Show the actual highlight / shading color NAMES at the caret in
+   *  the status bar, independent of the display overrides above. The
+   *  15 OOXML hues carry meaning in shared files (each author's
+   *  color-coding convention); this exposes that meaning as text —
+   *  the colorblind-accessible channel. */
+  showCursorColorNames: boolean;
   /** Theme. `'light'` and `'dark'` force the corresponding
    *  palette. `'system'` (default) follows the OS-level
    *  `prefers-color-scheme` and tracks live changes. Setting
@@ -1083,6 +1089,7 @@ const DEFAULTS: Settings = {
   overrideHighlightSlots: ['#ffff00'],
   overrideShadingColor: false,
   overrideShadingSlots: ['#d2d2d2'],
+  showCursorColorNames: false,
   customColorOverrides: {},
   navPaneVisible: true,
   formatNavPaneByType: true,
@@ -1865,6 +1872,14 @@ export const SETTING_METADATA: SettingMeta[] = [
     dependsOn: 'overrideShadingColor',
   },
   {
+    key: 'showCursorColorNames',
+    label: 'Show highlight & shading names in the status bar',
+    description:
+      'Displays the actual stored highlight and shading color names for the text at your cursor (e.g. "Hl: Yellow · Sh: none"), whether or not the display overrides above are on. Highlight hues often carry meaning in shared files — this gives you that meaning as text, useful when colors are hard to tell apart.',
+    kind: 'toggle',
+    category: 'accessibility',
+  },
+  {
     key: 'customColorOverrides',
     label: 'Color overrides',
     description:
@@ -2504,6 +2519,7 @@ function sanitize(s: Settings): Settings {
       '#ffff00',
     ),
     overrideShadingColor: !!s.overrideShadingColor,
+    showCursorColorNames: !!s.showCursorColorNames,
     overrideShadingSlots: sanitizeColorSlots(
       s.overrideShadingSlots,
       (s as { overrideShadingColorValue?: unknown }).overrideShadingColorValue,
