@@ -18,6 +18,9 @@ see `DETAILED_CHANGELOG.md`.
   Highlighting (except Yellow)". Both commands are
   keybindable (unbound by default). Combined with the "No color" pen, they
   also work as "clear everything except my exception color".
+- **Search palette tooltips.** When a result's file name, heading, or
+  folder path is too long to fit its row, hovering it now shows the full
+  text in a tooltip. Results that fit show no tooltip.
 
 ## 0.1.0-beta.6 — 2026-07-02
 

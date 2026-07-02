@@ -40,6 +40,18 @@ in each release, see `CHANGELOG.md`.
   skip, null-pen + exception, plain-standardize regression, selection
   scoping, and case-insensitive shading matching.
 
+- **Search palette: truncation tooltips** (`quick-card-search-ui.ts`).
+  Every result row's name span and meta span (the file's directory) are
+  ellipsis-truncated by CSS with no way to see the full text. Rows now
+  get a `mouseenter` handler that compares `scrollWidth` to `clientWidth`
+  and sets the native `title` to the full text only when the ellipsis
+  actually cut something off (clearing it otherwise). The check runs
+  lazily on hover rather than at render time because layout isn't final
+  while rows are being built, and this way it stays correct across
+  palette resizes; it also costs nothing for keyboard-only use. Covers
+  all result sources — file rows, in-file object rows (headings / tags /
+  cites), and outline browse rows all render through the same spans.
+
 ## 0.1.0-beta.6 — 2026-07-02
 
 - **Settings navigability: section headers, Files tab, category moves**

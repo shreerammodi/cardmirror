@@ -1318,12 +1318,23 @@ class QuickCardSearchUI {
       name.className = 'pmd-qcs-row-name';
       name.textContent = r.name;
       top.appendChild(name);
+      let meta: HTMLSpanElement | null = null;
       if (r.meta) {
-        const meta = document.createElement('span');
+        meta = document.createElement('span');
         meta.className = 'pmd-qcs-row-tags';
         meta.textContent = r.meta;
         top.appendChild(meta);
       }
+      // Tooltip with the full name / directory, but only when the
+      // ellipsis actually cut something off. Checked lazily on hover
+      // — layout isn't final while rows are being built, and this
+      // stays correct across palette resizes.
+      row.addEventListener('mouseenter', () => {
+        for (const el of meta ? [name, meta] : [name]) {
+          if (el.scrollWidth > el.clientWidth) el.title = el.textContent ?? '';
+          else el.removeAttribute('title');
+        }
+      });
       // Pin star on file rows — filled when pinned, faint otherwise.
       // Click the star to toggle the pin.
       if (r.source === 'file' && r.filePath) {

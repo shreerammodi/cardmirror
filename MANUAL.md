@@ -705,7 +705,8 @@ version, and Enter jumps to the About this install section of Settings.
 
 Results show 100 at a time. When there are more, the last row says so —
 click **show more** (or just keep arrowing down past the end) to reveal
-the next hundred.
+the next hundred. When a result's name or folder path is too long to fit
+the row, hovering it shows the full text in a tooltip.
 
 **Inserting evidence.** Quick-card, dropzone, and in-file results drop in
 at your cursor (the same insertion the send-to-speech and Quick Card
