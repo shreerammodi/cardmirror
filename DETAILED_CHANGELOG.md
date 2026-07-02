@@ -5,7 +5,7 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
-## Unreleased
+## 0.1.0-beta.6 — 2026-07-02
 
 - **Settings navigability: section headers, Files tab, category moves**
   (`settings.ts`, `settings-categories.ts`, `settings-ui.ts`, `style.css`,
