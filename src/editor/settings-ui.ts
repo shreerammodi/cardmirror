@@ -116,8 +116,6 @@ const FONT_GROUPS: FontGroup[] = [
   },
 ];
 
-const COMMON_FONTS = FONT_GROUPS.flatMap((g) => g.fonts);
-
 /** Human-readable label for each display-size key. */
 const DISPLAY_SIZE_LABELS: Record<keyof DisplaySizes, string> = {
   normal: 'Normal (body)',

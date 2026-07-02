@@ -90,6 +90,18 @@ in each release, see `CHANGELOG.md`.
   the default composition, each option axis, cite collection, the
   heading-assembly rules, and the empty-selection guard.
 
+- **Comment-audit follow-ups** (`settings.ts`, `settings-ui.ts`,
+  `word-break.ts`, `word-selection-keymap.ts`, `word-selection-plugin.ts`,
+  `find-replace-plugin.ts`, `ribbon-commands.ts`).
+  Removed two dead symbols the audit's reviewers surfaced —
+  `sanitizeHexColor` (superseded by the slots-array sanitizer) and
+  `COMMON_FONTS` (only reference was its own definition; `FONT_GROUPS`
+  itself stays live). Removed all six references to the
+  never-vendored spec doc `word-selection-behavior.md` (two of which
+  embedded a machine-local `~/Downloads` path): `word-break.ts`'s
+  header is now the canonical definition of the word-selection model
+  and its Layer 1/2/3 taxonomy, and the other five sites point there.
+
 - **Code comment audit** (140 files across `src/`, `apps/desktop/src/`,
   `tests/`, `scripts/`, `dev/`; comments only — no user-facing impact).
   A 52-agent audit rationalized the comments accumulated across AI

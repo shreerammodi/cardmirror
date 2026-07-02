@@ -4,9 +4,13 @@
  * Single source of truth for "what is a word", "what is a unit",
  * and "where are unit boundaries" inside a string of text.
  *
- * Spec: `~/Downloads/word-selection-behavior.md` (Layer 1). The
- * model has three classes of code-point — word-character, space,
- * tab, punctuation — plus four base units:
+ * This is Layer 1 of the editor's word-selection model; this header
+ * is the model's canonical definition. (Layer 2 = caret and mouse
+ * selection, `word-selection-keymap.ts` / `word-selection-plugin.ts`;
+ * Layer 3 = formatting-time trailing-space trimming,
+ * `trimRangesForFormatting` in `ribbon-commands.ts`.) The model has
+ * three classes of code-point — word-character, space, tab,
+ * punctuation — plus four base units:
  *
  *   - Word: maximal run of word-characters.
  *   - Punctuation: maximal run of punctuation chars (any mix —
@@ -17,7 +21,7 @@
  *
  * Word-characters: letters, digits, `'` U+0027, `'` U+2019. Notably
  * `'` U+2018 (left/opening single quote) is punctuation. Also
- * notable per the spec: `.`, `,`, `:`, `_`, `-`, `—`, `–`, `…`
+ * notable: `.`, `,`, `:`, `_`, `-`, `—`, `–`, `…`
  * are all punctuation and break a word, so `1,234` is three units
  * and `H2O` is one (letter↔digit transition doesn't break).
  *
@@ -122,11 +126,11 @@ export function normalizeForMatch(s: string): { text: string; map: number[] } {
   return { text, map };
 }
 
-// ─── Spec reference implementations (no live callers) ──────────────
+// ─── Reference implementations (no live callers) ───────────────────
 // The four unit-boundary functions below plus `trimTrailingSpace` are
-// the reference implementations of the word-break spec's Layer 1 and
-// Layer 3 operations (`word-selection-behavior.md`), kept so the spec
-// has runnable, testable definitions. The editor's live code paths
+// the reference implementations of the model's Layer 1 and Layer 3
+// operations, kept so the model has runnable, testable definitions
+// beyond this header's prose. The editor's live code paths
 // (word-selection keymap/plugin, find/replace, ribbon) reimplement
 // their boundary walks directly on `classifyChar`/`isWordChar` and do
 // NOT import these. Kept deliberately — if you wire one into product

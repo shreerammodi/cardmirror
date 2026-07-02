@@ -132,8 +132,8 @@ export const findReplaceKey = new PluginKey<FindReplaceState>('find-replace');
 // and neither is `.` / `,` / hyphen / dash / `'` U+2018. So e.g.
 // searching "don" whole-word doesn't match inside "don't"
 // (apostrophe joins the word), while "user" matches "user_name"
-// (underscore breaks). See `word-selection-behavior.md` Layer 1
-// for the full rationale.
+// (underscore breaks). The `word-break.ts` header documents the
+// full model.
 
 /** Map a textblock node type name to its match category. The
  *  three doc-level outline heading types collapse to `heading`;

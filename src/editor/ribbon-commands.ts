@@ -895,7 +895,7 @@ function wordRangeAtCursor(state: EditorState): { from: number; to: number } | n
  *  loses the final space but keeps its internal spaces formatted.
  *  Selecting just ` ` (a single space) or `   ` (whitespace only)
  *  is left intact so the format applies to the whole range.
- *  Spec: see `word-selection-behavior.md` Layer 3. */
+ *  Layer 3 of the word-selection model (see `word-break.ts`). */
 function trimRangesForFormatting(
   doc: PMNode,
   ranges: { from: number; to: number }[],

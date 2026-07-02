@@ -1,9 +1,8 @@
 /**
  * Layer 2 — Word-style mouse-selection state machine.
- *
- * Implements the mouse-side of the word-selection spec
- * (`word-selection-behavior.md` Layer 2). Three click gestures
- * with distinct anchor + granularity behavior:
+ * (`word-break.ts` defines the word-selection model and its layer
+ * taxonomy.) Three click gestures with distinct anchor +
+ * granularity behavior:
  *
  *   - Single click: anchor = a point, granularity = character.
  *     Dynamic — extending past the anchor's own unit upgrades to

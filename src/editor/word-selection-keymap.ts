@@ -1,8 +1,7 @@
 /**
- * Layer 2 — Word-style keyboard navigation.
- *
- * Spec: `~/Downloads/word-selection-behavior.md` Layer 2 — caret
- * movement and extension. Six commands plus their Shift-extend
+ * Layer 2 — Word-style keyboard navigation: caret movement and
+ * extension. (`word-break.ts` defines the word-selection model and
+ * its layer taxonomy.) Six commands plus their Shift-extend
  * variants:
  *
  *   - **Ctrl+Left / Ctrl+Right** → start of previous / next unit

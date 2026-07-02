@@ -3252,15 +3252,6 @@ function sanitizeFileSearchRoots(s: Settings): string[] {
   return out;
 }
 
-/** Accept a hex color string (`#rrggbb`, case-insensitive); fall
- *  back to `defaultValue` otherwise. */
-function sanitizeHexColor(raw: unknown, defaultValue: string): string {
-  if (typeof raw !== 'string') return defaultValue;
-  const trimmed = raw.trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed.toLowerCase();
-  return defaultValue;
-}
-
 /** Validate + clamp the 1–3-color slots arrays used by the
  *  highlight / shading display overrides. Accepts hex or
  *  rgba/rgb strings. Migrates from the previous single-color
