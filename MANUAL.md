@@ -1342,7 +1342,11 @@ and headings instead of importing flat text.
 - **Save (Mod-S)** / **Save As… (Mod-Shift-S)**.
 - **Autosave** is a per-file toggle in the ribbon; it remembers its
   setting per document across close and reopen, and applies to `.cmir`
-  files. **(Desktop only.)**
+  files. The button shows whether autosave is actually protecting the
+  current doc: a **solid filled** button means it's saving; a **hollow
+  button with a dashed outline** means it's on but not firing (the doc
+  is `.docx`, or hasn't been saved once yet) — hover it for the reason.
+  **(Desktop only.)**
 
 ### Save As presets
 

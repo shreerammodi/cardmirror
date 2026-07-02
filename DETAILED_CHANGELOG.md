@@ -51,6 +51,25 @@ in each release, see `CHANGELOG.md`.
   dropping a row's own divider when it sits against a section boundary
   so lines never stack.
 
+- **Accessibility: autosave inert state is now hollow, not just amber**
+  (`style.css`, `MANUAL.md`). Color-audit item (MEDIUM, data-loss
+  consequence): the autosave toggle's two on-states — effective (blue
+  filled) vs inert/armed-but-not-firing (amber filled) — were
+  geometrically identical, distinguished by hue plus a hover tooltip
+  that the ribbonTooltipMode setting can disable entirely. The inert
+  state now drops its background fill and draws a 1.5px dashed
+  warning-color outline (outline + negative offset, not border, so no
+  layout shift): filled block vs dashed hollow reads in full grayscale,
+  and the dashed stroke connotes "armed but not engaged". Applied at
+  the button level rather than as a hollow icon variant — the icon
+  glyphs are generated assets in two icon sets (Untitled UI line +
+  classic emoji), so an icon-level treatment would need new artwork in
+  both for less visual payoff. A :focus-visible override restores the
+  ribbon's standard solid focus ring, which the persistent outline
+  would otherwise swallow. CSS-only: the state attributes
+  (aria-pressed + data-autosave-effective) already existed and are
+  live-maintained by refreshAutosaveBtn.
+
 - **Fix: voice-model download offer was unreachable at session start**
   (`apps/desktop/src/voice/ipc.ts`, `voice/controller.ts`). The
   first-use flow shipped with the model-download feature intended

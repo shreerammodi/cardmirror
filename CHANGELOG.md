@@ -24,6 +24,11 @@ see `DETAILED_CHANGELOG.md`.
   palette engineered to stay distinguishable under red-green and blue-yellow
   color-vision deficiencies. Works in light and dark themes, and any colors
   you've set by hand still win.
+- **The autosave button shows its real state by shape.** When autosave is
+  on but not actually firing (a `.docx` file, or a doc that's never been
+  saved), the ribbon button is now a hollow chip with a dashed outline
+  instead of a filled one — so "protecting you" vs "armed but inert" no
+  longer differ by color alone.
 - **Fixed: first voice use now offers the model download.** On a fresh
   install, turning voice on before downloading the recognition model showed
   a dead-end error mentioning a developer environment variable instead of

@@ -1309,20 +1309,32 @@ html:has(body.pmd-speech-banner-visible) {
 
 /* Autosave toggle: three visible states.
    - Off (default unpressed): no rule, inherits the resting button look.
-   - On + effective (cmir + saved-once): accent blue, "this IS saving."
-   - On + inert (no handle yet, OR doc is .docx): amber, "armed but
-     not firing." `data-autosave-effective` is maintained by
-     `refreshAutosaveBtn` whenever focus / file format / handle
-     changes, so the color tracks live state.
-   The green flash (`pmd-save-flash`) runs as an animation override
-   on top of either color and reverts cleanly. */
+   - On + effective (cmir + saved-once): accent blue FILLED chip,
+     "this IS saving."
+   - On + inert (no handle yet, OR doc is .docx): amber HOLLOW chip
+     with a dashed outline, "armed but not firing." Filled vs hollow is
+     the shape channel (color-vision audit): the two on-states must not
+     differ by hue alone — misreading inert as effective is a
+     data-loss belief. Outline (not border) so the box doesn't shift;
+     negative offset draws it inside the button's rounded rect.
+   `data-autosave-effective` is maintained by `refreshAutosaveBtn`
+   whenever focus / file format / handle changes, so the state tracks
+   live. The green flash (`pmd-save-flash`) runs as an animation
+   override on top of either state and reverts cleanly. */
 #ribbon #autosave-btn[aria-pressed="true"][data-autosave-effective="true"] {
   color: var(--pmd-c-accent);
   background: var(--pmd-c-accent-soft);
 }
 #ribbon #autosave-btn[aria-pressed="true"][data-autosave-effective="false"] {
   color: var(--pmd-c-warning);
-  background: var(--pmd-c-warning-soft);
+  outline: 1.5px dashed var(--pmd-c-warning);
+  outline-offset: -1.5px;
+}
+/* The persistent outline above would otherwise swallow the UA focus
+   ring — restore the ribbon's standard focus treatment on top. */
+#ribbon #autosave-btn[aria-pressed="true"][data-autosave-effective="false"]:focus-visible {
+  outline: 2px solid var(--pmd-c-focus);
+  outline-offset: -2px;
 }
 
 /* Speech-doc button stack. Same layout rhythm as the file stack
