@@ -8,6 +8,17 @@ A content-agnostic store-and-forward mailbox with live push:
   DELETE /relay/messages/{msg_id}     acknowledge / remove one delivered bundle
   GET    /relay/health                liveness (no auth)
 
+…plus durable ROOMS for collaboration sessions (opaque encrypted CRDT
+update logs with server-assigned delivery cursors):
+
+  POST   /relay/rooms                       create → {roomId}
+  POST   /relay/rooms/{id}/updates          append opaque blob → {seq}
+  GET    /relay/rooms/{id}/updates?after=N  snapshot (if N predates it) + tail
+  GET    /relay/rooms/{id}/stream           SSE: hello{lastSeq}, update/presence frames
+  POST   /relay/rooms/{id}/snapshot         {blob, coversThroughSeq} → truncates ≤ seq
+  POST   /relay/rooms/{id}/presence         ephemeral fan-out, never stored
+  DELETE /relay/rooms/{id}                  end session (tombstone → 410)
+
 This is the same wire contract CardMirror's official relay speaks, so
 pointing the app at your own deployment is just Settings → Card Sharing →
 Custom relay URL + Custom relay token. Everyone sharing cards with each
@@ -33,10 +44,28 @@ Design notes:
     expected number of concurrent SSE streams (it counts long-lived
     connections) — e.g. 4096 — as a connection-storm backstop.
 
+Rooms design notes:
+  - `seq` is a delivery cursor, not a semantic order: CRDT updates are
+    commutative, so the server only promises "give me everything after
+    N" resumption. A global sequence shared across rooms is fine (gaps
+    within a room are expected and harmless).
+  - Compaction is the CLIENT's job (the server cannot read ciphertext):
+    a client periodically uploads an encrypted snapshot covering
+    everything through seq S; the server then deletes updates ≤ S.
+    Joins fetch snapshot + tail, bounding join time on large docs.
+  - Ended sessions tombstone (410, distinct from never-existed 404) so
+    clients can tell "session over" from "bad room id". Idle rooms are
+    garbage-collected after ROOM_IDLE_GC — generous by design: a
+    session legitimately spans a travel day + tournament weekend with
+    long fully-offline gaps.
+  - At most MAX_STREAMS_PER_ROOM concurrent streams per room (409 on
+    the next), which is also the participant ceiling.
+
 PRIVACY: the card payload is end-to-end encrypted by the CardMirror
 client. This server stores the bundle OPAQUELY (the `body` column) and
 must never log or inspect it — only routing codes, ids, and counts are
-ever touched here.
+ever touched here. Room update/snapshot/presence blobs are equally
+opaque ciphertext: store, forward, count — never decode.
 
 Env:
   RELAY_TOKEN    required — the shared bearer your CardMirror clients
@@ -48,6 +77,7 @@ Env:
 See README.md for one-command deployment with docker compose.
 """
 import asyncio
+import base64
 import gzip
 import hmac
 import json
@@ -62,7 +92,7 @@ from typing import AsyncIterator, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from sqlalchemy import Column, DateTime, Index, String, create_engine
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Index, String, create_engine
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import TimeoutError as SATimeoutError
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
@@ -104,6 +134,40 @@ class RelayMessage(Base):
     )
 
 
+class RelayRoom(Base):
+    __tablename__ = "relay_rooms"
+
+    id = Column(String, primary_key=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_activity = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    bytes_used = Column(BigInteger, default=0, nullable=False)
+    tombstoned = Column(Boolean, default=False, nullable=False)
+
+
+class RelayRoomUpdate(Base):
+    __tablename__ = "relay_room_updates"
+
+    # Global autoincrement doubles as the per-room delivery cursor (`seq`).
+    # Gaps within a room are expected; clients only rely on "after N".
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    room_id = Column(String, nullable=False)
+    blob = Column(String, nullable=False)  # base64 ciphertext, opaque
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_relay_room_updates_room_id_id", "room_id", "id"),
+    )
+
+
+class RelayRoomSnapshot(Base):
+    __tablename__ = "relay_room_snapshots"
+
+    room_id = Column(String, primary_key=True)
+    blob = Column(String, nullable=False)  # base64 ciphertext, opaque
+    covers_through_seq = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -120,6 +184,13 @@ TTL = timedelta(hours=3)
 MAX_PER_POLL = 100
 HEARTBEAT_SECONDS = 25
 STREAM_QUEUE_MAX = 100
+
+# Rooms (collaboration sessions)
+MAX_UPDATE_BYTES = 5 * 1024 * 1024        # one appended blob (chunked client-side above 256 KiB)
+ROOM_CAP_BYTES = 200 * 1024 * 1024        # total stored per room (updates + snapshot)
+MAX_UPDATES_PER_PAGE = 200
+MAX_STREAMS_PER_ROOM = 10                 # participant ceiling, enforced at stream connect
+ROOM_IDLE_GC = timedelta(days=7)          # must exceed travel day + tournament weekend
 
 # routing code → open stream queues (single-worker only; see module doc)
 _streams: dict[str, set["asyncio.Queue[dict]"]] = {}
@@ -144,6 +215,23 @@ def _push_to_streams(recipient: str, message: dict) -> None:
             pass
 
 
+# room id → open stream queues (single-worker only, like _streams)
+_room_streams: dict[str, set["asyncio.Queue[dict]"]] = {}
+
+
+def _push_to_room(room_id: str, frame: dict) -> None:
+    """Runs ON the event loop; same shed-on-full semantics as
+    `_push_to_streams` (a catch-up `GET updates?after=` recovers)."""
+    queues = _room_streams.get(room_id)
+    if not queues:
+        return
+    for q in list(queues):
+        try:
+            q.put_nowait(frame)
+        except asyncio.QueueFull:
+            pass
+
+
 def _sweep(db: Session) -> int:
     cutoff = datetime.utcnow() - TTL
     removed = (
@@ -151,6 +239,26 @@ def _sweep(db: Session) -> int:
         .filter(RelayMessage.created_at < cutoff)
         .delete(synchronize_session=False)
     )
+    # Room GC: idle rooms tombstone (clients see 410 "session ended");
+    # tombstones past a second idle period are dropped entirely.
+    idle_cutoff = datetime.utcnow() - ROOM_IDLE_GC
+    idle = (
+        db.query(RelayRoom)
+        .filter(RelayRoom.last_activity < idle_cutoff)
+        .all()
+    )
+    for room in idle:
+        db.query(RelayRoomUpdate).filter(RelayRoomUpdate.room_id == room.id).delete(
+            synchronize_session=False
+        )
+        db.query(RelayRoomSnapshot).filter(RelayRoomSnapshot.room_id == room.id).delete(
+            synchronize_session=False
+        )
+        if room.tombstoned:
+            db.delete(room)
+        else:
+            room.tombstoned = True
+            room.bytes_used = 0
     db.commit()
     return removed
 
@@ -347,4 +455,241 @@ def delete_message(msg_id: str, db: Session = Depends(get_db)) -> Response:
         synchronize_session=False
     )
     db.commit()
+    return Response(status_code=204)
+
+
+# ── Rooms (collaboration sessions) ───────────────────────────────────
+
+
+def _room_or_error(db: Session, room_id: str) -> RelayRoom:
+    room = db.get(RelayRoom, room_id)
+    if room is None:
+        raise HTTPException(404, "no such room")
+    if room.tombstoned:
+        raise HTTPException(410, "session ended")
+    return room
+
+
+def _room_last_seq(db: Session, room_id: str) -> int:
+    from sqlalchemy import func
+
+    max_id = (
+        db.query(func.max(RelayRoomUpdate.id))
+        .filter(RelayRoomUpdate.room_id == room_id)
+        .scalar()
+    )
+    if max_id is not None:
+        return int(max_id)
+    snap = db.get(RelayRoomSnapshot, room_id)
+    return int(snap.covers_through_seq) if snap is not None else 0
+
+
+@app.post("/relay/rooms", status_code=201, dependencies=[Depends(require_relay_token)])
+def create_room(db: Session = Depends(get_db)) -> JSONResponse:
+    room_id = uuid.uuid4().hex
+    db.add(RelayRoom(id=room_id))
+    db.commit()
+    logger.info("[relay] room created %s…", room_id[:8])
+    return JSONResponse({"roomId": room_id}, status_code=201)
+
+
+@app.post(
+    "/relay/rooms/{room_id}/updates",
+    status_code=202,
+    dependencies=[Depends(require_relay_token)],
+)
+def post_room_update(
+    room_id: str,
+    raw: bytes = Depends(_raw_body),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    if not raw:
+        raise HTTPException(400, "empty update")
+    if len(raw) > MAX_UPDATE_BYTES:
+        raise HTTPException(413, "update too large")
+    room = _room_or_error(db, room_id)
+    if room.bytes_used + len(raw) > ROOM_CAP_BYTES:
+        raise HTTPException(413, "room storage cap reached")
+    b64 = base64.b64encode(raw).decode("ascii")
+    row = RelayRoomUpdate(room_id=room_id, blob=b64)
+    db.add(row)
+    room.bytes_used = room.bytes_used + len(raw)
+    room.last_activity = datetime.utcnow()
+    db.commit()
+    seq = int(row.id)
+    if _loop is not None:
+        _loop.call_soon_threadsafe(_push_to_room, room_id, {"t": "u", "seq": seq, "blob": b64})
+    return JSONResponse({"seq": seq}, status_code=202)
+
+
+@app.get("/relay/rooms/{room_id}/updates", dependencies=[Depends(require_relay_token)])
+def get_room_updates(
+    room_id: str,
+    after: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> dict:
+    _room_or_error(db, room_id)
+    out: dict = {}
+    snap = db.get(RelayRoomSnapshot, room_id)
+    floor = after
+    if snap is not None and after < snap.covers_through_seq:
+        out["snapshot"] = {
+            "blob": snap.blob,
+            "coversThroughSeq": int(snap.covers_through_seq),
+        }
+        floor = int(snap.covers_through_seq)
+    rows = (
+        db.query(RelayRoomUpdate)
+        .filter(RelayRoomUpdate.room_id == room_id, RelayRoomUpdate.id > floor)
+        .order_by(RelayRoomUpdate.id.asc())
+        .limit(MAX_UPDATES_PER_PAGE)
+        .all()
+    )
+    out["updates"] = [{"seq": int(r.id), "blob": r.blob} for r in rows]
+    out["more"] = len(rows) == MAX_UPDATES_PER_PAGE
+    out["lastSeq"] = int(rows[-1].id) if rows else floor
+    return out
+
+
+@app.post(
+    "/relay/rooms/{room_id}/snapshot",
+    status_code=204,
+    dependencies=[Depends(require_relay_token)],
+)
+def post_room_snapshot(
+    room_id: str,
+    raw: bytes = Depends(_raw_body),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        payload = json.loads(raw)
+        blob = payload["blob"]
+        covers = int(payload["coversThroughSeq"])
+        if not isinstance(blob, str) or not blob or covers < 0:
+            raise ValueError
+    except Exception:
+        raise HTTPException(400, "expected {blob, coversThroughSeq}")
+    if len(blob) > MAX_UPDATE_BYTES * 8:
+        raise HTTPException(413, "snapshot too large")
+    room = _room_or_error(db, room_id)
+    existing = db.get(RelayRoomSnapshot, room_id)
+    if existing is not None and covers <= existing.covers_through_seq:
+        # Stale or duplicate compaction (another client got there first).
+        return Response(status_code=204)
+    if existing is None:
+        db.add(RelayRoomSnapshot(room_id=room_id, blob=blob, covers_through_seq=covers))
+    else:
+        existing.blob = blob
+        existing.covers_through_seq = covers
+        existing.created_at = datetime.utcnow()
+    db.query(RelayRoomUpdate).filter(
+        RelayRoomUpdate.room_id == room_id, RelayRoomUpdate.id <= covers
+    ).delete(synchronize_session=False)
+    # Recompute stored size from what actually remains (base64 length is a
+    # fine proxy for the cap's purpose).
+    from sqlalchemy import func
+
+    remaining = (
+        db.query(func.coalesce(func.sum(func.length(RelayRoomUpdate.blob)), 0))
+        .filter(RelayRoomUpdate.room_id == room_id)
+        .scalar()
+    )
+    room.bytes_used = int(remaining) + len(blob)
+    room.last_activity = datetime.utcnow()
+    db.commit()
+    return Response(status_code=204)
+
+
+@app.post(
+    "/relay/rooms/{room_id}/presence",
+    status_code=202,
+    dependencies=[Depends(require_relay_token)],
+)
+async def post_room_presence(room_id: str, request: Request) -> JSONResponse:
+    """Ephemeral fan-out only — never stored, never touches the DB (this
+    is the hot path at cursor-move rates). An unknown room simply has no
+    open streams, so the frame goes nowhere."""
+    raw = await request.body()
+    if not raw:
+        raise HTTPException(400, "empty presence")
+    if len(raw) > 64 * 1024:
+        raise HTTPException(413, "presence too large")
+    b64 = base64.b64encode(raw).decode("ascii")
+    _push_to_room(room_id, {"t": "p", "blob": b64})
+    return JSONResponse({}, status_code=202)
+
+
+@app.get("/relay/rooms/{room_id}/stream", dependencies=[Depends(require_relay_token)])
+async def stream_room(
+    request: Request,
+    room_id: str,
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """SSE: `event: hello` with the current cursor, then update/presence
+    frames. The participant cap is enforced here — holding a stream IS
+    being in the room."""
+    room = db.get(RelayRoom, room_id)
+    if room is None:
+        raise HTTPException(404, "no such room")
+    if room.tombstoned:
+        raise HTTPException(410, "session ended")
+    open_count = len(_room_streams.get(room_id, set()))
+    if open_count >= MAX_STREAMS_PER_ROOM:
+        raise HTTPException(409, "room is full")
+    last_seq = _room_last_seq(db, room_id)
+    room.last_activity = datetime.utcnow()
+    db.commit()
+
+    queue: "asyncio.Queue[dict]" = asyncio.Queue(maxsize=STREAM_QUEUE_MAX)
+    _room_streams.setdefault(room_id, set()).add(queue)
+
+    async def gen() -> AsyncIterator[str]:
+        try:
+            yield f'event: hello\ndata: {{"lastSeq":{last_seq}}}\n\n'
+            while True:
+                if await request.is_disconnected():
+                    return
+                try:
+                    frame = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_SECONDS)
+                    yield f"data: {json.dumps(frame, separators=(',', ':'))}\n\n"
+                    if frame.get("t") == "end":
+                        return
+                except asyncio.TimeoutError:
+                    yield ": hb\n\n"
+        finally:
+            peers = _room_streams.get(room_id)
+            if peers is not None:
+                peers.discard(queue)
+                if not peers:
+                    _room_streams.pop(room_id, None)
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.delete(
+    "/relay/rooms/{room_id}",
+    status_code=204,
+    dependencies=[Depends(require_relay_token)],
+)
+def delete_room(room_id: str, db: Session = Depends(get_db)) -> Response:
+    room = db.get(RelayRoom, room_id)
+    if room is None:
+        raise HTTPException(404, "no such room")
+    if not room.tombstoned:
+        room.tombstoned = True
+        room.bytes_used = 0
+        room.last_activity = datetime.utcnow()
+        db.query(RelayRoomUpdate).filter(RelayRoomUpdate.room_id == room_id).delete(
+            synchronize_session=False
+        )
+        db.query(RelayRoomSnapshot).filter(RelayRoomSnapshot.room_id == room_id).delete(
+            synchronize_session=False
+        )
+        db.commit()
+        if _loop is not None:
+            _loop.call_soon_threadsafe(_push_to_room, room_id, {"t": "end"})
     return Response(status_code=204)

@@ -7,6 +7,41 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Collab M2 (coediting branch): rooms protocol + client sync core**
+  (`relay/server.py` rooms endpoints; `src/editor/collab/` NEW —
+  `collab-crypto.ts`, `room-client.ts`, `collab-session.ts`;
+  `loro-crdt` 1.13.6 + `loro-prosemirror` 0.4.3 exact-pinned;
+  `tests/collab/` NEW, 30 tests). Not user-facing yet — no UI is wired;
+  everything is dormant modules + tests.
+  - *Server*: durable rooms on the self-hosted relay — create,
+    append-update (server-assigned delivery cursor `seq`), cursor-paged
+    fetch with snapshot fast-path, client-uploaded encrypted snapshot
+    compaction (server truncates the log it cannot read), SSE stream
+    (hello{lastSeq} / update / presence / end frames), ephemeral
+    presence fan-out (zero-DB hot path), tombstoned deletion (410 ≠
+    404), 10-stream participant cap at connect, ≥7-day idle GC. Sync
+    handlers per the overload-hardening pattern; fan-out scheduled onto
+    the loop with call_soon_threadsafe.
+  - *Client*: AES-256-GCM room crypto (WebCrypto; 12-byte IV ‖ ct+tag;
+    `cmshare1.<roomId>.<key>` share codes); renderer-portable rooms REST
+    client + SSE `RoomStream` (getReader-based sibling of the desktop
+    `relay-stream.ts`, same backoff+jitter discipline, 410→ended,
+    409→full); `CollabSession` conducting LoroDoc ↔ transport — outbound
+    debounce-flush via version-vector diff export, synchronous
+    export-before-import so remote ops are never echoed, offline send
+    queue with retry, hello-triggered + periodic catch-up (heals shed
+    push frames via Loro's causal-dependency queue), host-side snapshot
+    compaction cadence, seed state as the room's first regular update.
+  - *Tests*: crypto round-trip/tamper (6), transport incl. 10-cap and
+    outage reconnect (6), end-to-end two-editor sessions over the
+    in-process mock relay — seed propagation, live convergence, the
+    travel-day offline/reconnect cycle, the P1 highlight-union
+    regression through the full encrypted stack, session end (5) — plus
+    the promoted bake-off suites: Peritext criteria + structural merges
+    with leader-gated repair (12; concurrent-creation boundary
+    insertion documented as peer-id tie-broken, asserted for
+    convergence not inclusion) and a 15-seed 3-peer CRDT fuzz (1).
+
 - **Collab groundwork (M0): sync-origin meta contract, normalizer loop
   guard, deterministic doc repair** (`sync-origin.ts` NEW,
   `normalizer-guard.ts` NEW, `doc-repair.ts` NEW; `read-mode-plugin.ts`,
