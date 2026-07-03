@@ -21,7 +21,7 @@ import { showToast } from '../toast.js';
 import { promptForText } from '../text-prompt.js';
 import { markSyncOrigin } from '../sync-origin.js';
 import { setCollabPluginSource, setCollabTransactionTagger } from './collab-hooks.js';
-import { collabEnabled } from './collab-gate.js';
+import { collabEnabled, collabDevRelay } from './collab-gate.js';
 import { decodeShareCode } from './collab-crypto.js';
 import { RoomsClient } from './room-client.js';
 import { CollabSession } from './collab-session.js';
@@ -62,8 +62,11 @@ function updateChip(status: { connected: boolean; queuedUpdates: number } | null
 }
 
 function relayClient(): RoomsClient | null {
-  const url = settings.get('pairingRelayUrl').trim().replace(/\/+$/, '');
-  const token = settings.get('pairingRelayToken').trim();
+  // Settings win; the dev env fallback lets the web dev build reach a
+  // relay without the Electron-only Card Sharing fields.
+  const dev = collabDevRelay();
+  const url = (settings.get('pairingRelayUrl').trim() || dev?.url || '').replace(/\/+$/, '');
+  const token = settings.get('pairingRelayToken').trim() || dev?.token || '';
   if (!url || !token) return null;
   return new RoomsClient({ baseUrl: () => url, token: () => token });
 }

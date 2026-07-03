@@ -48,8 +48,32 @@ export default defineConfig(({ command }) => {
       process.env['VITE_BASE'] ??
       (command === 'build' ? '/cardmirror/' : '/'),
     resolve: { alias: { '@cardcutter/browser': cardCutterTarget } },
-    plugins: enablePWA
-      ? [
+    plugins: [
+      // Dev-only: loro-crdt's loader statically imports its .wasm as an
+      // ES module, which the dev server rejects ("ESM integration
+      // proposal for Wasm" unsupported). The PRODUCTION build already
+      // resolves that import to a URL-exporting asset module, and the
+      // loader's normalizer handles the {default: url} shape by
+      // fetch+instantiate — so dev resolves the same import to `?url`.
+      ...(command === 'serve'
+        ? [
+            {
+              name: 'cardmirror:loro-wasm-url-dev',
+              enforce: 'pre' as const,
+              resolveId(source: string) {
+                if (source.endsWith('loro_wasm_bg.wasm')) {
+                  return (
+                    path.resolve(__dirname, 'node_modules/loro-crdt/bundler/loro_wasm_bg.wasm') +
+                    '?url'
+                  );
+                }
+                return null;
+              },
+            },
+          ]
+        : []),
+      ...(enablePWA
+        ? [
           VitePWA({
             // `prompt` (not `autoUpdate`): never force-reload a running editor
             // session — a new version activates on the next launch, so unsaved
@@ -87,10 +111,17 @@ export default defineConfig(({ command }) => {
               cleanupOutdatedCaches: true,
             },
           }),
-        ]
-      : [],
+          ]
+        : []),
+    ],
     server: {
       fs: { allow: [path.resolve(__dirname), path.resolve(__dirname, '../card-cutter')] },
     },
+    // loro-crdt's wasm loader uses top-level await, which the dev-time
+    // dependency pre-bundler (esbuild, pre-es2022 targets) rejects.
+    // Excluding the pair serves them as native ESM in dev — modern dev
+    // browsers handle TLA fine, and production goes through rollup,
+    // which already builds them (into their own lazy chunks).
+    optimizeDeps: { exclude: ['loro-crdt', 'loro-prosemirror'] },
   };
 });

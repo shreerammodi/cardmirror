@@ -73,6 +73,9 @@ Env:
   DATABASE_URL   required — Postgres, e.g.
                  postgresql://user:pass@localhost:5432/relay
   PORT           optional (default 8000; the Dockerfile wires this up).
+  RELAY_CORS_ORIGINS  optional (default "*") — comma-separated allowed
+                 origins for browser/PWA collab clients. "*" is safe
+                 here (the auth is a bearer header, not a cookie).
 
 See README.md for one-command deployment with docker compose.
 """
@@ -91,6 +94,7 @@ from datetime import datetime, timedelta, timezone
 from typing import AsyncIterator, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy import BigInteger, Boolean, Column, DateTime, Index, String, create_engine
 from sqlalchemy.dialects.postgresql import JSONB
@@ -287,6 +291,22 @@ async def _lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="CardMirror relay", lifespan=_lifespan)
+
+# CORS: collaboration sessions are driven from the browser/renderer via
+# `fetch` (the mailbox card-sharing path runs in Electron's main process,
+# which is not a browser and never triggers CORS — hence this was not
+# needed before). A web/PWA client at a different origin needs the relay
+# to answer CORS preflights. The bearer token is a header, not a cookie,
+# so credential-less "*" is safe; lock it down with RELAY_CORS_ORIGINS
+# (comma-separated) when serving a known front end.
+_cors = os.getenv("RELAY_CORS_ORIGINS", "*").strip()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"] if _cors == "*" else [o.strip() for o in _cors.split(",") if o.strip()],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.exception_handler(SATimeoutError)
