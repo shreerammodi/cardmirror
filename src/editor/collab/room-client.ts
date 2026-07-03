@@ -21,6 +21,11 @@ import { base64ToBytes } from './collab-crypto.js';
 
 export type RoomsFetch = typeof fetch;
 
+/** Browser `window.fetch` throws "Illegal invocation" when called
+ *  unbound (assigned to a variable and invoked with `this` ≠ window);
+ *  Node's fetch does not care. Wrapping keeps both happy. */
+const boundFetch: RoomsFetch = (input, init) => fetch(input, init);
+
 /** Typed transport failure; `status` is 0 for network-level errors. */
 export class RoomsError extends Error {
   constructor(
@@ -57,7 +62,7 @@ export class RoomsClient {
   constructor(readonly opts: RoomsClientOptions) {}
 
   private get fetchImpl(): RoomsFetch {
-    return this.opts.fetchImpl ?? fetch;
+    return this.opts.fetchImpl ?? boundFetch;
   }
 
   private headers(extra?: Record<string, string>): Record<string, string> {
@@ -247,7 +252,7 @@ export class RoomStream {
   private async connectLoop(): Promise<void> {
     if (this.stopped) return;
     this.controller = new AbortController();
-    const fetchImpl = this.opts.fetchImpl ?? fetch;
+    const fetchImpl = this.opts.fetchImpl ?? boundFetch;
     try {
       const res = await fetchImpl(`${this.opts.baseUrl()}/rooms/${this.opts.roomId}/stream`, {
         method: 'GET',
