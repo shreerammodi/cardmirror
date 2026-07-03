@@ -5,7 +5,7 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
-## Unreleased
+## 0.1.0-beta.7 — 2026-07-02
 
 - **Card sharing v2 transport: SSE push + self-hosted relays**
   (`relay-stream.ts` NEW, `pairing-ipc.ts`, `preload.ts`,
