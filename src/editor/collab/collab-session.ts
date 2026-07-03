@@ -228,6 +228,10 @@ export class CollabSession {
         onFull: () => {
           this.callbacks.onFull?.();
         },
+        onDown: () => {
+          this.connected = false;
+          this.emitStatus();
+        },
       },
     });
     this.stream.start();
@@ -295,13 +299,22 @@ export class CollabSession {
       while (this.outQueue.length > 0) {
         const blob = this.outQueue[0]!;
         try {
-          const seq = await this.client.postUpdate(this.roomId, await encryptBlob(this.key, blob));
+          await this.client.postUpdate(this.roomId, await encryptBlob(this.key, blob));
           this.outQueue.shift();
           this.postedCount++;
           this.sendRetryMs = 1000;
-          this.connected = true;
-          if (seq > this.lastSeq) this.lastSeq = seq;
+          // Deliberately NOT advancing lastSeq to our own posted seq:
+          // the cursor means "I have imported everything ≤ this", and a
+          // peer's concurrent post can hold a LOWER seq we haven't seen
+          // — claiming it would skip their updates forever, and new
+          // edits depending on them would park in the causal-deps
+          // queue. Catch-up re-fetching our own blobs is a no-op.
           this.emitStatus();
+          // A successful send proves the relay is reachable; skip the
+          // stream's remaining backoff so push delivery resumes now.
+          if (this.stream && this.stream.running && !this.stream.connected) {
+            this.stream.restart();
+          }
           if (this.role === 'host' && this.postedCount % this.snapshotEvery === 0) {
             void this.uploadSnapshot();
           }
@@ -354,10 +367,16 @@ export class CollabSession {
       return;
     }
     this.flush(); // capture local diff before import (see module doc)
-    this.loroDoc.importBatch([plain]);
+    const status = this.loroDoc.importBatch([plain]);
     this.lastSentVersion = this.loroDoc.version();
     this.lastSeq = u.seq;
     this.sendRetryMs = 1000;
+    // Ops whose causal dependencies we lack (a shed push frame, or a
+    // window the cursor skipped) sit pending until the deps arrive —
+    // fetch them now instead of waiting for the periodic catch-up.
+    if (status.pending && status.pending.size > 0) {
+      void this.catchUp();
+    }
   }
 
   /** Fetch and import everything after our cursor (join, reconnect,
@@ -366,6 +385,7 @@ export class CollabSession {
     if (this.ended || this.catchUpRunning) return;
     this.catchUpRunning = true;
     try {
+      let pendingLeft = false;
       for (;;) {
         const page = await this.client.fetchUpdates(this.roomId, this.lastSeq);
         const blobs: Uint8Array[] = [];
@@ -382,11 +402,33 @@ export class CollabSession {
         }
         if (blobs.length > 0) {
           this.flush();
+          const status = this.loroDoc.importBatch(blobs);
+          this.lastSentVersion = this.loroDoc.version();
+          pendingLeft = !!status.pending && status.pending.size > 0;
+        }
+        if (page.lastSeq > this.lastSeq) this.lastSeq = page.lastSeq;
+        if (!page.more) break;
+      }
+      if (pendingLeft) {
+        // Deps live below our cursor (skipped or compacted) — one full
+        // resync from zero: the snapshot fast-path bounds the size, and
+        // importing already-known history is a no-op.
+        const page = await this.client.fetchUpdates(this.roomId, 0);
+        const blobs: Uint8Array[] = [];
+        if (page.snapshot) blobs.push(await decryptBlob(this.key, page.snapshot.blob));
+        for (const u of page.updates) {
+          try {
+            blobs.push(await decryptBlob(this.key, u.blob));
+          } catch {
+            /* skip undecryptable frame */
+          }
+        }
+        if (blobs.length > 0) {
+          this.flush();
           this.loroDoc.importBatch(blobs);
           this.lastSentVersion = this.loroDoc.version();
         }
         if (page.lastSeq > this.lastSeq) this.lastSeq = page.lastSeq;
-        if (!page.more) break;
       }
       this.connected = true;
       this.emitStatus();

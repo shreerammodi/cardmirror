@@ -156,6 +156,10 @@ export interface RoomStreamCallbacks {
   onEnded: () => void;
   /** Room at participant capacity (409). Terminal. */
   onFull: () => void;
+  /** A previously-connected stream dropped; reconnection with backoff
+   *  is already underway. Lets the session mark itself offline instead
+   *  of discovering the outage on the next failed send. */
+  onDown?: () => void;
 }
 
 export interface RoomStreamOptions {
@@ -174,6 +178,7 @@ export class RoomStream {
   private stopped = true;
   private backoffMs: number;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private helloed = false;
 
   constructor(private readonly opts: RoomStreamOptions) {
     this.backoffMs = opts.minBackoffMs ?? 1000;
@@ -181,6 +186,12 @@ export class RoomStream {
 
   get running(): boolean {
     return !this.stopped;
+  }
+
+  /** True while the current connection has received its hello (i.e.
+   *  live push delivery is actually flowing). */
+  get connected(): boolean {
+    return !this.stopped && this.helloed;
   }
 
   start(): void {
@@ -209,6 +220,10 @@ export class RoomStream {
 
   private scheduleRetry(): void {
     if (this.stopped) return;
+    if (this.helloed) {
+      this.helloed = false;
+      this.opts.callbacks.onDown?.();
+    }
     const max = this.opts.maxBackoffMs ?? 60_000;
     // ±30% jitter so a fleet doesn't reconnect in lockstep.
     const jitter = 0.7 + Math.random() * 0.6;
@@ -223,6 +238,7 @@ export class RoomStream {
   private dispatchFrame(eventName: string, dataText: string): void {
     if (eventName === 'hello') {
       this.backoffMs = this.opts.minBackoffMs ?? 1000;
+      this.helloed = true;
       let lastSeq = 0;
       try {
         const parsed = JSON.parse(dataText || '{}') as { lastSeq?: number };
