@@ -12207,6 +12207,57 @@ body.pmd-multi-doc .pmd-cardcutter-trim {
   color: var(--pmd-c-text-muted);
 }
 
+/* Partner presence cursor (loro-prosemirror's widget): a colored caret
+   with a name flag that fades to a sliver when idle. Border color is
+   set inline per peer. */
+.ProseMirror-loro-cursor {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 2px solid;
+  word-break: normal;
+  pointer-events: none;
+}
+.ProseMirror-loro-cursor > div {
+  position: absolute;
+  top: -1.35em;
+  left: -2px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #fff;
+  padding: 0 4px;
+  border-radius: 3px 3px 3px 0;
+  white-space: nowrap;
+  user-select: none;
+  opacity: 0.35;
+  transition: opacity 0.25s ease;
+}
+.ProseMirror:hover .ProseMirror-loro-cursor > div,
+.ProseMirror-loro-cursor:hover > div {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ProseMirror-loro-cursor > div {
+    transition: none;
+  }
+}
+
+/* Partner's AI lease advertisement (§4.6, non-enforcing): a quiet
+   dashed underline + a small tag; advisory only, edits stay allowed. */
+.pmd-collab-lease-ad {
+  border-bottom: 2px dashed var(--pmd-c-accent);
+  opacity: 0.9;
+}
+.pmd-collab-lease-ad-tag {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--pmd-c-accent);
+  user-select: none;
+  vertical-align: super;
+  margin-right: 2px;
+}
+
 /* Session-invite rows act, they don't insert: a compact Join button in
    the accent color where the drag affordance would be. */
 .pmd-receive-row-join {

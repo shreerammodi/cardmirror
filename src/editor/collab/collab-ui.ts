@@ -21,6 +21,7 @@ import { settings } from '../settings.js';
 import { showToast } from '../toast.js';
 import { promptForText, promptForChoice } from '../text-prompt.js';
 import { markSyncOrigin } from '../sync-origin.js';
+import { readModePlugin } from '../read-mode-plugin.js';
 import { setCollabPluginSource, setCollabTransactionTagger } from './collab-hooks.js';
 import { getElectronHost } from '../host/index.js';
 import { ensureBakedRelay, relayClient } from './collab-relay.js';
@@ -30,6 +31,7 @@ import { buildRoomInviteItem, ROOM_INVITE_MIN_VERSION } from '../pairing/room-in
 import { collabInvariantHealPlugin } from './collab-invariants.js';
 import { installCommentsSync, type CommentsSyncHandle } from './collab-comments.js';
 import { attachSessionPersistence, type PersistHandle } from './collab-persist.js';
+import { installCursorPresence, type CursorsHandle } from './collab-cursors.js';
 import { loadSessionRecord, loadPrefetch, deletePrefetch } from './collab-store.js';
 import { importRoomKey, decryptBlob } from './collab-crypto.js';
 import { setCommentIdSessionMode } from '../comments-plugin.js';
@@ -90,6 +92,7 @@ function collabTagger(tr: Parameters<typeof markSyncOrigin>[0]): void {
 
 let commentsSync: CommentsSyncHandle | null = null;
 let persist: PersistHandle | null = null;
+let cursors: CursorsHandle | null = null;
 let wakeCleanup: (() => void) | null = null;
 
 /** Wake-from-sleep / network-return hooks (M3): a resumed laptop's
@@ -114,6 +117,7 @@ function installSeams(session: CollabSession, deps: CollabUiDeps): void {
   // list resumes from it). Cleared only on explicit end/leave or a
   // remote tombstone — a crash leaving it behind is the feature.
   persist = attachSessionPersistence(session, active!.shareCode, sessionDocTitle);
+  cursors = installCursorPresence(session, () => deps.getView());
   // Concurrent new comments must not collide on the shared map key —
   // both peers advance the same small-int counter otherwise.
   setCommentIdSessionMode(true);
@@ -123,10 +127,20 @@ function installSeams(session: CollabSession, deps: CollabUiDeps): void {
       LoroUndoPlugin({ doc: session.loroDoc }),
       collabInvariantHealPlugin(),
       commentsSync!.plugin,
+      ...(cursors?.plugins() ?? []),
     ],
     ownsUndo: () => true,
-    undo: loroUndo,
-    redo: loroRedo,
+    // Read-mode clamp (M4): swallow undo/redo entirely while reading.
+    // The Loro undo manager can't be depth-bounded the way
+    // prosemirror-history is (readModeAwareUndo's baseUndoDepth trick),
+    // and its transactions carry the binding meta → sync-origin →
+    // they'd sail through the read-mode lock and revert real edits
+    // from under a "reading" user. Reading-marker drops lose keyboard
+    // undo in sessions; markers remain removable by click.
+    undo: (state, dispatch, view) =>
+      readModePlugin.getState(state)?.on ? true : loroUndo(state, dispatch, view),
+    redo: (state, dispatch, view) =>
+      readModePlugin.getState(state)?.on ? true : loroRedo(state, dispatch, view),
   });
 }
 
@@ -137,6 +151,8 @@ function clearSeams(keepRecord = false): void {
   wakeCleanup = null;
   commentsSync?.dispose();
   commentsSync = null;
+  cursors?.dispose();
+  cursors = null;
   setCommentIdSessionMode(false);
   // Terminal paths (explicit end/leave, remote tombstone, failed join)
   // drop the persisted record; a cancelled RESUME keeps it — the user
@@ -149,6 +165,7 @@ function clearSeams(keepRecord = false): void {
 function sessionCallbacks(deps: CollabUiDeps) {
   return {
     onStatus: (s: { connected: boolean; queuedUpdates: number }) => updateChip(s),
+    onPresence: (bytes: Uint8Array) => cursors?.applyRemote(bytes),
     onBacklogMerged: (count: number) => {
       // Merge-visibility (M3): a travel-day backlog just landed — say
       // so, instead of the doc silently reshaping under the user.

@@ -90,6 +90,16 @@ function isBypass(tr: Transaction): boolean {
 
 /** True when a non-bypass transaction would change content *inside* any
  *  live lease — length change at the interior, or a deleted boundary. */
+/** Live leased ranges (remapped positions), for advisory surfaces —
+ *  the collab session advertises them to the partner ("AI is editing
+ *  here", §4.6 non-enforcing). Read-only over the plugin state. */
+export function leasedRanges(state: EditorState): CoordRange[] {
+  return (coordinatorKey.getState(state)?.leases ?? []).map((l) => ({
+    from: l.positions[0]!,
+    to: l.positions[1]!,
+  }));
+}
+
 export function coordinatorBlocks(state: EditorState, tr: Transaction): boolean {
   if (!tr.docChanged || isBypass(tr) || isSyncOrigin(tr)) return false;
   const cs = coordinatorKey.getState(state);

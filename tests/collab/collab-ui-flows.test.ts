@@ -136,6 +136,17 @@ describe('collab UI flows through the editor seams', () => {
     const before = docText(hostView.state.doc);
     hostView.dispatch(hostView.state.tr.insertText('X', 2));
     expect(docText(hostView.state.doc)).toBe(before);
+
+    // M4 read-mode clamp: session undo/redo are swallowed while
+    // reading — Loro undo transactions carry the binding meta (→
+    // sync-origin) and would otherwise sail through the read-mode
+    // lock and revert real edits.
+    const src = collabPluginSource()!;
+    expect(src.undo(hostView.state, hostView.dispatch)).toBe(true);
+    expect(docText(hostView.state.doc)).toBe(before);
+    expect(src.redo(hostView.state, hostView.dispatch)).toBe(true);
+    expect(docText(hostView.state.doc)).toBe(before);
+
     hostView.dispatch(hostView.state.tr.setMeta(PMD_READ_MODE_TOGGLE, false));
 
     // Host ends the session: partner is notified, seams clear, chip hides.

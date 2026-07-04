@@ -7,6 +7,30 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Collab M4 (coediting branch): presence cursors, lease
+  advertisement, read-mode undo clamps** (`collab/collab-cursors.ts`
+  NEW, `collab-ui.ts`, `ai/edit-coordinator.ts`, `settings.ts`,
+  `style.css`, tests). Partners now see each other's live cursor and
+  selection: loro-prosemirror's ephemeral-cursor plugin does the
+  position math (PM selection → stable loro cursors → decorations);
+  our layer pipes its store over the room's encrypted presence channel
+  with a 1-byte frame type (0x01 cursor bytes, 0x02 lease ads),
+  throttled to ≤1 frame/120ms trailing-edge plus a 15s keepalive so a
+  reading partner doesn't expire out of the overlay. Per-peer
+  deterministic colors; name flag fades to a sliver until hover.
+  "Show partner cursors in sessions" settings row (default on; off =
+  doc still syncs, overlay hidden and yours stops broadcasting). AI
+  leases are advertised NON-enforcing (§4.6): while the coordinator
+  holds leases, their live ranges broadcast every 2s and render on the
+  partner as a dashed advisory underline + tag, remapped through local
+  edits between refreshes (raw-position advisory by design — exact when
+  converged, approximate under divergence, never blocking). New
+  `leasedRanges()` read API on the edit coordinator. Read-mode clamp:
+  session undo/redo are SWALLOWED while reading — Loro undo can't be
+  depth-bounded like prosemirror-history, and its transactions carry
+  the binding meta (→ sync-origin) so they'd bypass the read-mode lock
+  and revert real edits from under a reading user.
+
 - **Collab M3 (coediting branch): session persistence + offline
   resilience** (`collab/collab-store.ts` NEW, `collab-persist.ts` NEW,
   `collab-relay.ts` NEW, `collab-prefetch.ts` NEW, `collab-session.ts`,
