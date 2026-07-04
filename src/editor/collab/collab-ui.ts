@@ -10,8 +10,9 @@
  * transactions so read mode and the AI coordinator admit them), and
  * refresh the plugin stack through the injected reconfigure capability.
  *
- * M2 invite transport is the share code (clipboard); pairing-mailbox
- * invites layer on later without changing anything here.
+ * Invite transport: the share code (clipboard) and, on desktop, sealed
+ * pairing-mailbox invites (inviteStarredFlow / joinSessionWithCode via
+ * the Receive pill's Join).
  */
 
 import type { EditorView } from 'prosemirror-view';
@@ -21,6 +22,10 @@ import { showToast } from '../toast.js';
 import { promptForText } from '../text-prompt.js';
 import { markSyncOrigin } from '../sync-origin.js';
 import { setCollabPluginSource, setCollabTransactionTagger } from './collab-hooks.js';
+import { getElectronHost } from '../host/index.js';
+import { relayClient as pairingRelayClient } from '../pairing/relay-client.js';
+import { resolveStarredTarget } from '../pairing/send-to-starred.js';
+import { buildRoomInviteItem, ROOM_INVITE_MIN_VERSION } from '../pairing/room-invite.js';
 import { collabInvariantHealPlugin } from './collab-invariants.js';
 import { installCommentsSync, type CommentsSyncHandle } from './collab-comments.js';
 import { setCommentIdSessionMode } from '../comments-plugin.js';
@@ -64,12 +69,31 @@ function updateChip(status: { connected: boolean; queuedUpdates: number } | null
       : 'Session: offline';
 }
 
+/** Baked relay endpoint from the desktop main process — resolved once,
+ *  used as the LAST fallback so packaged builds work with zero setup.
+ *  '' fields mean web edition / old preload / nothing baked. */
+let bakedRelay: { url: string; token: string } | null = null;
+async function ensureBakedRelay(): Promise<void> {
+  if (bakedRelay) return;
+  try {
+    bakedRelay = (await getElectronHost()?.collabRelayDefaults()) ?? { url: '', token: '' };
+  } catch {
+    bakedRelay = { url: '', token: '' };
+  }
+}
+
 function relayClient(): RoomsClient | null {
   // Settings win; the dev env fallback lets the web dev build reach a
-  // relay without the Electron-only Card Sharing fields.
+  // relay without the Electron-only Card Sharing fields; the baked
+  // desktop default (same base + token as card sharing) comes last.
   const dev = collabDevRelay();
-  const url = (settings.get('pairingRelayUrl').trim() || dev?.url || '').replace(/\/+$/, '');
-  const token = settings.get('pairingRelayToken').trim() || dev?.token || '';
+  const url = (
+    settings.get('pairingRelayUrl').trim() ||
+    dev?.url ||
+    bakedRelay?.url ||
+    ''
+  ).replace(/\/+$/, '');
+  const token = settings.get('pairingRelayToken').trim() || dev?.token || bakedRelay?.token || '';
   if (!url || !token) return null;
   return new RoomsClient({ baseUrl: () => url, token: () => token });
 }
@@ -155,6 +179,7 @@ export async function startSessionFlow(deps: CollabUiDeps): Promise<void> {
     showToast('Already in a session — end or leave it first');
     return;
   }
+  await ensureBakedRelay();
   const client = relayClient();
   if (!client) {
     showToast('Set the relay URL and token in Settings → Card Sharing first');
@@ -190,21 +215,29 @@ export async function startSessionFlow(deps: CollabUiDeps): Promise<void> {
 
 export async function joinSessionFlow(deps: CollabUiDeps): Promise<void> {
   if (!collabEnabled()) return;
-  if (active) {
-    showToast('Already in a session — end or leave it first');
-    return;
-  }
-  const client = relayClient();
-  if (!client) {
-    showToast('Set the relay URL and token in Settings → Card Sharing first');
-    return;
-  }
   const code = await promptForText({
     message: 'Paste the share code from your partner',
     placeholder: 'cmshare1.…',
     okLabel: 'Join',
   });
   if (!code) return;
+  await joinSessionWithCode(deps, code);
+}
+
+/** Join with a code in hand — the prompt flow above and the Receive
+ *  pill's invite Join both land here. */
+export async function joinSessionWithCode(deps: CollabUiDeps, code: string): Promise<void> {
+  if (!collabEnabled()) return;
+  if (active) {
+    showToast('Already in a session — end or leave it first');
+    return;
+  }
+  await ensureBakedRelay();
+  const client = relayClient();
+  if (!client) {
+    showToast('Set the relay URL and token in Settings → Card Sharing first');
+    return;
+  }
   const decoded = decodeShareCode(code);
   if (!decoded) {
     showToast('That does not look like a share code');
@@ -244,6 +277,55 @@ export async function copyShareCodeFlow(): Promise<void> {
     () => false,
   );
   showToast(ok ? 'Share code copied' : 'Could not copy the share code');
+}
+
+/** Current doc title for invite labels: document.title is
+ *  `${filename} — CardMirror` in the single-doc windows sessions run
+ *  in ('CardMirror' when untitled → ''). */
+function sessionDocTitle(): string {
+  const t = document.title;
+  const cut = t.lastIndexOf(' — CardMirror');
+  if (cut > 0) return t.slice(0, cut);
+  return t === 'CardMirror' ? '' : t;
+}
+
+/** Send a session invite to the starred partner/group through the
+ *  pairing mailbox (sealed box; version-floored so pre-invite clients
+ *  get the update-required toast instead of a dead card row). */
+export async function inviteStarredFlow(): Promise<void> {
+  if (!collabEnabled()) return;
+  if (!active) {
+    showToast('No active session — start one first');
+    return;
+  }
+  if (!settings.get('pairingEnabled')) {
+    showToast('Card sharing is off — invites travel through it');
+    return;
+  }
+  const target = resolveStarredTarget(
+    settings.get('pairingStarred'),
+    settings.get('pairingPartners'),
+    settings.get('pairingGroups'),
+  );
+  if (!target) {
+    showToast('Star a partner or group in the Send pill first');
+    return;
+  }
+  if (target.codes.length === 0) {
+    showToast('The starred group has no recipients yet');
+    return;
+  }
+  const item = buildRoomInviteItem({
+    shareCode: active.shareCode,
+    title: sessionDocTitle(),
+  });
+  const res = await pairingRelayClient.send(target.codes, item, {
+    via: target.via,
+    minReceiverVersion: ROOM_INVITE_MIN_VERSION,
+  });
+  if (res.fail === 0) showToast(`Invited ${target.label} ✓`);
+  else if (res.ok === 0) showToast(`Couldn't reach ${target.label}`);
+  else showToast(`Invited ${target.label} (${res.fail} failed)`);
 }
 
 export async function endSessionFlow(deps: CollabUiDeps): Promise<void> {

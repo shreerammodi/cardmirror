@@ -7,6 +7,29 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Collab M2 (coediting branch): pairing-mailbox session invites +
+  baked relay defaults** (`pairing/room-invite.ts` NEW,
+  `receive-pill-ui.ts`, `relay-client.ts`, `collab-ui.ts`,
+  `collab-hooks.ts`, ribbon registration, desktop `pairing-ipc.ts` +
+  `preload.ts` + `electron-host.ts`). An invite is a normal sealed
+  pairing message whose item carries `{shareCode, title}` under type
+  `room-invite` — the payload rides `sliceJson`, which main passes
+  through verbatim, so the desktop pipeline needed only a per-message
+  `minReceiverVersion` override (invites declare the first
+  invite-aware version; pre-invite clients drop them with the existing
+  update-required toast instead of rendering a dead card row). New
+  "Invite Starred Partner to Session" ribbon command sends the active
+  session's share code to the starred partner/group; the Receive pill
+  renders invite rows ("«name» invited you to collaborate on «doc»")
+  with a Join button that hands the code to the lazy collab module
+  through a new collab-hooks seam (invite rows don't drag/insert; the
+  code is consumed on join). Rooms clients also gain a LAST-fallback
+  relay endpoint: the desktop main process exposes its baked relay
+  base + shared token over a new `host:collab-relay-defaults` IPC, so
+  packaged builds can host/join sessions with zero settings setup
+  (resolution stays settings → dev env → baked). Deferred: invite
+  seed-snapshot prefetch (plan §4.1) lands with M3 session persistence.
+
 - **Collab M2 (coediting branch): comment-thread sync**
   (`collab/collab-comments.ts` NEW, `comments-plugin.ts`,
   `collab-ui.ts`, tests). Field symptom: comment paint synced (the

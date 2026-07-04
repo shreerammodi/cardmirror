@@ -47,3 +47,17 @@ export function setCollabPluginSource(src: CollabPluginSource | null): void {
 export function collabPluginSource(): CollabPluginSource | null {
   return pluginSource;
 }
+
+/** Invite-join seam: the Receive pill (always-loaded pairing UI) hands a
+ *  share code from a `room-invite` inbox item to the lazily-loaded collab
+ *  module. Registered from editor/index.ts alongside the other collab
+ *  ribbon wiring; null while the collab gate is closed. */
+let inviteJoiner: ((shareCode: string) => void) | null = null;
+
+export function setCollabInviteJoiner(fn: ((shareCode: string) => void) | null): void {
+  inviteJoiner = fn;
+}
+
+export function collabInviteJoiner(): ((shareCode: string) => void) | null {
+  return inviteJoiner;
+}

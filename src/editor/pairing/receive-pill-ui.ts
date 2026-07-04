@@ -20,6 +20,9 @@ import { typeBadge, dropzoneDragLevel } from '../dropzone-ui.js';
 import { settings } from '../settings.js';
 import { inboxStore, type InboxItem } from './inbox-store.js';
 import { insertReceivedItem } from './inbox-insert.js';
+import { parseRoomInvite } from './room-invite.js';
+import { collabEnabled } from '../collab/collab-gate.js';
+import { collabInviteJoiner } from '../collab/collab-hooks.js';
 
 interface ReceivePillMountOptions {
   parent: HTMLElement;
@@ -231,6 +234,8 @@ export class ReceivePillController {
   }
 
   private renderRow(item: InboxItem): HTMLLIElement {
+    const invite = parseRoomInvite(item);
+    if (invite) return this.renderInviteRow(item, invite);
     const row = document.createElement('li');
     row.className = 'pmd-receive-row';
     if (!item.read) row.classList.add('pmd-receive-row-unread');
@@ -281,6 +286,71 @@ export class ReceivePillController {
       window.addEventListener('pointerup', this.onDragOutPointerUp);
       e.preventDefault();
     });
+
+    return row;
+  }
+
+  /** A session invite: not draggable/insertable — its action is Join.
+   *  Old clients never see these rows (the envelope's version floor
+   *  drops the message in main with the update toast); a client with
+   *  the collab gate closed shows the row without the Join button. */
+  private renderInviteRow(
+    item: InboxItem,
+    invite: { shareCode: string; title: string },
+  ): HTMLLIElement {
+    const row = document.createElement('li');
+    row.className = 'pmd-receive-row pmd-receive-row-invite';
+    if (!item.read) row.classList.add('pmd-receive-row-unread');
+
+    const badge = document.createElement('span');
+    badge.className = 'pmd-dropzone-row-type pmd-dropzone-row-type-generic';
+    badge.textContent = 'SESSION';
+    row.appendChild(badge);
+
+    const main = document.createElement('span');
+    main.className = 'pmd-receive-row-main';
+    const label = document.createElement('span');
+    label.className = 'pmd-receive-row-label';
+    label.textContent = invite.title
+      ? `Invited you to collaborate on “${invite.title}”`
+      : 'Invited you to a collaboration session';
+    label.title = label.textContent;
+    main.appendChild(label);
+    const meta = document.createElement('span');
+    meta.className = 'pmd-receive-row-meta';
+    meta.textContent = `${resolveSender(item)} · ${relTime(item.receivedAt)}`;
+    meta.title = meta.textContent;
+    main.appendChild(meta);
+    row.appendChild(main);
+
+    const joiner = collabEnabled() ? collabInviteJoiner() : null;
+    if (joiner) {
+      const join = document.createElement('button');
+      join.type = 'button';
+      join.className = 'pmd-receive-row-join';
+      join.textContent = 'Join';
+      join.title = 'Join the collaboration session';
+      join.addEventListener('click', (e) => {
+        e.stopPropagation();
+        joiner(invite.shareCode);
+        // Consumed on use: a share code is a session credential, not a
+        // card to keep around.
+        void inboxStore.remove(item.id);
+      });
+      row.appendChild(join);
+    }
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'pmd-dropzone-row-delete';
+    del.title = 'Remove';
+    del.setAttribute('aria-label', 'Remove');
+    setIcon(del, 'close');
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void inboxStore.remove(item.id);
+    });
+    row.appendChild(del);
 
     return row;
   }

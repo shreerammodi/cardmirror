@@ -4522,6 +4522,7 @@ export type RibbonCommandId =
   | 'collabStartSession'
   | 'collabJoinSession'
   | 'collabCopyShareCode'
+  | 'collabInviteStarred'
   | 'collabEndSession'
   | 'insertImage'
   | 'zoomIn'
@@ -4716,6 +4717,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'collabStartSession',
   'collabJoinSession',
   'collabCopyShareCode',
+  'collabInviteStarred',
   'collabEndSession',
   'insertImage',
   'zoomIn',
@@ -4877,6 +4879,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   collabStartSession: 'Start Collaboration Session',
   collabJoinSession: 'Join Collaboration Session',
   collabCopyShareCode: 'Copy Session Share Code',
+  collabInviteStarred: 'Invite Starred Partner to Session',
   collabEndSession: 'End or Leave Collaboration Session',
   insertImage: 'Insert Image at Cursor',
   zoomIn: 'Zoom In',
@@ -4945,6 +4948,7 @@ export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly st
   collabStartSession: ['collaborate', 'coedit', 'co-edit', 'share session', 'live edit'],
   collabJoinSession: ['join session', 'share code', 'coedit'],
   collabCopyShareCode: ['share code', 'invite code', 'session code'],
+  collabInviteStarred: ['invite partner', 'session invite', 'invite to session'],
   collabEndSession: ['leave session', 'stop session', 'stop collaborating'],
   repairParagraphIntegrity: [
     'paragraph integrity',
@@ -5149,6 +5153,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   collabStartSession: '',
   collabJoinSession: '',
   collabCopyShareCode: '',
+  collabInviteStarred: '',
   collabEndSession: '',
   newSpeechDocument: '',
   markActiveAsSpeech: '',
@@ -5368,6 +5373,7 @@ export interface RibbonContext {
   collabStartSession: () => void;
   collabJoinSession: () => void;
   collabCopyShareCode: () => void;
+  collabInviteStarred: () => void;
   collabEndSession: () => void;
   /** Open the file picker that prompts for an image to insert at
    *  the editor's current cursor. Pasting an image from the
@@ -5496,6 +5502,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   collabStartSession: () => {},
   collabJoinSession: () => {},
   collabCopyShareCode: () => {},
+  collabInviteStarred: () => {},
   collabEndSession: () => {},
   insertImage: () => {},
   zoomIn: () => {},
@@ -5998,6 +6005,12 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return (_state, dispatch) => {
         if (!dispatch) return true;
         ctx.collabCopyShareCode();
+        return true;
+      };
+    case 'collabInviteStarred':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.collabInviteStarred();
         return true;
       };
     case 'collabEndSession':

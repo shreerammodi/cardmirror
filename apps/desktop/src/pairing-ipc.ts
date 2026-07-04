@@ -704,6 +704,15 @@ export function registerPairingIpc(): void {
 
   // Mint a fresh keypair (invalidates the old code for partners). Returns the
   // new public code and re-points delivery at the new routing code.
+  // Rooms (collab sessions) run their HTTP/SSE client in the renderer;
+  // hand it the same baked relay base + shared token card sharing uses,
+  // as the LAST fallback after settings/dev-env. The rooms transport is
+  // E2E encrypted, so the renderer holding the shared bearer token is
+  // equivalent exposure to the web edition.
+  ipcMain.handle('host:collab-relay-defaults', (): { url: string; token: string } => {
+    return { url: relayUrl(), token: relayToken() };
+  });
+
   ipcMain.handle('host:pairing-regenerate-key', (): { ownCode: string } => {
     const ownCode = ks().regenerate();
     consumed.clear();
@@ -757,7 +766,12 @@ export function registerPairingIpc(): void {
     'host:pairing-send',
     async (
       _event,
-      payload: { recipientCodes: string[]; item: SendItem; via?: string },
+      payload: {
+        recipientCodes: string[];
+        item: SendItem;
+        via?: string;
+        minReceiverVersion?: string;
+      },
     ): Promise<{ ok: number; fail: number }> => {
       const targets = Array.isArray(payload?.recipientCodes)
         ? Array.from(new Set(payload.recipientCodes.filter((c) => typeof c === 'string' && c)))
@@ -772,11 +786,17 @@ export function registerPairingIpc(): void {
         targets.map(async (recipientPublicCode) => {
           try {
             // Seal everything-but-routing to the recipient's public key.
+            // Per-message floor (session invites) beats the config-level
+            // card floor; blank still means tolerant.
+            const floor =
+              typeof payload.minReceiverVersion === 'string' && payload.minReceiverVersion.trim()
+                ? payload.minReceiverVersion.trim()
+                : config.minReceiverVersion;
             const inner: InnerPayload = {
               schemaVersion: config.schemaVersion,
               // Omit when blank so the payload stays minimal and older receivers
               // never see an unexpected field; absent = tolerant.
-              minReceiverVersion: config.minReceiverVersion || undefined,
+              minReceiverVersion: floor || undefined,
               senderCode,
               senderName: config.displayName,
               via: payload.via,

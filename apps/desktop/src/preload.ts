@@ -555,6 +555,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('host:pairing-inbox-remove', id),
   pairingInboxClear: () => ipcRenderer.invoke('host:pairing-inbox-clear'),
   pairingInboxMarkAllRead: () => ipcRenderer.invoke('host:pairing-inbox-mark-read'),
+  collabRelayDefaults: () =>
+    ipcRenderer.invoke('host:collab-relay-defaults') as Promise<{ url: string; token: string }>,
   onPairingInboxChanged(handler: (items: PairingInboxItemIpc[]) => void): () => void {
     const listener = (_evt: unknown, items: PairingInboxItemIpc[]): void => handler(items);
     ipcRenderer.on('pairing:inbox-changed', listener);

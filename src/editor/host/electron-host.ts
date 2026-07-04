@@ -87,6 +87,9 @@ export interface PairingSendIpc {
   recipientCodes: string[];
   item: PairingSendItemIpc;
   via?: string;
+  /** Per-message compatibility floor override (session invites carry the
+   *  first invite-aware version; cards keep the config-level floor). */
+  minReceiverVersion?: string;
 }
 export interface PairingInboxItemIpc {
   id: string;
@@ -262,6 +265,11 @@ interface ElectronAPI {
   pairingInboxRemove?(id: string): Promise<void>;
   pairingInboxClear?(): Promise<void>;
   pairingInboxMarkAllRead?(): Promise<void>;
+  /** Baked relay endpoint from the main process (same base + shared
+   *  token card sharing uses) — the renderer-side rooms client falls
+   *  back to this when no settings/dev override is present. Optional so
+   *  an older preload degrades to settings-only resolution. */
+  collabRelayDefaults?(): Promise<{ url: string; token: string }>;
   onPairingInboxChanged?(handler: (items: PairingInboxItemIpc[]) => void): () => void;
   onPairingVersionMismatch?(
     handler: (info: {
@@ -756,6 +764,10 @@ export class ElectronHost implements Host {
 
   async pairingInboxMarkAllRead(): Promise<void> {
     await api().pairingInboxMarkAllRead?.();
+  }
+
+  async collabRelayDefaults(): Promise<{ url: string; token: string }> {
+    return (await api().collabRelayDefaults?.()) ?? { url: '', token: '' };
   }
 
   onPairingInboxChanged(handler: (items: PairingInboxItemIpc[]) => void): () => void {

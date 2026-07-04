@@ -130,7 +130,7 @@ import {
   readModeAwareUndo,
   readModeAwareRedo,
 } from './read-mode-plugin.js';
-import { tagCollabTransaction, collabPluginSource } from './collab/collab-hooks.js';
+import { tagCollabTransaction, collabPluginSource, setCollabInviteJoiner } from './collab/collab-hooks.js';
 import { learnHighlightPlugin, flashcardRangeAt } from './learn-highlight-plugin.js';
 import { repairHighlightPlugin } from './repair-highlight-plugin.js';
 import { aiWorkingPlugin } from './ai/ai-working-plugin.js';
@@ -946,6 +946,12 @@ let collabUiModule: Promise<typeof import('./collab/collab-ui.js')> | null = nul
 function loadCollabUi(): Promise<typeof import('./collab/collab-ui.js')> {
   return (collabUiModule ??= import('./collab/collab-ui.js'));
 }
+// Receive-pill invites: hand the share code from a `room-invite` inbox
+// row to the lazy collab module. Registered unconditionally (cheap
+// setter); the pill itself gates the Join button on collabEnabled().
+setCollabInviteJoiner((code) => {
+  void loadCollabUi().then((m) => m.joinSessionWithCode(collabDeps, code));
+});
 const collabDeps = {
   getView: () => view,
   // The blessed same-view plugin swap (same pattern as the keybinding
@@ -975,6 +981,9 @@ const ribbonContext: RibbonContext = {
   },
   collabCopyShareCode: () => {
     void loadCollabUi().then((m) => m.copyShareCodeFlow());
+  },
+  collabInviteStarred: () => {
+    void loadCollabUi().then((m) => m.inviteStarredFlow());
   },
   collabEndSession: () => {
     void loadCollabUi().then((m) => m.endSessionFlow(collabDeps));
@@ -3193,6 +3202,7 @@ const VIEWLESS_RIBBON_COMMANDS = new Set<RibbonCommandId>([
   'collabStartSession',
   'collabJoinSession',
   'collabCopyShareCode',
+  'collabInviteStarred',
   'collabEndSession',
 ]);
 
@@ -3217,6 +3227,7 @@ function runViewlessRibbon(id: RibbonCommandId): void {
     case 'collabStartSession': ribbonContext.collabStartSession(); return;
     case 'collabJoinSession': ribbonContext.collabJoinSession(); return;
     case 'collabCopyShareCode': ribbonContext.collabCopyShareCode(); return;
+    case 'collabInviteStarred': ribbonContext.collabInviteStarred(); return;
     case 'collabEndSession': ribbonContext.collabEndSession(); return;
     // Multi-pane workspace navigation. Each dispatches into the
     // shell via dynamic import — keeps single-doc bundles free
