@@ -106,7 +106,7 @@ new documents will open blank instead.
 
 The ribbon across the top is grouped into panels, left to right:
 
-- **File** — open, new, save, and the per-file autosave toggle.
+- **File** — open, new, save, and the autosave toggle.
 - **Structural styles** — Pocket, Hat, Block, Tag, Analytic, Undertag.
 - **Cite / Underline / Emphasis / Clear** — the inline marks.
 - **Colors** — highlight, background, and font color, each a split button
@@ -933,8 +933,7 @@ Assemble a speech document by sending cards into it:
    away, leaving what you'll deliver.
 
 The **dropzone** is a holding shelf: press **Mod-`` ` ``** to send a card
-there and pull it back later — useful for parking evidence while you
-rearrange.
+there and pull it back later — useful for parking common evidence temporarily.
 
 ### Saving a send doc
 
@@ -1418,12 +1417,11 @@ and headings instead of importing flat text.
 ### Saving
 
 - **Save (Mod-S)** / **Save As… (Mod-Shift-S)**.
-- **Autosave** is a per-file toggle in the ribbon; it remembers its
-  setting per document across close and reopen, and applies to `.cmir`
+- **Autosave** is a toggle in the ribbon that applies to `.cmir`
   files. The button shows whether autosave is actually protecting the
   current doc: a **solid filled** button means it's saving; a **hollow
   button with a dashed outline** means it's on but not firing (the doc
-  is `.docx`, or hasn't been saved once yet) — hover it for the reason.
+  is `.docx`, or hasn't been saved once yet) — hover over it for the reason.
   **(Desktop only.)**
 
 ### Save As presets
