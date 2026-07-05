@@ -23,6 +23,7 @@ import { promptForText, promptForChoice } from '../text-prompt.js';
 import { markSyncOrigin } from '../sync-origin.js';
 import { readModePlugin } from '../read-mode-plugin.js';
 import { setCollabPluginSource, setCollabTransactionTagger } from './collab-hooks.js';
+import { RoomsError } from './room-client.js';
 import { getElectronHost } from '../host/index.js';
 import { ensureBakedRelay, relayClient } from './collab-relay.js';
 import { relayClient as pairingRelayClient } from '../pairing/relay-client.js';
@@ -205,6 +206,24 @@ function sessionCallbacks(deps: CollabUiDeps) {
   };
 }
 
+/** Turn a relay failure into a user-actionable message. A 401 is the
+ *  gating/auth signal — for INITIATING a session (send-gated per §5.4:
+ *  paid initiates, free joins) that means a subscription is required;
+ *  for join/resume it means the relay rejected the credentials. The
+ *  401 is inherently ambiguous between "hosted relay, needs a paid
+ *  account" and "self-host, wrong token", so the message names both
+ *  without asserting which. Any non-401 keeps its raw reason. */
+export function relayFailureMessage(err: unknown, opts: { initiating: boolean; verb: string }): string {
+  if (err instanceof RoomsError && err.status === 401) {
+    return opts.initiating
+      ? 'Starting a collaboration session requires a Debate Decoded subscription — ' +
+          'connect your account in Settings → Card Sharing. (Self-hosting a relay? Check your relay token.)'
+      : 'The session relay rejected your credentials — connect your Debate Decoded account in ' +
+          'Settings → Card Sharing, or check your relay token if you self-host.';
+  }
+  return `Could not ${opts.verb}: ${(err as Error).message}`;
+}
+
 function guardReady(deps: CollabUiDeps): EditorView | null {
   if (!collabEnabled()) return null;
   const view = deps.getView();
@@ -255,7 +274,7 @@ export async function startSessionFlow(deps: CollabUiDeps): Promise<void> {
         : 'Session started — use "Copy Session Share Code" to invite',
     );
   } catch (err) {
-    showToast(`Could not start the session: ${(err as Error).message}`);
+    showToast(relayFailureMessage(err, { initiating: true, verb: 'start the session' }));
   }
 }
 
@@ -349,7 +368,7 @@ export async function joinSessionWithCode(deps: CollabUiDeps, code: string): Pro
   } catch (err) {
     active = null;
     clearSeams();
-    showToast(`Could not join: ${(err as Error).message}`);
+    showToast(relayFailureMessage(err, { initiating: false, verb: 'join' }));
   }
 }
 
@@ -416,7 +435,7 @@ export async function resumeSessionFlow(deps: CollabUiDeps, roomId: string): Pro
   } catch (err) {
     active = null;
     clearSeams();
-    showToast(`Could not resume: ${(err as Error).message}`);
+    showToast(relayFailureMessage(err, { initiating: false, verb: 'resume' }));
   }
 }
 

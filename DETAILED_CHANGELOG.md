@@ -7,6 +7,18 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Collab: gating-aware session-start error (co-editing auth parity)**
+  (`collab-ui.ts`, test). With subscription gating live (§5.4: paid
+  accounts initiate sessions, free accounts join), a free user's
+  "Start Collaboration Session" gets a relay 401 on room creation — it
+  now surfaces an actionable "requires a Debate Decoded subscription —
+  connect your account in Settings" message (with a self-host relay-
+  token hedge, since a 401 is ambiguous), instead of a raw "rooms
+  request failed: 401". Join/resume 401s get the credentials message;
+  non-401 failures keep their reason. Server-side gating was already a
+  pure env flip (rooms `POST /rooms` is send-gated through the same
+  `_authorize` seam as card sharing); this closes the last client gap.
+
 - **Collab: fixed the one-way desync (silent send-drop) + invalid-mark
   merges** (`collab-session.ts`, `doc-repair.ts`, `collab-repair.ts`,
   tests). Root-caused via an adversarial stress study (up to 10 peers,
