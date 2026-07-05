@@ -109,6 +109,18 @@ export function initPairingWiring(): void {
     });
   }
 
+  // Relay rejected our credentials (401): a wrong self-host token today,
+  // or a missing subscription once gating enforces. Same two-path
+  // framing as the co-editing session-start message.
+  if (electron?.onPairingUnauthorized) {
+    electron.onPairingUnauthorized(() => {
+      showToast(
+        'Card sharing: the relay rejected your credentials. In Settings → ' +
+          'Card Sharing, connect your Debate Decoded account or set up your own relay.',
+      );
+    });
+  }
+
   applyConfig();
   settings.subscribe(() => applyConfig());
 }

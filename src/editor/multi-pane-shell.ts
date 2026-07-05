@@ -89,6 +89,7 @@ import {
 import { sendViewToStarred } from './pairing/send-to-starred.js';
 import { editorNodeViews } from './image-resize-nodeview.js';
 import { coordinatorBlocks, flashLockedLeases } from './ai/edit-coordinator.js';
+import { tagCollabTransaction } from './collab/collab-hooks.js';
 import { icon, setIcon } from './icons';
 
 type SlotId = 'slot1' | 'slot2' | 'slot3';
@@ -2601,6 +2602,9 @@ function buildDocRecord(
     // served by the custom viewport checker (viewport-spellcheck.ts).
     attributes: { spellcheck: 'false' },
     dispatchTransaction(tx) {
+      // Stamp collab metas (sync-origin on the Loro binding's remote
+      // transactions) BEFORE apply, mirroring the single-doc dispatch.
+      tagCollabTransaction(tx);
       // Reject a user edit inside a region an AI op has leased; flash the
       // locked region. AI writes carry a bypass tag and pass through.
       if (coordinatorBlocks(view.state, tx)) {

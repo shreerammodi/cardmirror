@@ -3363,6 +3363,63 @@ html.pmd-home-active #speech-doc-banner {
   flex-direction: column;
   gap: 2px;
 }
+
+/* Collaboration sessions — dedicated section below Recent. Scrolls
+   past ~6 rows so a long list never pushes the utilities off screen,
+   and a session can never be displaced the way recents rotate. */
+.pmd-home-sessions-section {
+  margin-top: 1.1rem;
+}
+.pmd-home-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+.pmd-home-session {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.pmd-home-session-open {
+  appearance: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--pmd-c-text);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pmd-home-session-open:hover {
+  background: var(--pmd-c-hover);
+}
+.pmd-home-session-role {
+  background: var(--pmd-c-accent);
+  color: #fff;
+}
+.pmd-home-session-forget {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--pmd-c-text-muted);
+  padding: 0.4rem 0.55rem;
+  flex: 0 0 auto;
+}
+.pmd-home-session-forget:hover {
+  background: var(--pmd-c-hover);
+  color: var(--pmd-c-text);
+}
 .pmd-home-recents-empty {
   margin: 0.25rem 0;
   color: var(--pmd-c-text-muted);
@@ -12212,6 +12269,105 @@ body.pmd-multi-doc .pmd-cardcutter-trim {
   white-space: nowrap;
   font-size: 0.7rem;
   color: var(--pmd-c-text-muted);
+}
+
+/* Partner presence cursor (loro-prosemirror's widget): a colored caret
+   with a name flag that fades to a sliver when idle. Border color is
+   set inline per peer. */
+.ProseMirror-loro-cursor {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 2px solid;
+  word-break: normal;
+  pointer-events: none;
+}
+.ProseMirror-loro-cursor > div {
+  position: absolute;
+  top: -1.35em;
+  left: -2px;
+  /* Above every other in-document decoration (AI working box sits at
+     z-index 40) — the partner's name flag must never hide under
+     highlights/boxes. */
+  z-index: 50;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #fff;
+  padding: 0 4px;
+  border-radius: 3px 3px 3px 0;
+  white-space: nowrap;
+  user-select: none;
+  opacity: 0.35;
+  transition: opacity 0.25s ease;
+}
+.ProseMirror:hover .ProseMirror-loro-cursor > div,
+.ProseMirror-loro-cursor:hover > div {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ProseMirror-loro-cursor > div {
+    transition: none;
+  }
+}
+
+/* Partner's AI lease advertisement (§4.6, non-enforcing): the SAME box
+   treatment as the local AI-working affordance (.pmd-ai-working) so it
+   reads as "an AI routine is running here", in the collab accent blue
+   instead of the local purple — different color = different machine.
+   Advisory only; edits stay allowed. */
+.pmd-collab-lease-ad {
+  outline: 2px solid var(--pmd-c-accent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--pmd-c-accent) 10%, transparent);
+  border-radius: 4px;
+}
+.pmd-collab-lease-ad-tag {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--pmd-c-accent);
+  user-select: none;
+  vertical-align: super;
+  margin-right: 2px;
+}
+
+/* Send pill click-to-invite mode: pointer affordance on the bar, a
+   small header above the rows, and hoverable rows (drag mode highlights
+   via the controller instead). */
+.pmd-send-bar-clickable {
+  cursor: pointer;
+}
+.pmd-send-invite-header {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--pmd-c-accent);
+  padding: 0.35rem 0.6rem 0.15rem;
+  user-select: none;
+}
+.pmd-send-invite-mode .pmd-send-target {
+  cursor: pointer;
+}
+.pmd-send-invite-mode .pmd-send-target:hover {
+  background: var(--pmd-c-hover);
+}
+
+/* Session-invite rows act, they don't insert: a compact Join button in
+   the accent color where the drag affordance would be. */
+.pmd-receive-row-join {
+  flex: 0 0 auto;
+  border: 1px solid var(--pmd-c-accent);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--pmd-c-accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.pmd-receive-row-join:hover {
+  background: var(--pmd-c-accent);
+  color: var(--pmd-c-bg, #fff);
 }
 
 

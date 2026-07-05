@@ -3091,12 +3091,16 @@ export function smartShrinkText(
     const tr = state.tr;
     for (const { from, to, pt } of edits) {
       tr.removeMark(from, to, fontSizeType);
-      tr.addMark(from, to, fontSizeType.create({ halfPoints: Math.round(pt * 2) }));
+      tr.addMark(
+        from,
+        to,
+        fontSizeType.create({ halfPoints: Math.round(pt * 2), origin: 'shrink' }),
+      );
     }
     const normalHp = Math.round(normalPt() * 2);
     for (const { from, to } of protectedRanges) {
       tr.removeMark(from, to, fontSizeType);
-      tr.addMark(from, to, fontSizeType.create({ halfPoints: normalHp }));
+      tr.addMark(from, to, fontSizeType.create({ halfPoints: normalHp, origin: 'shrink' }));
     }
     dispatch(tr);
     return true;
@@ -3167,7 +3171,7 @@ function sizeCycleCommand(
     const newHp = Math.round(newSize * 2);
     for (const { from, to } of eligible) {
       tr.removeMark(from, to, fontSizeType);
-      tr.addMark(from, to, fontSizeType.create({ halfPoints: newHp }));
+      tr.addMark(from, to, fontSizeType.create({ halfPoints: newHp, origin: 'shrink' }));
     }
 
     // Force protected ranges to Normal size. Done after the eligible
@@ -3175,7 +3179,7 @@ function sizeCycleCommand(
     const normalHp = Math.round(normal * 2);
     for (const { from, to } of protectedRanges) {
       tr.removeMark(from, to, fontSizeType);
-      tr.addMark(from, to, fontSizeType.create({ halfPoints: normalHp }));
+      tr.addMark(from, to, fontSizeType.create({ halfPoints: normalHp, origin: 'shrink' }));
     }
 
     dispatch(tr);
@@ -4515,7 +4519,13 @@ export type RibbonCommandId =
   | 'addQuickCard'
   | 'manageQuickCards'
   | 'openQuickCardSearch'
+  | 'collabStartSession'
+  | 'collabJoinSession'
+  | 'collabCopyShareCode'
+  | 'collabInviteStarred'
+  | 'collabEndSession'
   | 'insertImage'
+  | 'openDevConsole'
   | 'zoomIn'
   | 'zoomOut'
   | 'zoomReset'
@@ -4705,7 +4715,13 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'addQuickCard',
   'manageQuickCards',
   'openQuickCardSearch',
+  'collabStartSession',
+  'collabJoinSession',
+  'collabCopyShareCode',
+  'collabInviteStarred',
+  'collabEndSession',
   'insertImage',
+  'openDevConsole',
   'zoomIn',
   'zoomOut',
   'zoomReset',
@@ -4862,7 +4878,13 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   addQuickCard: 'Add Quick Card',
   manageQuickCards: 'Manage Quick Cards',
   openQuickCardSearch: 'Search Everything',
+  collabStartSession: 'Start Collaboration Session',
+  collabJoinSession: 'Join Collaboration Session',
+  collabCopyShareCode: 'Copy Session Share Code',
+  collabInviteStarred: 'Invite Starred Partner to Session',
+  collabEndSession: 'End or Leave Collaboration Session',
   insertImage: 'Insert Image at Cursor',
+  openDevConsole: 'Open Developer Console',
   zoomIn: 'Zoom In',
   zoomOut: 'Zoom Out',
   zoomReset: 'Reset Zoom to 100%',
@@ -4926,6 +4948,12 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
  * Keep entries lowercase. Only commands that need an alias appear here.
  */
 export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly string[]>> = {
+  collabStartSession: ['collaborate', 'coedit', 'co-edit', 'share session', 'live edit'],
+  collabJoinSession: ['join session', 'share code', 'coedit'],
+  collabCopyShareCode: ['share code', 'invite code', 'session code'],
+  collabInviteStarred: ['invite partner', 'session invite', 'invite to session'],
+  openDevConsole: ['devtools', 'dev console', 'debug console', 'inspect', 'developer tools'],
+  collabEndSession: ['leave session', 'stop session', 'stop collaborating'],
   repairParagraphIntegrity: [
     'paragraph integrity',
     'split paragraphs',
@@ -5126,6 +5154,11 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   addQuickCard: '',
   manageQuickCards: '',
   openQuickCardSearch: 'Mod-Shift-Space',
+  collabStartSession: '',
+  collabJoinSession: '',
+  collabCopyShareCode: '',
+  collabInviteStarred: '',
+  collabEndSession: '',
   newSpeechDocument: '',
   markActiveAsSpeech: '',
   insertImage: '',
@@ -5136,6 +5169,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   // either command can be rebound. zoomReset stays unbound by
   // default — Mod-0 is a browser-level "reset zoom" chord that
   // Chromium won't always let the page intercept.
+  openDevConsole: '',
   zoomIn: 'Mod-=',
   zoomOut: 'Mod--',
   zoomReset: '',
@@ -5341,6 +5375,11 @@ export interface RibbonContext {
   /** Open the floating quick-card search palette. Works with no
    *  active doc (browse-only; insert no-ops). */
   openQuickCardSearch: () => void;
+  collabStartSession: () => void;
+  collabJoinSession: () => void;
+  collabCopyShareCode: () => void;
+  collabInviteStarred: () => void;
+  collabEndSession: () => void;
   /** Open the file picker that prompts for an image to insert at
    *  the editor's current cursor. Pasting an image from the
    *  clipboard goes through paste-plugin instead — no ctx hook
@@ -5349,6 +5388,8 @@ export interface RibbonContext {
   /** Zoom controls — bumps the persisted `zoomPct` setting one
    *  step up/down or resets it to 100%. The status-bar buttons
    *  use the same handlers. */
+  /** Toggle Chromium DevTools (desktop only; hidden on web). */
+  openDevConsole: () => void;
   zoomIn: () => void;
   zoomOut: () => void;
   zoomReset: () => void;
@@ -5465,7 +5506,13 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   addQuickCard: () => {},
   manageQuickCards: () => {},
   openQuickCardSearch: () => {},
+  collabStartSession: () => {},
+  collabJoinSession: () => {},
+  collabCopyShareCode: () => {},
+  collabInviteStarred: () => {},
+  collabEndSession: () => {},
   insertImage: () => {},
+  openDevConsole: () => {},
   zoomIn: () => {},
   zoomOut: () => {},
   zoomReset: () => {},
@@ -5950,6 +5997,36 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
         ctx.openQuickCardSearch();
         return true;
       };
+    case 'collabStartSession':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.collabStartSession();
+        return true;
+      };
+    case 'collabJoinSession':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.collabJoinSession();
+        return true;
+      };
+    case 'collabCopyShareCode':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.collabCopyShareCode();
+        return true;
+      };
+    case 'collabInviteStarred':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.collabInviteStarred();
+        return true;
+      };
+    case 'collabEndSession':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.collabEndSession();
+        return true;
+      };
     case 'insertImage':
       return (_state, dispatch) => {
         if (!dispatch) return true;
@@ -5972,6 +6049,12 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
         // Open the popover straight into edit mode so the flow is
         // invoke → type the note → Save.
         if (view) openFootnoteEditor(view, insertPos);
+        return true;
+      };
+    case 'openDevConsole':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.openDevConsole();
         return true;
       };
     case 'zoomIn':

@@ -38,11 +38,14 @@ class RelayClient {
   }
 
   /** Push one card to each recipient code. Returns per-recipient tallies
-   *  so the caller can confirm a real delivery before flashing "sent". */
+   *  so the caller can confirm a real delivery before flashing "sent".
+   *  `minReceiverVersion` overrides the config-level compatibility floor
+   *  for THIS message — item types newer than the card format (session
+   *  invites) declare the version that understands them. */
   async send(
     recipientCodes: string[],
     item: SendItem,
-    opts?: { via?: string },
+    opts?: { via?: string; minReceiverVersion?: string },
   ): Promise<SendResult> {
     const targets = Array.from(new Set(recipientCodes.filter(Boolean)));
     if (targets.length === 0) return { ok: 0, fail: 0 };
@@ -57,6 +60,7 @@ class RelayClient {
         recipientCodes: targets,
         item,
         via: opts?.via,
+        minReceiverVersion: opts?.minReceiverVersion,
       });
       return { ok: res?.ok ?? 0, fail: res?.fail ?? 0 };
     } catch {

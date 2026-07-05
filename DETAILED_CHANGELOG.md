@@ -7,6 +7,433 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Collab: co-editing is categorically desktop-only (web has no
+  server-dependent capabilities)** (`collab-gate.ts`, `collab-ui.ts`,
+  test). The web edition now cannot run co-editing under any
+  circumstance: `collabEnabled()` hard-closes on a browser host
+  (`getHost().kind === 'browser'`) BEFORE consulting either the
+  build-time `VITE_COLLAB` flag or the runtime
+  `localStorage['pmd-collab']` console flip, so neither can open a
+  server-backed session in a browser. This makes explicit a guarantee
+  the architecture mostly already held — card sharing's crypto and
+  keystore are Electron-main-only, so pairing is inert on the web — by
+  closing the one remaining server-backed feature a console flag could
+  otherwise switch on in a browser tab. Defense-in-depth: `start`- and
+  `resumeSessionFlow` also early-return on a closed gate (join already
+  did), so no entry point can reach the relay from the web build even
+  if a caller is added later. A future Tauri desktop host reports a
+  non-`browser` kind and is treated like Electron. `collab-gate.test.ts`
+  pins all four cases (browser + flag → off, browser + `VITE_COLLAB` →
+  off, desktop + flag → on, desktop + no flag → off, i.e. still dormant
+  by default on desktop). Developer testing of the collab UI now happens
+  in the Electron dev build (or headless in the harnesses), not a
+  browser tab.
+
+- **Relay auth messaging is accurate about what's required.** Both the
+  co-editing session-start 401 and the card-sharing relay-401
+  (previously a dev-only console warning, now a throttled user toast)
+  say a **relay** is required and offer both paths — "connect your
+  Debate Decoded account **or set up your own relay**" — rather than
+  implying a subscription is required (a self-hosted relay needs none).
+
+- **Collab: gating-aware session-start error (co-editing auth parity)**
+  (`collab-ui.ts`, test). With subscription gating live (§5.4: paid
+  accounts initiate sessions, free accounts join), a free user's
+  "Start Collaboration Session" gets a relay 401 on room creation — it
+  now surfaces an actionable message (final wording per the entry above:
+  "starting a session requires a relay — connect your Debate Decoded
+  account or set up your own relay", since a self-hosted relay is a
+  valid path and a 401 is ambiguous anyway) instead of a raw "rooms
+  request failed: 401". Join/resume 401s get the credentials message;
+  non-401 failures keep their reason. Server-side gating was already a
+  pure env flip (rooms `POST /rooms` is send-gated through the same
+  `_authorize` seam as card sharing); this closes the last client gap.
+
+- **Collab: fixed the one-way desync (silent send-drop) + invalid-mark
+  merges** (`collab-session.ts`, `doc-repair.ts`, `collab-repair.ts`,
+  tests). Root-caused via an adversarial stress study (up to 10 peers,
+  latency/loss/partitions, real editor macros). **The desync:** on a
+  merge, plugin-generated repair/heal transactions land a microtask
+  after the import, and the sync layer's post-import
+  `lastSentVersion = version()` absorbed those un-posted local ops into
+  the "already sent" frontier — so the next flush saw nothing to send,
+  the queue emptied, the status read "synced," and those ops never
+  reached the relay, leaving other peers permanently unable to catch up
+  (nothing was ever destroyed — the author's replica held the truth,
+  which is why re-hosting recovered it). Fix: our own peer's sent
+  counter now advances ONLY when flush actually exports, never absorbed
+  by an import; the room-history audit was hardened to compare against
+  the live doc version rather than the (previously self-corrupting)
+  acked bookkeeping. **The invalid marks:** concurrent underline-vs-
+  emphasis (and the bold/super-sub pairs) over overlapping text merged
+  to a schema-illegal combination; the resolver now runs on every peer
+  (not just the session leader) using a schema-derived priority order
+  (cite > emphasis > underline), so a follower never holds an invalid
+  run waiting on a leader's fix. Regression tests pin both (P17 verified
+  to fail against the pre-fix code).
+
+- **Collab: tables/cards repair pass wired into sessions (§4.4
+  complete)** (`collab/collab-repair.ts` NEW, `collab-cursors.ts`,
+  `collab-ui.ts`, tests). The M0 repair (`buildDocRepairTr`:
+  prosemirror-tables fixTables + exclusive-marks sweep + container
+  first-child invariant) now runs AUTOMATICALLY after every remote
+  batch and undo/redo, leader-gated per §4.3: lowest peer id among
+  self + presence-visible peers dispatches; followers receive the
+  synced fix. The gate is best-effort dedup, not a correctness
+  dependency — with presence empty (cursors off) everyone repairs,
+  which idempotence + the normalizer round cap make safe. Repairs
+  carry the normalizer origin (read mode admits; round cap applies).
+  T4 pins the session-level behavior: the ragged row-vs-column merge
+  squares itself with no manual step, zero cell-content loss,
+  idempotent on both peers. Peer ids compare NUMERICALLY (BigInt) —
+  decimal u64 strings sort wrong lexically.
+
+- **Collab: delivery-cursor discipline — the recurring one-way desync
+  and the permanent gap, both closed** (`collab-session.ts`,
+  `patches/`, `style.css`, tests). Field round 3, triggered by network
+  flaps (ERR_NETWORK_CHANGED): (a) *Stream frames no longer advance
+  the delivery cursor.* A pushed frame proves nothing about the rows
+  below it — pushes are shed under backpressure and dropped by dying
+  connections — and a cursor that jumped past an unfetched row made
+  every later catch-up ("rows after N") skip it FOREVER: the field's
+  "specific set of changes never recovered", plus a compaction hazard
+  (coversThroughSeq trusts this cursor). The cursor now advances ONLY
+  from catch-up pages (server-confirmed contiguous coverage); the
+  stream stays the fast path. P16 regression, verified to fail against
+  the old logic. (b) *The pending-deps healer's full resync now
+  PAGINATES* — it read one page (200 rows) of what can be a much
+  longer log and parked forever short of the deps it needed: why the
+  one-way desync recurred despite the compaction guard. (c) The
+  import-transaction selection restore skips endpoints outside inline
+  content (silences PM's "TextSelection endpoint…(table)" warning and
+  its surprise caret hop). (d) Partner cursor name flags render above
+  all other document decorations (z-index over the AI box).
+
+- **Collab: click-to-invite Send pill, chunked large-doc sync, quieter
+  console** (`send-pill-ui.ts`, `collab-hooks.ts`, `collab-ui.ts`,
+  `collab-session.ts`, `patches/`, tests). (a) *The Send pill is now
+  clickable* (when the collab gate is open): click → the same
+  partner/group rows in invite mode with an "Invite to collaboration
+  session" header — picking one starts a session on the current doc if
+  none is active, then sends the invite (§6's picker-first flow, now
+  ~2 clicks total). Drag-to-send is unchanged. (b) *Large documents
+  can host sessions* — the field 413: the seed (full CRDT snapshot)
+  exceeded the relay's 5MB per-update cap on big master files. All
+  oversized payloads (seeds, huge pastes, the audit's full-history
+  repost) now ship as CAP-SIZED UPDATE CHUNKS via loro's
+  updates-in-range export — ordinary log entries that streams push
+  live and importers assemble through the causal-dependency queue. No
+  snapshot detour, no truncation, no new data-loss surface; a server
+  413 on a normal-sized blob re-chunks at half size as a backstop
+  (P15). Intermediate chunks ack back to the span start, so a crash
+  mid-sequence re-sends the whole span instead of losing the tail.
+  (c) *"Cannot find the loroNode" per keystroke silenced*: the
+  selection stash ran on the raw keystroke transaction, one step
+  before the doc-changed sync pushes the edit into loro — it now
+  captures only at agreement points (the doc-changed follow-up, or
+  doc-untouched transactions). The occasional "posted update never
+  echoed" console line is the self-echo watchdog working as designed
+  (transient network) — bursts of it would point at relay health.
+
+- **Collab field fixes (stress-test round 2): compaction data loss +
+  minimal-diff imports + lease-ad polish**
+  (`collab-session.ts`, `patches/loro-prosemirror+0.4.3.patch`,
+  `collab-cursors.ts`, `style.css`, tests). (a) *The one-way sync
+  split.* The host's compaction snapshot covered `lastSeq`
+  unconditionally — but the delivery cursor advances even when imports
+  park in Loro's causal-dependency queue, so a compaction fired while
+  the partner's ops were pending exported a snapshot WITHOUT them
+  while its truncation deleted their stored blobs: the room
+  permanently lost the partner's causal ancestors, every later edit of
+  theirs parked forever, and both chips honestly said "synced"
+  (surviving restarts — the room itself was damaged). Two-part fix:
+  compaction now refuses to run while any import is pending
+  (`pendingImports`, cleared only by a clean full-resync), and a
+  ROOM-HISTORY AUDIT (15s after start, then every 30min) compares the
+  room's blob metadata (decodeImportBlobMeta — no full import) against
+  this replica's relay-ACKNOWLEDGED version and reposts full history
+  when the room lost ops — which also self-heals rooms already
+  damaged, including live field sessions, once the affected peer runs
+  this build (P14 regression). (b) *AI routines survive partner
+  edits.* The binding replaced the WHOLE doc on every import, so
+  `tr.mapping` collapsed and every tracked position (AI-lease regions,
+  decorations) broke whenever the partner typed — "card moved — cut
+  not applied" during AI runs. Patched to a MINIMAL-DIFF replace
+  (findDiffStart/findDiffEnd, verify-result-and-fallback for
+  structural edge cases): remote edits now map like local ones. (c)
+  *Lease-ad polish*: sender identity travels in the ad — your own
+  echo no longer renders on the machine running the AI; the tag names
+  the partner ("Priya's AI"); and the advisory region uses the same
+  outline+fill box treatment as the local AI-working affordance, in
+  the collab blue.
+
+- **Collab field fixes (stress-test round): viewport stability +
+  joiner doc naming** (`patches/loro-prosemirror+0.4.3.patch`,
+  `collab-ui.ts`, `index.ts`, tests). (a) *Remote edits no longer
+  fight the local caret/viewport.* The binding's remote-update path
+  replaces the whole doc, remapping the local selection to a bogus
+  boundary position, and only restored it in a `setTimeout` — under
+  continuous partner typing that bogus-selection window flickered the
+  nav-pane indicator twice a second and let local keystrokes land (and
+  scroll) at the PARTNER's position: the field's viewport ping-pong.
+  Worse, the restore itself was drift-prone: it captured the selection
+  as loro cursors AFTER the import, anchoring against already-shifted
+  text (caret drifted by the inserted length per batch). Patched: the
+  selection is stashed as loro cursors on every LOCAL transaction
+  (while PM and loro agree) and restored ON the import transaction —
+  no async window, no drift (P13 regression: caret pinned through
+  every imported batch, checked after every transaction). Also dropped
+  an upstream bug where rendering a partner's stale cursor WROTE the
+  re-encoded position under the LOCAL peer's store key, teleporting
+  your advertised cursor to the partner's location. (b) *Joiners now
+  know the doc's name.* The host publishes the title into the room's
+  `meta` map with the seed; join/resume adopt it for the window title,
+  filename chip, save-as default, and the Sessions-list rows (which
+  previously just said "collaboration session").
+
+- **Collab M4 (coediting branch): presence cursors, lease
+  advertisement, read-mode undo clamps** (`collab/collab-cursors.ts`
+  NEW, `collab-ui.ts`, `ai/edit-coordinator.ts`, `settings.ts`,
+  `style.css`, tests). Partners now see each other's live cursor and
+  selection: loro-prosemirror's ephemeral-cursor plugin does the
+  position math (PM selection → stable loro cursors → decorations);
+  our layer pipes its store over the room's encrypted presence channel
+  with a 1-byte frame type (0x01 cursor bytes, 0x02 lease ads),
+  throttled to ≤1 frame/120ms trailing-edge plus a 15s keepalive so a
+  reading partner doesn't expire out of the overlay. Per-peer
+  deterministic colors; name flag fades to a sliver until hover.
+  "Show partner cursors in sessions" settings row (default on; off =
+  doc still syncs, overlay hidden and yours stops broadcasting). AI
+  leases are advertised NON-enforcing (§4.6): while the coordinator
+  holds leases, their live ranges broadcast every 2s and render on the
+  partner as a dashed advisory underline + tag, remapped through local
+  edits between refreshes (raw-position advisory by design — exact when
+  converged, approximate under divergence, never blocking). New
+  `leasedRanges()` read API on the edit coordinator. Read-mode clamp:
+  session undo/redo are SWALLOWED while reading — Loro undo can't be
+  depth-bounded like prosemirror-history, and its transactions carry
+  the binding meta (→ sync-origin) so they'd bypass the read-mode lock
+  and revert real edits from under a reading user.
+
+- **Collab M3 (coediting branch): session persistence + offline
+  resilience** (`collab/collab-store.ts` NEW, `collab-persist.ts` NEW,
+  `collab-relay.ts` NEW, `collab-prefetch.ts` NEW, `collab-session.ts`,
+  `collab-ui.ts`, `home-screen.ts`, desktop wake plumbing, tests).
+  Sessions now survive an app nuke: a per-room record (share code,
+  role, delivery cursor, CRDT snapshot + increments) persists to a
+  dedicated IndexedDB store on a 2.5s cadence + pagehide, cleared only
+  on explicit end/leave or tombstone. The load-bearing subtlety the
+  tests caught: the persisted version must be what the relay has
+  ACKNOWLEDGED, not what was exported to the send queue — export-time
+  tracking would silently drop every queued-but-unposted update on
+  crash (new `ackedVersion`, advanced per posted entry, snapped to the
+  export version when the queue drains). `CollabSession.resume()`
+  rebuilds from the record; the first flush sends exactly the unsent
+  diff. Home screen gains a DEDICATED "Sessions" section below Recent
+  (never merged with recents — sessions must not be displaced by doc
+  churn; scrollable; per-row Forget). Also: join is now STRICT about
+  its initial sync (a network failure used to "succeed" with an empty
+  doc — catchUp swallows errors by design, joins must not); invite
+  receipt prefetches the encrypted room seed so an invite accepted
+  offline still joins locally (ciphertext at rest, key stays in the
+  share code) and syncs on reconnect; wake-from-sleep hard-restarts
+  the stream (powerMonitor broadcast on desktop, 'online' event both
+  editions); catch-ups that merge a big offline backlog announce it
+  ("synced N offline updates") instead of silently reshaping the doc.
+
+## 0.1.0-beta.8 — 2026-07-03
+
+- **Collab field fixes (draft-installer round 1).** (a) *Joining now
+  swaps the doc IN the joining window.* The join flow reused
+  `newDocument()`, which on desktop SPAWNS a window — the session
+  binding installed into the original window's plugin source, but its
+  editor was never rebuilt, and the spawned window knew nothing about
+  the session: joiner saw an unrelated new window plus an inert
+  "Session: synced" chip (the stream WAS connected; nothing bound it to
+  an editor). New `replaceWithSessionDoc()` runs the web edition's
+  New-in-place path with the same overwrite prompt; cancelling unwinds
+  the join without touching the room (regression-tested). (b) *End/
+  leave confirm is an in-app overlay.* `window.confirm` on Windows/
+  Linux Electron never returns keyboard focus to the renderer — the
+  editor was untypeable until reload. Editor refocused after end/join.
+
+- **Open Developer Console ribbon command** (`openDevConsole`;
+  desktop-only, hidden on web; no default binding — command-bar
+  triggered, rebindable like any command; new "Diagnostics" group).
+  Backed by a `host:toggle-devtools` IPC that toggles Chromium DevTools
+  on the invoking window. Load-bearing on Windows/Linux: the packaged
+  app sets a null application menu there, and Electron's stock DevTools
+  accelerators (F12/Ctrl+Shift+I) only exist as menu accelerators — so
+  packaged builds had NO console access (discovered while flipping the
+  dormant-collab localStorage gate for field testing). Deliberately not
+  bound to F12, which is `clearToNormal`.
+
+- **Collab M2 (coediting branch): pairing-mailbox session invites +
+  baked relay defaults** (`pairing/room-invite.ts` NEW,
+  `receive-pill-ui.ts`, `relay-client.ts`, `collab-ui.ts`,
+  `collab-hooks.ts`, ribbon registration, desktop `pairing-ipc.ts` +
+  `preload.ts` + `electron-host.ts`). An invite is a normal sealed
+  pairing message whose item carries `{shareCode, title}` under type
+  `room-invite` — the payload rides `sliceJson`, which main passes
+  through verbatim, so the desktop pipeline needed only a per-message
+  `minReceiverVersion` override (invites declare the first
+  invite-aware version; pre-invite clients drop them with the existing
+  update-required toast instead of rendering a dead card row). New
+  "Invite Starred Partner to Session" ribbon command sends the active
+  session's share code to the starred partner/group; the Receive pill
+  renders invite rows ("«name» invited you to collaborate on «doc»")
+  with a Join button that hands the code to the lazy collab module
+  through a new collab-hooks seam (invite rows don't drag/insert; the
+  code is consumed on join). Rooms clients also gain a LAST-fallback
+  relay endpoint: the desktop main process exposes its baked relay
+  base + shared token over a new `host:collab-relay-defaults` IPC, so
+  packaged builds can host/join sessions with zero settings setup
+  (resolution stays settings → dev env → baked). Deferred: invite
+  seed-snapshot prefetch (plan §4.1) lands with M3 session persistence.
+
+- **Collab M2 (coediting branch): comment-thread sync**
+  (`collab/collab-comments.ts` NEW, `comments-plugin.ts`,
+  `collab-ui.ts`, tests). Field symptom: comment paint synced (the
+  `comment_range` mark rides the doc CRDT) but thread content lives in
+  plugin state and never left the machine — the partner's comments
+  pane stayed empty. Threads now mirror into a `comments` root LoroMap
+  on the session doc (same flush timer, same E2E encryption): nested
+  per-thread map keyed by comment id, so concurrent replies MERGE
+  rather than LWW-clobbering whole threads; edits are LWW per comment;
+  root deletion beats a concurrent reply. Outbound, a session plugin
+  mirrors the `commentsKey` mutation metas (scoped to the session view
+  — other panes can't leak comments into the room); inbound imports
+  dispatch a new `sync-load` refresh that, unlike `load`, PRESERVES
+  the GC tombstone parking (orphan parking stays local so undo can
+  still resurrect; only explicit deletes touch the shared map). Hosts
+  seed their existing threads before the first flush; joiners pull the
+  map after the session doc lands. Comment ids switch to random
+  Word-compatible int32s during sessions — two peers advancing the
+  same small-int counter WOULD collide on concurrent new comments.
+
+- **Collab M2 (coediting branch): formatting-fusion heal — provenance-
+  tagged shrink sizes + session invariant plugin** (`schema/marks.ts`,
+  `ribbon-commands.ts`, `collab/collab-invariants.ts` NEW,
+  `collab-ui.ts`, tests). Field root cause (plan §14): Peritext range
+  marks cover text concurrently inserted INSIDE their range, so a
+  partner's underlined typing inside a shrunk span inherits the small
+  `font_size` at merge — on both replicas, with no op recording it —
+  and Loro's UndoManager compounds it by re-marking drifted ranges
+  across interleaved remote ops (undo also leaves residue by skipping
+  remote interior characters). Worse, fused runs are shrink-EXEMPT, so
+  regrow could never clear them. Fix: `font_size` gains an `origin`
+  attr — `'shrink'` when the protection-aware sizing machinery
+  (shrink/regrow cycle, smart shrink) applied it, `null` for anything
+  the user chose (size chip, ± nudge, pasted content; the attr is
+  deliberately not DOM-serialized, so clipboard round-trips demote to
+  manual). A session-only plugin then heals on the Loro binding's
+  transactions (remote imports, init replace, undo/redo): within
+  changed ranges, strip `font_size` where `origin === 'shrink'` AND
+  the run carries underline/emphasis. Both fusion paths copy the
+  enclosing mark's attrs verbatim, so provenance travels with every
+  fused copy; user-chosen sizes survive all of them (pinned by a
+  manual-wins regression test that doubles as the no-heal control).
+  Old saved docs parse fine (attr defaults in) but pre-upgrade shrink
+  marks are untagged and won't auto-heal.
+
+- **Collab M2 (coediting branch): field-test fixes — differ mark-kill
+  patch, stale-instance watchdog, healer escalation, zombie-proof
+  shutdown** (`patches/loro-prosemirror+0.4.3.patch` NEW + postinstall,
+  `collab-session.ts`, `room-client.ts`, `_rooms-mock.ts`, relay
+  Dockerfile/README, tests). Live two-window testing with relay
+  kill/restart cycles surfaced four defects:
+  1. *Concurrent highlight loss (upstream binding bug, patched).*
+     loro-prosemirror's text differ "normalized" mark state by emitting
+     blanket `key: null` retains over every unmarked run on every
+     transaction — local no-ops that are REAL unmark ops, LWW-killing
+     the partner's concurrent highlights (field: per-paragraph
+     winner-take-all). Sibling defect unconditionally delete()d null
+     node attrs, clobbering concurrent attr sets. Patched (per-run
+     diffing; delete only existing keys) via patch-package; regression
+     tests P11/P12 pin both. Upstream report TODO.
+  2. *Send-success restarts starved the stream.* restart() aborts the
+     in-flight handshake, so steady typing killed every reconnect
+     before its hello; live push never resumed while the user typed.
+     Now a nudge() (skips backoff wait, never touches an in-flight
+     attempt), pinned by a deterministic connect-attempt-count test.
+     "Synced" now strictly means the stream's hello state — catch-up
+     success no longer paints the chip.
+  3. *Zombie relay instances after deploy/restart.* Uvicorn's default
+     graceful shutdown waits forever for SSE streams: a stopped
+     instance lingers unbound, heartbeating its old streams while the
+     new instance owns the port — pushes fan out where nobody listens
+     ("synced but updates arrive in 5-minute batches"). Server:
+     --timeout-graceful-shutdown 5 in both Dockerfiles. Client:
+     self-echo watchdog — the server pushes your own update back to
+     your stream, so "posted seq N, stream silent past the deadline"
+     proves staleness and hard-restarts the stream.
+  4. *Pending-deps healer couldn't reach below the cursor.* A frame
+     whose causal deps were shed advanced the cursor past the gap, and
+     the healing catch-up (fetching after the cursor) found nothing.
+     Catch-ups invoked for missing deps now escalate to a full resync
+     from seq 0 when the tail is empty. 409 on stream RECONNECT retries
+     (our own ghost may briefly inflate the count) instead of
+     terminally reporting the room full.
+
+- **Collab M2 (coediting branch): session UI wiring** (`collab-gate.ts`
+  NEW, `collab-hooks.ts` NEW, `collab-ui.ts` NEW; `index.ts`,
+  `index.html`, `ribbon-commands.ts`, `ribbon-groups.ts`,
+  `ribbon-availability.ts`). Four view-less ribbon commands under a new
+  "Collaboration" group — Start / Join / Copy Session Share Code /
+  End-or-Leave — all unbound, searchable in the command bar, and hidden
+  entirely unless the collab gate is open (`VITE_COLLAB=1` at build
+  time or a manual localStorage flip; packaged releases stay dormant).
+  Everything heavy loads lazily: the editor core touches only two
+  loro-free seams (`collab-hooks.ts`) — a transaction tagger in
+  `dispatchTransaction` that stamps sync-origin on the Loro binding's
+  transactions BEFORE filters run (so read mode and the AI coordinator
+  admit remote edits — the M0 contract cashing in), and a plugin source
+  consulted by `buildEditorPlugins` that appends the session's binding
+  plugins and swaps `history()` for the CRDT undo manager while a
+  session is live (undo never reverts a partner's edits). Session flows
+  in `collab-ui.ts`: host = share code auto-copied to the clipboard;
+  join = paste-code prompt into a fresh unsaved doc populated by the
+  binding; a `#collab-chip` status segment shows synced / sending /
+  offline-with-queue; end/leave confirms and restores the normal plugin
+  stack. Integration test (`collab-ui-flows.test.ts`) drives the real
+  flows end-to-end over the mock relay, including read-mode-on remote
+  delivery with local typing still locked.
+
+- **Collab M2 (coediting branch): rooms protocol + client sync core**
+  (`relay/server.py` rooms endpoints; `src/editor/collab/` NEW —
+  `collab-crypto.ts`, `room-client.ts`, `collab-session.ts`;
+  `loro-crdt` 1.13.6 + `loro-prosemirror` 0.4.3 exact-pinned;
+  `tests/collab/` NEW, 30 tests). Not user-facing yet — no UI is wired;
+  everything is dormant modules + tests.
+  - *Server*: durable rooms on the self-hosted relay — create,
+    append-update (server-assigned delivery cursor `seq`), cursor-paged
+    fetch with snapshot fast-path, client-uploaded encrypted snapshot
+    compaction (server truncates the log it cannot read), SSE stream
+    (hello{lastSeq} / update / presence / end frames), ephemeral
+    presence fan-out (zero-DB hot path), tombstoned deletion (410 ≠
+    404), 10-stream participant cap at connect, ≥7-day idle GC. Sync
+    handlers per the overload-hardening pattern; fan-out scheduled onto
+    the loop with call_soon_threadsafe.
+  - *Client*: AES-256-GCM room crypto (WebCrypto; 12-byte IV ‖ ct+tag;
+    `cmshare1.<roomId>.<key>` share codes); renderer-portable rooms REST
+    client + SSE `RoomStream` (getReader-based sibling of the desktop
+    `relay-stream.ts`, same backoff+jitter discipline, 410→ended,
+    409→full); `CollabSession` conducting LoroDoc ↔ transport — outbound
+    debounce-flush via version-vector diff export, synchronous
+    export-before-import so remote ops are never echoed, offline send
+    queue with retry, hello-triggered + periodic catch-up (heals shed
+    push frames via Loro's causal-dependency queue), host-side snapshot
+    compaction cadence, seed state as the room's first regular update.
+  - *Tests*: crypto round-trip/tamper (6), transport incl. 10-cap and
+    outage reconnect (6), end-to-end two-editor sessions over the
+    in-process mock relay — seed propagation, live convergence, the
+    travel-day offline/reconnect cycle, the P1 highlight-union
+    regression through the full encrypted stack, session end (5) — plus
+    the promoted bake-off suites: Peritext criteria + structural merges
+    with leader-gated repair (12; concurrent-creation boundary
+    insertion documented as peer-id tie-broken, asserted for
+    convergence not inclusion) and a 15-seed 3-peer CRDT fuzz (1).
+
 - **Collab groundwork (M0): sync-origin meta contract, normalizer loop
   guard, deterministic doc repair** (`sync-origin.ts` NEW,
   `normalizer-guard.ts` NEW, `doc-repair.ts` NEW; `read-mode-plugin.ts`,

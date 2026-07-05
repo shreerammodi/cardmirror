@@ -120,3 +120,40 @@ describe('resolveStarredTarget', () => {
     expect(resolveStarredTarget({ kind: 'group', ref: 'grp-gone' }, partners, groups)).toBeNull();
   });
 });
+
+describe('room-invite items', async () => {
+  const { buildRoomInviteItem, parseRoomInvite, ROOM_INVITE_ITEM_TYPE, ROOM_INVITE_MIN_VERSION } =
+    await import('../../src/editor/pairing/room-invite.js');
+
+  it('round-trips through the inbox item shape', () => {
+    const item = buildRoomInviteItem({
+      shareCode: 'cmshare1.abc123.key456',
+      title: 'Aff Updates',
+    });
+    expect(item.type).toBe(ROOM_INVITE_ITEM_TYPE);
+    expect(item.label).toBe('Aff Updates');
+    // exactly what the main process copies into the inbox verbatim
+    const parsed = parseRoomInvite({ type: item.type, sliceJson: item.sliceJson });
+    expect(parsed).toEqual({ shareCode: 'cmshare1.abc123.key456', title: 'Aff Updates' });
+  });
+
+  it('untitled docs get a generic label and empty title', () => {
+    const item = buildRoomInviteItem({ shareCode: 'cmshare1.a.b', title: '' });
+    expect(item.label).toBe('Collaboration session');
+    expect(parseRoomInvite({ type: item.type, sliceJson: item.sliceJson })?.title).toBe('');
+  });
+
+  it('rejects non-invite and malformed items', () => {
+    expect(parseRoomInvite({ type: 'card', sliceJson: { shareCode: 'cmshare1.a.b' } })).toBeNull();
+    expect(parseRoomInvite({ type: ROOM_INVITE_ITEM_TYPE, sliceJson: null })).toBeNull();
+    expect(parseRoomInvite({ type: ROOM_INVITE_ITEM_TYPE, sliceJson: {} })).toBeNull();
+    // share codes from a different scheme are not joinable — reject early
+    expect(
+      parseRoomInvite({ type: ROOM_INVITE_ITEM_TYPE, sliceJson: { shareCode: 'cmk1.pubkey' } }),
+    ).toBeNull();
+  });
+
+  it('declares a real version floor (old clients must drop invites)', () => {
+    expect(ROOM_INVITE_MIN_VERSION).toMatch(/^\d+\.\d+\.\d+/);
+  });
+});

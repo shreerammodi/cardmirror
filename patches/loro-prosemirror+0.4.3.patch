@@ -1,0 +1,452 @@
+diff --git a/node_modules/loro-prosemirror/dist/index.cjs b/node_modules/loro-prosemirror/dist/index.cjs
+index 74c4b30..1085d9b 100644
+--- a/node_modules/loro-prosemirror/dist/index.cjs
++++ b/node_modules/loro-prosemirror/dist/index.cjs
+@@ -83,19 +83,70 @@ function createLoroText(parentList, pos, nodes, mapping) {
+ function updateLoroText(obj, nodes, mapping) {
+ 	mapping.set(obj.id, nodes);
+ 	let str = obj.toString();
+-	const attrs = {};
+-	for (const delta of obj.toDelta()) for (const key of Object.keys(delta.attributes ?? {})) attrs[key] = null;
+ 	const content = nodes.map((p) => ({
+ 		insert: p.text,
+-		attributes: Object.assign({}, attrs, nodeMarksToAttributes(p.marks))
++		attributes: nodeMarksToAttributes(p.marks)
+ 	}));
+-	const { insert, remove, index } = (0, lib0_diff.simpleDiff)(str, content.map((c) => c.insert).join(""));
++	const { insert, remove, index } = simpleDiff(str, content.map((c) => c.insert).join(""));
+ 	if (remove > 0) obj.delete(index, remove);
+ 	if (insert.length) obj.insert(index, insert);
+-	obj.applyDelta(content.map((c) => ({
+-		retain: c.insert.length,
+-		attributes: c.attributes
+-	})));
++	// PATCHED (cardmirror): per-run attribute DIFF against the post-edit
++	// layout instead of blanket `key: null` retains over every run. The
++	// blanket form emits REAL unmark ops for unchanged unmarked ranges;
++	// locally they are no-ops, but they LWW-kill CONCURRENT marks from
++	// other peers (observed: two users highlighting disjoint ranges of
++	// one paragraph while offline -> one side's highlights vanish on
++	// merge). Normalization must not generate ops where nothing changed.
++	const layout = [];
++	{
++		let off = 0;
++		for (const d of obj.toDelta()) {
++			const len = (d.insert ?? "").length;
++			layout.push({ start: off, end: off + len, attributes: d.attributes ?? {} });
++			off += len;
++		}
++	}
++	const overlapping = (start, end) => {
++		const out = [];
++		for (const seg of layout) {
++			const s = Math.max(seg.start, start);
++			const e = Math.min(seg.end, end);
++			if (s < e) out.push({ len: e - s, attributes: seg.attributes });
++		}
++		return out;
++	};
++	const deltas = [];
++	let pos = 0;
++	let pending = 0;
++	const flush = () => {
++		if (pending > 0) {
++			deltas.push({ retain: pending });
++			pending = 0;
++		}
++	};
++	for (const run of content) {
++		const len = run.insert.length;
++		if (len === 0) continue;
++		for (const seg of overlapping(pos, pos + len)) {
++			const diff = {};
++			const keys = new Set([...Object.keys(seg.attributes), ...Object.keys(run.attributes)]);
++			for (const key of keys) {
++				const oldV = seg.attributes[key] ?? null;
++				const newV = run.attributes[key] ?? null;
++				if (JSON.stringify(oldV) !== JSON.stringify(newV)) diff[key] = newV;
++			}
++			if (Object.keys(diff).length === 0) pending += seg.len;
++			else {
++				flush();
++				deltas.push({ retain: seg.len, attributes: diff });
++			}
++		}
++		pos += len;
++	}
++	if (deltas.some((d) => d.attributes !== void 0)) {
++		while (deltas.length && deltas[deltas.length - 1].attributes === void 0) deltas.pop();
++		obj.applyDelta(deltas);
++	}
+ }
+ function nodeMarksToAttributes(marks) {
+ 	const pattrs = {};
+@@ -226,10 +277,12 @@ function updateLoroMapAttributes(obj, node, _mapping) {
+ 	for (const [key, value] of Object.entries(pAttrs)) {
+ 		if (value !== null) {
+ 			if (!(0, lib0_function.equalityDeep)(attrs.get(key), value)) attrs.set(key, value);
+-		} else attrs.delete(key);
++		} else if (attrs.get(key) !== void 0) attrs.delete(key);
+ 		keys.delete(key);
+ 	}
+-	for (const key of keys) attrs.delete(key);
++	for (const key of keys) {
++		if (attrs.get(key) !== void 0) attrs.delete(key);
++	}
+ }
+ function getLoroMapChildren(obj) {
+ 	return obj.getOrCreateContainer(CHILDREN_KEY, new loro_crdt.LoroList());
+@@ -425,24 +478,13 @@ function createDecorations(state, store, _plugin, createSelection, createCursor)
+ 		const [focus, focusCursorUpdate] = cursorToAbsolutePosition(cursor.focus, doc, loroState.mapping);
+ 		d.push(prosemirror_view.Decoration.widget(focus, createCursor(peer)));
+ 		if (!cursorEq(cursor.anchor, cursor.focus)) {
+-			const [anchor, anchorCursorUpdate] = cursorToAbsolutePosition(cursor.anchor, doc, loroState.mapping);
++			const [anchor] = cursorToAbsolutePosition(cursor.anchor, doc, loroState.mapping);
+ 			d.push(prosemirror_view.Decoration.inline(Math.min(anchor, focus), Math.max(anchor, focus), createSelection(peer)));
+-			if (focusCursorUpdate || anchorCursorUpdate) {
+-				const existingLocalState = store.getLocal();
+-				store.setLocal({
+-					...existingLocalState?.user && { user: existingLocalState.user },
+-					anchor: anchorCursorUpdate || cursor.anchor,
+-					focus: focusCursorUpdate || cursor.focus
+-				});
+-			}
+-		} else if (focusCursorUpdate) {
+-			const existingLocalState = store.getLocal();
+-			store.setLocal({
+-				...existingLocalState?.user && { user: existingLocalState.user },
+-				focus: focusCursorUpdate,
+-				anchor: focusCursorUpdate
+-			});
+ 		}
++		// PATCHED (cardmirror): dropped the stale-cursor "update" writes —
++		// they stored the REMOTE peer's re-encoded positions under the
++		// LOCAL peer's key (setLocal), teleporting this peer's advertised
++		// cursor to wherever the partner's stale cursor resolved.
+ 	}
+ 	return prosemirror_view.DecorationSet.create(state.doc, d);
+ }
+@@ -587,6 +629,23 @@ const LoroSyncPlugin = (props) => {
+ 						break;
+ 					default: break;
+ 				}
++				// PATCHED (cardmirror): stash the selection as loro cursors
++				// while PM and loro AGREE. Capturing at import time (upstream)
++				// anchors the caret against text the remote ops already
++				// shifted — the caret drifts by the inserted length on every
++				// imported batch. Agreement holds on the appended doc-changed
++				// transaction (the sync above just ran) and on transactions
++				// that didn't touch the doc (selection moves); a raw
++				// doc-changing keystroke tr runs BEFORE its doc-changed
++				// follow-up, so capturing there both misses (loro lags one
++				// step) and spams "Cannot find the loroNode" per keystroke.
++				if (state.changedBy === "local" && (meta?.type === "doc-changed" || !tr.docChanged)) {
++					try {
++						state.selectionCursors = convertPmSelectionToCursors(newEditorState.doc, newEditorState.selection, state);
++					} catch (e) {
++						state.selectionCursors = void 0;
++					}
++				}
+ 				return state;
+ 			}
+ 		},
+@@ -650,14 +709,63 @@ function updateNodeOnLoroEvent(view, event) {
+ 	const mapping = state.mapping;
+ 	clearChangedNodes(state.doc, event, mapping);
+ 	const node = createNodeFromLoroObj(view.state.schema, state.containerId ? state.doc.getContainerById(state.containerId) : state.doc.getMap(ROOT_DOC_KEY), mapping);
+-	const { anchor, focus } = convertPmSelectionToCursors(view.state.doc, view.state.selection, state);
+-	let tr = view.state.tr.replace(0, view.state.doc.content.size, new prosemirror_model.Slice(prosemirror_model.Fragment.from(node), 0, 0));
++	// PATCHED (cardmirror): restore from the cursors stashed on the
++	// last LOCAL transaction (PM and loro agreed then) — capturing here,
++	// after the import, anchors against already-shifted text.
++	const { anchor, focus } = state.selectionCursors ?? { anchor: null, focus: null };
++	// PATCHED (cardmirror): MINIMAL-DIFF replace instead of replacing the
++	// whole document (see the ESM build for the full rationale).
++	let tr = view.state.tr;
++	{
++		const prevDoc = view.state.doc;
++		const nextNode = node;
++		const diffStart = prevDoc.content.findDiffStart(nextNode.content);
++		if (diffStart != null) {
++			// Try the bounded replace; structural changes (table shape
++			// edits) can produce open-depth mismatches the slice fit
++			// rejects or mangles — VERIFY the result and fall back to the
++			// whole-doc replace when it isn't byte-faithful.
++			let applied = false;
++			try {
++				let { a: endA, b: endB } = prevDoc.content.findDiffEnd(nextNode.content);
++				const overlap = diffStart - Math.min(endA, endB);
++				if (overlap > 0) {
++					endA += overlap;
++					endB += overlap;
++				}
++				tr = tr.replace(diffStart, endA, nextNode.slice(diffStart, endB));
++				applied = tr.doc.content.eq(nextNode.content);
++			} catch (e) {
++				applied = false;
++			}
++			if (!applied) tr = view.state.tr.replace(0, view.state.doc.content.size, new prosemirror_model.Slice(prosemirror_model.Fragment.from(nextNode), 0, 0));
++		}
++	}
++	// PATCHED (cardmirror): restore the local selection ON THIS
++	// TRANSACTION instead of a follow-up setTimeout dispatch (see the
++	// ESM build for the full rationale — bogus-selection window makes
++	// caret/nav indicators flicker and keystrokes land at the remote
++	// edit's position).
++	if (anchor != null && tr.docChanged) {
++		const anchorPos = cursorToAbsolutePosition(anchor, state.doc, mapping)[0];
++		const focusPos = focus ? cursorToAbsolutePosition(focus, state.doc, mapping)[0] : anchorPos;
++		if (anchorPos != null) {
++			const size = tr.doc.content.size;
++			const a = Math.max(0, Math.min(anchorPos, size));
++			const h = Math.max(0, Math.min(focusPos != null ? focusPos : anchorPos, size));
++			const $a = tr.doc.resolve(a);
++			const $h = tr.doc.resolve(h);
++			// Restore only when both endpoints land in inline content —
++			// TextSelection.between "fixes" other spots with a console
++			// warning and a surprise caret hop (field: table edits). The
++			// minimal-diff mapping already placed the selection sanely.
++			if ($a.parent.inlineContent && $h.parent.inlineContent) {
++				tr = tr.setSelection(prosemirror_state.TextSelection.between($a, $h));
++			}
++		}
++	}
+ 	tr.setMeta(loroSyncPluginKey, { type: "non-local-updates" });
+ 	view.dispatch(tr);
+-	if (anchor == null) return;
+-	setTimeout(() => {
+-		syncCursorsToPmSelection(view, anchor, focus);
+-	});
+ }
+ /**
+ * Update ProseMirror selection based on the given Loro cursors.
+diff --git a/node_modules/loro-prosemirror/dist/index.js b/node_modules/loro-prosemirror/dist/index.js
+index e41095d..047f2cb 100644
+--- a/node_modules/loro-prosemirror/dist/index.js
++++ b/node_modules/loro-prosemirror/dist/index.js
+@@ -82,19 +82,70 @@ function createLoroText(parentList, pos, nodes, mapping) {
+ function updateLoroText(obj, nodes, mapping) {
+ 	mapping.set(obj.id, nodes);
+ 	let str = obj.toString();
+-	const attrs = {};
+-	for (const delta of obj.toDelta()) for (const key of Object.keys(delta.attributes ?? {})) attrs[key] = null;
+ 	const content = nodes.map((p) => ({
+ 		insert: p.text,
+-		attributes: Object.assign({}, attrs, nodeMarksToAttributes(p.marks))
++		attributes: nodeMarksToAttributes(p.marks)
+ 	}));
+ 	const { insert, remove, index } = simpleDiff(str, content.map((c) => c.insert).join(""));
+ 	if (remove > 0) obj.delete(index, remove);
+ 	if (insert.length) obj.insert(index, insert);
+-	obj.applyDelta(content.map((c) => ({
+-		retain: c.insert.length,
+-		attributes: c.attributes
+-	})));
++	// PATCHED (cardmirror): per-run attribute DIFF against the post-edit
++	// layout instead of blanket `key: null` retains over every run. The
++	// blanket form emits REAL unmark ops for unchanged unmarked ranges;
++	// locally they are no-ops, but they LWW-kill CONCURRENT marks from
++	// other peers (observed: two users highlighting disjoint ranges of
++	// one paragraph while offline -> one side's highlights vanish on
++	// merge). Normalization must not generate ops where nothing changed.
++	const layout = [];
++	{
++		let off = 0;
++		for (const d of obj.toDelta()) {
++			const len = (d.insert ?? "").length;
++			layout.push({ start: off, end: off + len, attributes: d.attributes ?? {} });
++			off += len;
++		}
++	}
++	const overlapping = (start, end) => {
++		const out = [];
++		for (const seg of layout) {
++			const s = Math.max(seg.start, start);
++			const e = Math.min(seg.end, end);
++			if (s < e) out.push({ len: e - s, attributes: seg.attributes });
++		}
++		return out;
++	};
++	const deltas = [];
++	let pos = 0;
++	let pending = 0;
++	const flush = () => {
++		if (pending > 0) {
++			deltas.push({ retain: pending });
++			pending = 0;
++		}
++	};
++	for (const run of content) {
++		const len = run.insert.length;
++		if (len === 0) continue;
++		for (const seg of overlapping(pos, pos + len)) {
++			const diff = {};
++			const keys = new Set([...Object.keys(seg.attributes), ...Object.keys(run.attributes)]);
++			for (const key of keys) {
++				const oldV = seg.attributes[key] ?? null;
++				const newV = run.attributes[key] ?? null;
++				if (JSON.stringify(oldV) !== JSON.stringify(newV)) diff[key] = newV;
++			}
++			if (Object.keys(diff).length === 0) pending += seg.len;
++			else {
++				flush();
++				deltas.push({ retain: seg.len, attributes: diff });
++			}
++		}
++		pos += len;
++	}
++	if (deltas.some((d) => d.attributes !== void 0)) {
++		while (deltas.length && deltas[deltas.length - 1].attributes === void 0) deltas.pop();
++		obj.applyDelta(deltas);
++	}
+ }
+ function nodeMarksToAttributes(marks) {
+ 	const pattrs = {};
+@@ -225,10 +276,12 @@ function updateLoroMapAttributes(obj, node, _mapping) {
+ 	for (const [key, value] of Object.entries(pAttrs)) {
+ 		if (value !== null) {
+ 			if (!equalityDeep(attrs.get(key), value)) attrs.set(key, value);
+-		} else attrs.delete(key);
++		} else if (attrs.get(key) !== void 0) attrs.delete(key);
+ 		keys.delete(key);
+ 	}
+-	for (const key of keys) attrs.delete(key);
++	for (const key of keys) {
++		if (attrs.get(key) !== void 0) attrs.delete(key);
++	}
+ }
+ function getLoroMapChildren(obj) {
+ 	return obj.getOrCreateContainer(CHILDREN_KEY, new LoroList());
+@@ -424,24 +477,13 @@ function createDecorations(state, store, _plugin, createSelection, createCursor)
+ 		const [focus, focusCursorUpdate] = cursorToAbsolutePosition(cursor.focus, doc, loroState.mapping);
+ 		d.push(Decoration.widget(focus, createCursor(peer)));
+ 		if (!cursorEq(cursor.anchor, cursor.focus)) {
+-			const [anchor, anchorCursorUpdate] = cursorToAbsolutePosition(cursor.anchor, doc, loroState.mapping);
++			const [anchor] = cursorToAbsolutePosition(cursor.anchor, doc, loroState.mapping);
+ 			d.push(Decoration.inline(Math.min(anchor, focus), Math.max(anchor, focus), createSelection(peer)));
+-			if (focusCursorUpdate || anchorCursorUpdate) {
+-				const existingLocalState = store.getLocal();
+-				store.setLocal({
+-					...existingLocalState?.user && { user: existingLocalState.user },
+-					anchor: anchorCursorUpdate || cursor.anchor,
+-					focus: focusCursorUpdate || cursor.focus
+-				});
+-			}
+-		} else if (focusCursorUpdate) {
+-			const existingLocalState = store.getLocal();
+-			store.setLocal({
+-				...existingLocalState?.user && { user: existingLocalState.user },
+-				focus: focusCursorUpdate,
+-				anchor: focusCursorUpdate
+-			});
+ 		}
++		// PATCHED (cardmirror): dropped the stale-cursor "update" writes —
++		// they stored the REMOTE peer's re-encoded positions under the
++		// LOCAL peer's key (setLocal), teleporting this peer's advertised
++		// cursor to wherever the partner's stale cursor resolved.
+ 	}
+ 	return DecorationSet.create(state.doc, d);
+ }
+@@ -586,6 +628,23 @@ const LoroSyncPlugin = (props) => {
+ 						break;
+ 					default: break;
+ 				}
++				// PATCHED (cardmirror): stash the selection as loro cursors
++				// while PM and loro AGREE. Capturing at import time (upstream)
++				// anchors the caret against text the remote ops already
++				// shifted — the caret drifts by the inserted length on every
++				// imported batch. Agreement holds on the appended doc-changed
++				// transaction (the sync above just ran) and on transactions
++				// that didn't touch the doc (selection moves); a raw
++				// doc-changing keystroke tr runs BEFORE its doc-changed
++				// follow-up, so capturing there both misses (loro lags one
++				// step) and spams "Cannot find the loroNode" per keystroke.
++				if (state.changedBy === "local" && (meta?.type === "doc-changed" || !tr.docChanged)) {
++					try {
++						state.selectionCursors = convertPmSelectionToCursors(newEditorState.doc, newEditorState.selection, state);
++					} catch (e) {
++						state.selectionCursors = void 0;
++					}
++				}
+ 				return state;
+ 			}
+ 		},
+@@ -649,14 +708,72 @@ function updateNodeOnLoroEvent(view, event) {
+ 	const mapping = state.mapping;
+ 	clearChangedNodes(state.doc, event, mapping);
+ 	const node = createNodeFromLoroObj(view.state.schema, state.containerId ? state.doc.getContainerById(state.containerId) : state.doc.getMap(ROOT_DOC_KEY), mapping);
+-	const { anchor, focus } = convertPmSelectionToCursors(view.state.doc, view.state.selection, state);
+-	let tr = view.state.tr.replace(0, view.state.doc.content.size, new Slice(Fragment.from(node), 0, 0));
++	// PATCHED (cardmirror): restore from the cursors stashed on the
++	// last LOCAL transaction (PM and loro agreed then) — capturing here,
++	// after the import, anchors against already-shifted text.
++	const { anchor, focus } = state.selectionCursors ?? { anchor: null, focus: null };
++	// PATCHED (cardmirror): MINIMAL-DIFF replace instead of replacing the
++	// whole document. replace(0, size) destroys the transaction mapping —
++	// every plugin position (AI-lease regions, decorations, the default
++	// selection remap) collapses to the replace boundary on EVERY remote
++	// batch (field: "card moved — cut not applied" whenever the partner
++	// typed above a running AI routine). Diffing bounds the replace to
++	// the changed span, so tr.mapping is real and everything downstream
++	// tracks remote edits exactly like local ones.
++	let tr = view.state.tr;
++	{
++		const prevDoc = view.state.doc;
++		const nextNode = node;
++		const diffStart = prevDoc.content.findDiffStart(nextNode.content);
++		if (diffStart != null) {
++			// Try the bounded replace; structural changes (table shape
++			// edits) can produce open-depth mismatches the slice fit
++			// rejects or mangles — VERIFY the result and fall back to the
++			// whole-doc replace when it isn't byte-faithful.
++			let applied = false;
++			try {
++				let { a: endA, b: endB } = prevDoc.content.findDiffEnd(nextNode.content);
++				const overlap = diffStart - Math.min(endA, endB);
++				if (overlap > 0) {
++					endA += overlap;
++					endB += overlap;
++				}
++				tr = tr.replace(diffStart, endA, nextNode.slice(diffStart, endB));
++				applied = tr.doc.content.eq(nextNode.content);
++			} catch (e) {
++				applied = false;
++			}
++			if (!applied) tr = view.state.tr.replace(0, view.state.doc.content.size, new Slice(Fragment.from(nextNode), 0, 0));
++		}
++	}
++	// PATCHED (cardmirror): restore the local selection ON THIS
++	// TRANSACTION instead of a follow-up setTimeout dispatch. The
++	// whole-doc replace remaps the selection to the replace boundary;
++	// leaving that bogus selection live until a macrotask later makes
++	// caret/nav indicators flicker to wherever the remote edit landed
++	// on EVERY imported batch, and a keystroke arriving inside the
++	// window lands — and scrolls — at the wrong position (field:
++	// viewport ping-pong while both peers type).
++	if (anchor != null && tr.docChanged) {
++		const anchorPos = cursorToAbsolutePosition(anchor, state.doc, mapping)[0];
++		const focusPos = focus ? cursorToAbsolutePosition(focus, state.doc, mapping)[0] : anchorPos;
++		if (anchorPos != null) {
++			const size = tr.doc.content.size;
++			const a = Math.max(0, Math.min(anchorPos, size));
++			const h = Math.max(0, Math.min(focusPos != null ? focusPos : anchorPos, size));
++			const $a = tr.doc.resolve(a);
++			const $h = tr.doc.resolve(h);
++			// Restore only when both endpoints land in inline content —
++			// TextSelection.between "fixes" other spots with a console
++			// warning and a surprise caret hop (field: table edits). The
++			// minimal-diff mapping already placed the selection sanely.
++			if ($a.parent.inlineContent && $h.parent.inlineContent) {
++				tr = tr.setSelection(TextSelection.between($a, $h));
++			}
++		}
++	}
+ 	tr.setMeta(loroSyncPluginKey, { type: "non-local-updates" });
+ 	view.dispatch(tr);
+-	if (anchor == null) return;
+-	setTimeout(() => {
+-		syncCursorsToPmSelection(view, anchor, focus);
+-	});
+ }
+ /**
+ * Update ProseMirror selection based on the given Loro cursors.

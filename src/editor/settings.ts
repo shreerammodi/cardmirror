@@ -1125,6 +1125,10 @@ export interface Settings {
    *  so a partner who hasn't nicknamed you yet still sees a readable
    *  sender. Empty falls back to the short code on the receiver. */
   pairingDisplayName: string;
+  /** Collaboration sessions: render the partner's live cursor and
+   *  selection (presence). Off = the doc still syncs, just without
+   *  the cursor overlay. */
+  collabShowCursors: boolean;
   /** Pairing: machines you can send to (their code + your nickname). */
   pairingPartners: PairingPartner[];
   /** Pairing: named groups of partners for one-drop fan-out sends. */
@@ -1405,6 +1409,7 @@ const DEFAULTS: Settings = {
   pairingConnectedUntil: 0,
   pairingOwnCode: '',
   pairingDisplayName: '',
+  collabShowCursors: true,
   pairingPartners: [],
   pairingGroups: [],
   pairingStarred: null,
@@ -2720,6 +2725,14 @@ export const SETTING_METADATA: SettingMeta[] = [
     dependsOn: 'pairingEnabled',
   },
   {
+    key: 'collabShowCursors',
+    label: 'Show partner cursors in sessions',
+    description:
+      "Render your partner's live cursor and selection during a collaboration session. Turning this off keeps the document syncing — it only hides the cursor overlay (and stops broadcasting yours).",
+    kind: 'toggle',
+    category: 'pairing',
+  },
+  {
     key: 'pairingPartners',
     label: 'Recipients',
     description:
@@ -3316,6 +3329,7 @@ function sanitize(s: Settings): Settings {
     pairingOwnCode: typeof s.pairingOwnCode === 'string' ? s.pairingOwnCode.trim() : '',
     pairingDisplayName:
       typeof s.pairingDisplayName === 'string' ? s.pairingDisplayName.trim().slice(0, 80) : '',
+    collabShowCursors: s.collabShowCursors !== false,
     pairingPartners: sanitizePairingPartners(s.pairingPartners),
     pairingGroups: sanitizePairingGroups(s.pairingGroups, s.pairingPartners),
     pairingStarred: sanitizePairingStarred(s.pairingStarred, s.pairingPartners, s.pairingGroups),

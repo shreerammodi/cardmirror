@@ -292,6 +292,10 @@
            title="Highlight and shading colors stored on the run at the cursor">
         <span id="cursor-color-text">—</span>
       </div>
+      <!-- Collaboration-session sync status. Hidden unless a session is
+           active (the lazily-loaded collab-ui module owns its text). -->
+      <div id="collab-chip" class="status-segment" hidden
+           title="Collaboration session status"></div>
       <div class="status-spacer"></div>
       <div class="zoom-controls" title="Zoom">
         <button id="zoom-out-btn" type="button" aria-label="Zoom out"><span class="pmd-icon pmd-icon-minus" aria-hidden="true"></span></button>

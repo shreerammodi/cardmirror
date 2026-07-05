@@ -25,33 +25,68 @@ import type { Node as PMNode } from 'prosemirror-model';
 import { fixTables } from 'prosemirror-tables';
 import { schema } from './schema/index.js';
 
-/** [keep, drop] — drop is the later-declared mark of each `excludes`
- *  pair, so the sweep is deterministic under any input order. */
-const EXCLUDE_PAIRS: ReadonlyArray<readonly [string, string]> = [
-  ['cite_mark', 'underline_mark'],
-  ['cite_mark', 'emphasis_mark'],
-  ['underline_mark', 'emphasis_mark'],
-  ['bold', 'bold_off'],
-  ['superscript', 'subscript'],
-];
+/** Resolution order for mutually-exclusive marks: on a text node that
+ *  (post-merge) carries two marks the schema declares as `excludes`,
+ *  the HIGHER-priority one is kept and the other dropped. A single
+ *  priority per mark makes the resolution a TOTAL ORDER — it cannot
+ *  form a cycle the way a hand-listed pairwise winner-table can, and a
+ *  cycle would reintroduce order-dependent (non-converging) repair.
+ *  Which pairs actually conflict is read from the schema itself
+ *  (`type.excludes`), so this map only needs to rank the participants;
+ *  a new exclusive mark is covered by adding its priority.
+ *
+ *  Order (2026-07-05, user): citation styling is the most structural,
+ *  then emphasis, then underline; an explicit bold beats an explicit
+ *  bold-off; superscript beats subscript. */
+const MARK_PRIORITY: Readonly<Record<string, number>> = {
+  cite_mark: 30,
+  emphasis_mark: 20,
+  underline_mark: 10,
+  bold: 2,
+  bold_off: 1,
+  superscript: 2,
+  subscript: 1,
+};
 
-/** Build the repair transaction for `state`, or null when nothing needs
- *  repair. */
+/** Strip the lower-priority member of every present mutually-exclusive
+ *  pair from `tr`. Mark-level and deterministic: every peer resolves to
+ *  the same winner, so this is safe to run on ALL peers (unlike the
+ *  structural repairs) — double-application converges under LWW. */
+function sweepExclusiveMarks(tr: Transaction): void {
+  tr.doc.descendants((node, pos) => {
+    if (!node.isText) return true;
+    const ranked = node.marks.filter((m) => m.type.name in MARK_PRIORITY);
+    for (const m of ranked) {
+      const outranked = ranked.some(
+        (other) =>
+          other !== m &&
+          other.type.excludes(m.type) &&
+          MARK_PRIORITY[other.type.name]! > MARK_PRIORITY[m.type.name]!,
+      );
+      if (outranked) tr.removeMark(pos, pos + node.nodeSize, m.type);
+    }
+    return true;
+  });
+}
+
+/** Exclusive-marks resolution ONLY — no tables, no structural fixes.
+ *  Session repair runs this on every peer (mark-level, converges),
+ *  while the structural half stays leader-gated (see collab-repair). */
+export function buildMarkRepairTr(state: EditorState): Transaction | null {
+  const tr = state.tr;
+  sweepExclusiveMarks(tr);
+  return tr.steps.length ? tr : null;
+}
+
+/** Build the full repair transaction for `state` (tables + exclusive
+ *  marks + container invariant), or null when nothing needs repair.
+ *  Used by import, offline merge, and the session's leader. */
 export function buildDocRepairTr(state: EditorState): Transaction | null {
   const tr = fixTables(state) ?? state.tr;
 
   // Mark sweep scans tr.doc so positions reflect any table fixes above;
   // removeMark never shifts positions, so one scan can batch all fixes.
-  tr.doc.descendants((node, pos) => {
-    if (!node.isText) return true;
-    const names = new Set(node.marks.map((m) => m.type.name));
-    for (const [keep, drop] of EXCLUDE_PAIRS) {
-      if (names.has(keep) && names.has(drop)) {
-        tr.removeMark(pos, pos + node.nodeSize, schema.marks[drop]!);
-      }
-    }
-    return true;
-  });
+  sweepExclusiveMarks(tr);
 
   // Insertions shift positions, so collect first and apply bottom-up.
   const inserts: Array<{ pos: number; type: 'tag' | 'analytic' }> = [];

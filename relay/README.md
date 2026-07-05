@@ -35,6 +35,11 @@ a VPS…). Requirements:
 - Recommended: `--limit-concurrency 4096` (the Dockerfile sets this) as
   a connection-storm backstop. It counts long-lived SSE streams too, so
   keep it far above the number of apps you expect connected at once.
+- Required: `--timeout-graceful-shutdown 5` (the Dockerfile sets this).
+  Without it a stopped instance waits forever for its open SSE streams
+  and lingers as an unbound zombie that keeps heartbeating old clients
+  while the new instance owns the port — their live pushes then go
+  nowhere until the clients notice on their own.
 - The tables are created automatically on first start.
 
 Health check: `GET /relay/health` → `{"ok": true}` (no auth).

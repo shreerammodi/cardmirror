@@ -7,7 +7,7 @@
  * multi-pane / mobile shells install to take over per-pane state.
  */
 
-import { EditorState, Plugin, Selection, TextSelection } from 'prosemirror-state';
+import { EditorState, Plugin, Selection, TextSelection, type Command } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { keymap } from 'prosemirror-keymap';
 import { history, redo, undo } from 'prosemirror-history';
@@ -130,6 +130,7 @@ import {
   readModeAwareUndo,
   readModeAwareRedo,
 } from './read-mode-plugin.js';
+import { tagCollabTransaction, collabPluginSource, setCollabInviteJoiner, setCollabInviter } from './collab/collab-hooks.js';
 import { learnHighlightPlugin, flashcardRangeAt } from './learn-highlight-plugin.js';
 import { repairHighlightPlugin } from './repair-highlight-plugin.js';
 import { aiWorkingPlugin } from './ai/ai-working-plugin.js';
@@ -938,6 +939,47 @@ export function endBenchmark(snapshot: EditorState | null): void {
 // Live context for ribbon commands that read settings at keypress
 // time — active highlight / shading color for F11 / Mod-F11; condense
 // behavior flags for F3 / Alt-F3 / Mod-Alt-F3.
+// Collaboration sessions: everything heavy (Loro wasm, transport) lives
+// in the lazily-imported collab-ui module; these seams hand it the view
+// and the two state-swap capabilities it needs. Dormant unless the
+// collab gate is open (see collab/collab-gate.ts).
+let collabUiModule: Promise<typeof import('./collab/collab-ui.js')> | null = null;
+function loadCollabUi(): Promise<typeof import('./collab/collab-ui.js')> {
+  return (collabUiModule ??= import('./collab/collab-ui.js'));
+}
+// Receive-pill invites: hand the share code from a `room-invite` inbox
+// row to the lazy collab module. Registered unconditionally (cheap
+// setter); the pill itself gates the Join button on collabEnabled().
+setCollabInviteJoiner((code) => {
+  void loadCollabUi().then((m) => m.joinSessionWithCode(collabDeps, code));
+});
+setCollabInviter((target) => {
+  void loadCollabUi().then((m) => m.inviteTargetFlow(collabDeps, target));
+});
+const collabDeps = {
+  getView: () => view,
+  // The blessed same-view plugin swap (same pattern as the keybinding
+  // settings subscriber): a session starting/ending changes the plugin
+  // stack, and buildEditorPlugins consults the collab plugin source.
+  refreshPlugins: () => {
+    if (view) view.updateState(view.state.reconfigure({ plugins: buildEditorPlugins() }));
+  },
+  // Name the (unsaved) session doc: window title, filename chip, and
+  // the save-as default all follow currentDocFilename. No handle — the
+  // first save still prompts for a location, pre-filled with this name.
+  setDocTitle: (title: string) => {
+    currentDocFilename = title;
+    updateWindowTitle();
+  },
+  // Joining a session opens a new unsaved doc IN THIS WINDOW — never
+  // via ribbonContext.newDocument(), which SPAWNS a window on desktop
+  // and would strand the session binding in a window that never gets
+  // it (field bug: joiner saw an unrelated new window plus an inert
+  // "synced" chip here). The Loro binding replaces the empty content
+  // from the session's CRDT state after the swap.
+  newSessionDoc: () => replaceWithSessionDoc(),
+};
+
 const ribbonContext: RibbonContext = {
   highlightColor: () => settings.get('lastHighlightColor'),
   shadingColor: () => settings.get('lastShadingColor'),
@@ -946,6 +988,24 @@ const ribbonContext: RibbonContext = {
   extractUndertagInQuotes: () => settings.get('extractUndertagInQuotes'),
   headingMode: () => settings.get('headingMode'),
   condenseOnPaste: () => settings.get('condenseOnPaste'),
+  collabStartSession: () => {
+    void loadCollabUi().then((m) => m.startSessionFlow(collabDeps));
+  },
+  collabJoinSession: () => {
+    void loadCollabUi().then((m) => m.joinSessionFlow(collabDeps));
+  },
+  collabCopyShareCode: () => {
+    void loadCollabUi().then((m) => m.copyShareCodeFlow());
+  },
+  collabInviteStarred: () => {
+    void loadCollabUi().then((m) => m.inviteStarredFlow());
+  },
+  openDevConsole: () => {
+    void getElectronHost()?.toggleDevTools();
+  },
+  collabEndSession: () => {
+    void loadCollabUi().then((m) => m.endSessionFlow(collabDeps));
+  },
   clearFormattingOnNamedStyleToggleOff: () =>
     settings.get('clearFormattingOnNamedStyleToggleOff'),
   effectivePtForNode: (node, parent) => effectivePtForNode(node, parent),
@@ -1473,6 +1533,35 @@ async function onNewDocClicked(): Promise<void> {
   // Treat as non-pristine so subsequent Opens spawn.
   markNonPristineStarter();
   updateWindowTitle();
+}
+
+/** Join-session doc swap: the web edition's New-in-place path, minus
+ *  the spawn branch — the session binds to the CURRENT window's view.
+ *  Same overwrite protection as New: real edits prompt save/discard/
+ *  cancel; returns false when the user cancels (caller unwinds the
+ *  join without touching the room). */
+async function replaceWithSessionDoc(): Promise<boolean> {
+  if (multiDocActive) return false; // sessions are single-doc-window only
+  if (!isPristineStarter) {
+    const choice = await confirmNewDocOverwrite();
+    if (choice === 'cancel') return false;
+    if (choice === 'save') {
+      const saved = await runSaveAsFlow();
+      if (!saved) return false;
+    }
+  }
+  void clearCurrentJournal();
+  mountView(makeNewDocBody());
+  currentDocFilename = null;
+  setCurrentDocHandle(null);
+  currentDocFormat = null;
+  currentDocUid = newSessionDocUid();
+  currentDocId = null; // unsaved session copy → docId minted on first save
+  markCurrentDocClean();
+  syncSingleDocSpeechRegistration();
+  markNonPristineStarter();
+  updateWindowTitle();
+  return true;
 }
 
 /** Three-button overlay used by the single-doc "New document" flow.
@@ -3155,6 +3244,14 @@ const VIEWLESS_RIBBON_COMMANDS = new Set<RibbonCommandId>([
   'toggleVoice',
   // Pre-warming the Flow host spawns a process; no doc required.
   'startFlowHost',
+  // Collaboration-session lifecycle operates on the app shell (state
+  // swap, dialogs, clipboard) — the flows themselves fetch the view.
+  'collabStartSession',
+  'collabJoinSession',
+  'collabCopyShareCode',
+  'collabInviteStarred',
+  'collabEndSession',
+  'openDevConsole',
 ]);
 
 function runViewlessRibbon(id: RibbonCommandId): void {
@@ -3175,6 +3272,12 @@ function runViewlessRibbon(id: RibbonCommandId): void {
     case 'manageQuickCards': ribbonContext.manageQuickCards(); return;
     case 'toggleVoice': ribbonContext.toggleVoice(); return;
     case 'startFlowHost': ribbonContext.startFlowHost(); return;
+    case 'collabStartSession': ribbonContext.collabStartSession(); return;
+    case 'collabJoinSession': ribbonContext.collabJoinSession(); return;
+    case 'collabCopyShareCode': ribbonContext.collabCopyShareCode(); return;
+    case 'collabInviteStarred': ribbonContext.collabInviteStarred(); return;
+    case 'openDevConsole': ribbonContext.openDevConsole(); return;
+    case 'collabEndSession': ribbonContext.collabEndSession(); return;
     // Multi-pane workspace navigation. Each dispatches into the
     // shell via dynamic import — keeps single-doc bundles free
     // of the shell's deps. All no-op in single-doc mode (the
@@ -4006,8 +4109,16 @@ export function buildEditorPlugins(): Plugin[] {
     // mobile shell; a no-op everywhere else (the active flag is set
     // once at boot, before any view mounts).
     mobilePlugin,
-    history(),
-    keymap({ 'Mod-z': readModeAwareUndo, 'Mod-y': readModeAwareRedo, 'Mod-Shift-z': readModeAwareRedo }),
+    // A live collaboration session owns undo: the CRDT undo manager
+    // reverts only this peer's edits, which prosemirror-history cannot
+    // guarantee once remote transactions interleave. Outside a session,
+    // the plain history stack as always.
+    ...(collabPluginSource()?.ownsUndo()
+      ? [keymap({ 'Mod-z': collabUndo, 'Mod-y': collabRedo, 'Mod-Shift-z': collabRedo })]
+      : [
+          history(),
+          keymap({ 'Mod-z': readModeAwareUndo, 'Mod-y': readModeAwareRedo, 'Mod-Shift-z': readModeAwareRedo }),
+        ]),
     // Tag/analytic boundary editing rules (ARCHITECTURE.md §14.3).
     // These run before baseKeymap so they get first crack at
     // Backspace / Delete / Enter when the cursor is in a tag.
@@ -4130,8 +4241,18 @@ export function buildEditorPlugins(): Plugin[] {
   // inert without a session. The session toggle is bound through the
   // rebindable ribbon command (`toggleVoice`), not a fixed keymap here.
   plugins.push(voicePlugin());
+  // A live collaboration session appends its binding plugins (sync,
+  // undo manager, later cursors). Appended last: they carry no keymaps,
+  // and every earlier filter/appendTransaction must see their output.
+  const collab = collabPluginSource();
+  if (collab) plugins.push(...collab.plugins());
   return plugins;
 }
+
+const collabUndo: Command = (state, dispatch, viewArg) =>
+  collabPluginSource()?.undo(state, dispatch, viewArg) ?? false;
+const collabRedo: Command = (state, dispatch, viewArg) =>
+  collabPluginSource()?.redo(state, dispatch, viewArg) ?? false;
 
 let voiceController: VoiceController | null = null;
 function getVoiceController(): VoiceController {
@@ -4162,6 +4283,10 @@ function mountView(doc: PMNode, threads: Thread[] = []): void {
     attributes: { spellcheck: 'false' },
     dispatchTransaction(tx) {
       if (!view) return;
+      // Stamp collab metas (sync-origin on the Loro binding's remote
+      // transactions) BEFORE apply so every filterTransaction sees them.
+      // No-op when no session is active.
+      tagCollabTransaction(tx);
       // A user edit inside a region an AI op has leased is rejected and the
       // locked region flashes. AI writes carry a bypass tag, so they pass.
       if (coordinatorBlocks(view.state, tx)) {
@@ -4932,6 +5057,10 @@ const homeCallbacks: HomeScreenCallbacks = {
   },
   openRecent: (recent: RecentFile) => {
     void openRecentInPlace(recent);
+  },
+  resumeSession: (roomId: string) => {
+    homeScreen.hide();
+    void loadCollabUi().then((m) => m.resumeSessionFlow(collabDeps, roomId));
   },
   manageQuickCards: () => {
     void quickCardsManageUI.open();

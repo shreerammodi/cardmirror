@@ -24,6 +24,8 @@ import { schema } from '../../schema/index.js';
 import { settings, type PairingGroup } from '../settings.js';
 import { showToast } from '../toast.js';
 import { relayClient, type SendItem } from './relay-client.js';
+import { collabEnabled } from '../collab/collab-gate.js';
+import { collabInviter } from '../collab/collab-hooks.js';
 
 interface SendPillMountOptions {
   parent: HTMLElement;
@@ -65,6 +67,11 @@ export class SendPillController {
   private unsubscribeSettings: (() => void) | null = null;
   private unsubscribeController: (() => void) | null = null;
   private expanded = false;
+  /** Click-to-invite mode: the panel is open from a CLICK (not a drag)
+   *  and rows send session invites instead of absorbing cards. */
+  private inviteMode = false;
+  private inviteHeader: HTMLDivElement | null = null;
+  private onDocPointerDown: ((e: PointerEvent) => void) | null = null;
   /** Row element → resolved target, rebuilt with the partner/group list. */
   private targets = new Map<HTMLElement, SendTarget>();
 
@@ -92,6 +99,16 @@ export class SendPillController {
     labelEl.textContent = 'Send';
     this.bar.appendChild(labelEl);
     this.root.appendChild(this.bar);
+
+    // Click-to-invite (collab sessions): the same partner/group rows,
+    // but a click on one sends a session invite — starting a session on
+    // the current doc first when none is active. Only offered while the
+    // collab gate is open; otherwise the pill stays drag-only.
+    this.bar.addEventListener('click', () => {
+      if (!collabEnabled() || !collabInviter()) return;
+      if (this.inviteMode) this.collapse();
+      else this.openInviteMode();
+    });
 
     opts.parent.appendChild(this.root);
 
@@ -152,12 +169,51 @@ export class SendPillController {
       if (event === 'end') this.collapse();
     });
 
+    this.panel.addEventListener('click', (e) => {
+      if (!this.inviteMode) return;
+      const row = (e.target as HTMLElement).closest('.pmd-send-target');
+      if (!(row instanceof HTMLElement)) return;
+      const target = this.targets.get(row);
+      if (!target) return;
+      this.collapse();
+      collabInviter()?.({ codes: target.codes, label: target.label, via: target.via });
+    });
+
     this.renderTargets();
     this.applyVisibility();
     this.unsubscribeSettings = settings.subscribe(() => {
       this.renderTargets();
       this.applyVisibility();
+      this.applyClickAffordance();
     });
+    this.applyClickAffordance();
+  }
+
+  /** Cursor + tooltip reflect whether clicking does anything. */
+  private applyClickAffordance(): void {
+    const clickable = collabEnabled() && collabInviter() !== null && settings.get('pairingEnabled');
+    this.bar.classList.toggle('pmd-send-bar-clickable', clickable);
+    this.bar.title = clickable
+      ? 'Drag a card here to send it · Click to invite to a collaboration session'
+      : 'Drag a card here to send it';
+  }
+
+  private openInviteMode(): void {
+    this.inviteMode = true;
+    this.expand();
+    if (!this.inviteHeader) {
+      this.inviteHeader = document.createElement('div');
+      this.inviteHeader.className = 'pmd-send-invite-header';
+      this.inviteHeader.textContent = 'Invite to collaboration session';
+    }
+    this.panel.prepend(this.inviteHeader);
+    this.root.classList.add('pmd-send-invite-mode');
+    // Outside click closes (capture so editor clicks count too).
+    this.onDocPointerDown = (e: PointerEvent) => {
+      if (e.target instanceof Node && this.root.contains(e.target)) return;
+      this.collapse();
+    };
+    document.addEventListener('pointerdown', this.onDocPointerDown, true);
   }
 
   unmount(): void {
@@ -254,6 +310,15 @@ export class SendPillController {
   }
 
   private collapse(): void {
+    if (this.inviteMode) {
+      this.inviteMode = false;
+      this.root.classList.remove('pmd-send-invite-mode');
+      this.inviteHeader?.remove();
+      if (this.onDocPointerDown) {
+        document.removeEventListener('pointerdown', this.onDocPointerDown, true);
+        this.onDocPointerDown = null;
+      }
+    }
     if (!this.expanded) {
       this.clearRowHighlight();
       return;

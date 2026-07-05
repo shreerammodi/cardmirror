@@ -5,7 +5,54 @@ changes in each release, written for users of the editor. For
 in-depth rationale and implementation context behind each entry,
 see `DETAILED_CHANGELOG.md`.
 
-## Unreleased
+## 0.1.0-beta.8 — 2026-07-04
+
+### Added
+
+- **Word-style image resizing.** Click an image to get eight resize
+  handles: corners resize proportionally, edges stretch one axis —
+  exactly like Word. Sizes round-trip to .docx, so a resize here is
+  the same resize in Word. (Thanks to [Neo Cai](https://github.com/caineoyuan).)
+
+- **Open Developer Console command.** The command bar can now open the
+  built-in developer console on desktop (search "Open Developer
+  Console"; bindable to a key of your choice in Settings). Useful when
+  support asks you to check for errors — packaged builds previously
+  had no way to open it on Windows or Linux.
+
+### Preview — collaboration sessions (desktop only, off by default)
+
+This build carries an **early preview** of real-time collaboration. It
+is experimental and **may break** — expect rough edges, and know that a
+session can occasionally desync or need restarting while we field-test
+it. It runs only in the **desktop app** (the web version has no
+server-backed features), and it stays off until you deliberately turn
+it on from the developer console — there is no setting for it yet. We'll
+announce it properly, with a real on-switch, once it's ready. What's in
+the preview:
+
+- **Collaboration sessions.** Start a session on the document you have
+  open; a partner joins and you edit together live. Built for
+  tournament reality: it keeps working through offline stretches,
+  laptop sleep, and hotel wifi, syncing whenever either side gets a
+  connection — even if you're never online at the same moment. Ending
+  a session leaves everyone with their own copy.
+- **Invites through card sharing.** Click the Send pill (or use the
+  "Invite Starred Partner to Session" command) to invite a partner;
+  the invite lands in their Receive pill with a Join button. Invites
+  pre-download the document so joining works even if you've gone
+  offline by the time you accept.
+- **Partner presence.** See your partner's cursor and selection live,
+  labeled with their name (toggle in Settings → Card Sharing), plus a
+  marker over any region where their AI routine is working.
+- **Comments sync.** Comment threads and replies travel with the
+  session, not just the highlight.
+- **Sessions survive restarts.** A Sessions list on the home screen
+  resumes any session — including edits made offline that never got a
+  chance to sync before the app closed.
+- **Large documents supported.** Sessions work on big master files.
+- Everything is end-to-end encrypted; the relay only ever stores
+  ciphertext.
 
 ### Fixed
 
@@ -13,6 +60,11 @@ see `DETAILED_CHANGELOG.md`.
   rows have different numbers of cells (Word allows this) is now padded
   to a clean rectangle on import, so row and column editing behaves
   predictably instead of misaligning.
+
+- **Find bar stays on screen on narrow windows.** On a small or
+  narrow window the find bar could extend past the edge and clip its
+  controls; it now stays within the viewport. (Thanks to
+  [Shreeram Modi](https://github.com/shreerammodi).)
 
 ### Changed
 

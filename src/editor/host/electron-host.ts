@@ -87,6 +87,9 @@ export interface PairingSendIpc {
   recipientCodes: string[];
   item: PairingSendItemIpc;
   via?: string;
+  /** Per-message compatibility floor override (session invites carry the
+   *  first invite-aware version; cards keep the config-level floor). */
+  minReceiverVersion?: string;
 }
 export interface PairingInboxItemIpc {
   id: string;
@@ -262,6 +265,16 @@ interface ElectronAPI {
   pairingInboxRemove?(id: string): Promise<void>;
   pairingInboxClear?(): Promise<void>;
   pairingInboxMarkAllRead?(): Promise<void>;
+  /** Baked relay endpoint from the main process (same base + shared
+   *  token card sharing uses) — the renderer-side rooms client falls
+   *  back to this when no settings/dev override is present. Optional so
+   *  an older preload degrades to settings-only resolution. */
+  collabRelayDefaults?(): Promise<{ url: string; token: string }>;
+  /** Toggle Chromium DevTools on this window (packaged builds have no
+   *  menu accelerators for it on Windows/Linux). */
+  toggleDevTools?(): Promise<void>;
+  /** System woke from sleep — long-lived streams should hard-restart. */
+  onPowerResumed?(handler: () => void): () => void;
   onPairingInboxChanged?(handler: (items: PairingInboxItemIpc[]) => void): () => void;
   onPairingVersionMismatch?(
     handler: (info: {
@@ -270,6 +283,8 @@ interface ElectronAPI {
       requiredVersion: string;
     }) => void,
   ): () => void;
+  /** Relay rejected our credentials (401) — throttled in main. */
+  onPairingUnauthorized?(handler: () => void): () => void;
   pairingConnectAccount?(payload: {
     connectCode: string;
     confirmEvict?: boolean;
@@ -758,6 +773,18 @@ export class ElectronHost implements Host {
     await api().pairingInboxMarkAllRead?.();
   }
 
+  async collabRelayDefaults(): Promise<{ url: string; token: string }> {
+    return (await api().collabRelayDefaults?.()) ?? { url: '', token: '' };
+  }
+
+  async toggleDevTools(): Promise<void> {
+    await api().toggleDevTools?.();
+  }
+
+  onPowerResumed(handler: () => void): () => void {
+    return api().onPowerResumed?.(handler) ?? (() => {});
+  }
+
   onPairingInboxChanged(handler: (items: PairingInboxItemIpc[]) => void): () => void {
     return api().onPairingInboxChanged?.(handler) ?? (() => {});
   }
@@ -770,6 +797,10 @@ export class ElectronHost implements Host {
     }) => void,
   ): () => void {
     return api().onPairingVersionMismatch?.(handler) ?? (() => {});
+  }
+
+  onPairingUnauthorized(handler: () => void): () => void {
+    return api().onPairingUnauthorized?.(handler) ?? (() => {});
   }
 
   async pairingConnectAccount(payload: {

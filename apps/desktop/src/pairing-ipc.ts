@@ -412,6 +412,16 @@ function broadcastInbox(): void {
   }
 }
 
+let lastUnauthorizedBroadcast = 0;
+function broadcastUnauthorized(): void {
+  const now = Date.now();
+  if (now - lastUnauthorizedBroadcast < 60_000) return; // at most once a minute
+  lastUnauthorizedBroadcast = now;
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send('pairing:unauthorized');
+  }
+}
+
 function broadcastVersionMismatch(
   partnerVersion: string,
   localVersion: string,
@@ -645,13 +655,13 @@ function applyDelivery(): void {
         startFallbackPolling();
       },
       onUnauthorized: () => {
-        // Shared-token era: a 401 means the baked/self-host token doesn't
-        // match the relay. When subscription gating ships, this becomes
-        // the "connect your blog account" prompt.
-        console.warn(
-          '[pairing] relay rejected our token (401) — check the relay token ' +
-            '(Settings → Card sharing for a self-hosted relay)',
-        );
+        // A 401 means the relay rejected our credentials — a wrong
+        // self-host token today, or (once gating enforces) a missing
+        // subscription. Surface it to the user, throttled, so it never
+        // spams: the two paths forward are connect an account or run
+        // your own relay.
+        console.warn('[pairing] relay rejected our token (401)');
+        broadcastUnauthorized();
       },
     },
   });
@@ -704,6 +714,15 @@ export function registerPairingIpc(): void {
 
   // Mint a fresh keypair (invalidates the old code for partners). Returns the
   // new public code and re-points delivery at the new routing code.
+  // Rooms (collab sessions) run their HTTP/SSE client in the renderer;
+  // hand it the same baked relay base + shared token card sharing uses,
+  // as the LAST fallback after settings/dev-env. The rooms transport is
+  // E2E encrypted, so the renderer holding the shared bearer token is
+  // equivalent exposure to the web edition.
+  ipcMain.handle('host:collab-relay-defaults', (): { url: string; token: string } => {
+    return { url: relayUrl(), token: relayToken() };
+  });
+
   ipcMain.handle('host:pairing-regenerate-key', (): { ownCode: string } => {
     const ownCode = ks().regenerate();
     consumed.clear();
@@ -747,6 +766,11 @@ export function registerPairingIpc(): void {
   // prompt reconnect (whose hello triggers the catch-up poll). In
   // fallback-poll mode just poll immediately instead of waiting a cycle.
   powerMonitor.on('resume', () => {
+    // Renderers first (collab session streams restart themselves) —
+    // NOT gated on pairing being enabled.
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('host:power-resumed');
+    }
     if (!config.enabled) return;
     console.log('[pairing] system resumed — refreshing delivery channel');
     if (stream) stream.restart();
@@ -757,7 +781,12 @@ export function registerPairingIpc(): void {
     'host:pairing-send',
     async (
       _event,
-      payload: { recipientCodes: string[]; item: SendItem; via?: string },
+      payload: {
+        recipientCodes: string[];
+        item: SendItem;
+        via?: string;
+        minReceiverVersion?: string;
+      },
     ): Promise<{ ok: number; fail: number }> => {
       const targets = Array.isArray(payload?.recipientCodes)
         ? Array.from(new Set(payload.recipientCodes.filter((c) => typeof c === 'string' && c)))
@@ -772,11 +801,17 @@ export function registerPairingIpc(): void {
         targets.map(async (recipientPublicCode) => {
           try {
             // Seal everything-but-routing to the recipient's public key.
+            // Per-message floor (session invites) beats the config-level
+            // card floor; blank still means tolerant.
+            const floor =
+              typeof payload.minReceiverVersion === 'string' && payload.minReceiverVersion.trim()
+                ? payload.minReceiverVersion.trim()
+                : config.minReceiverVersion;
             const inner: InnerPayload = {
               schemaVersion: config.schemaVersion,
               // Omit when blank so the payload stays minimal and older receivers
               // never see an unexpected field; absent = tolerant.
-              minReceiverVersion: config.minReceiverVersion || undefined,
+              minReceiverVersion: floor || undefined,
               senderCode,
               senderName: config.displayName,
               via: payload.via,

@@ -21,6 +21,7 @@
 
 import { RIBBON_COMMAND_IDS, type RibbonCommandId } from './ribbon-commands.js';
 import { settings } from './settings.js';
+import { collabEnabled } from './collab/collab-gate.js';
 import { getElectronHost, isWindowsHost } from './host/index.js';
 
 const FLOW_COMMANDS = new Set<RibbonCommandId>([
@@ -34,9 +35,20 @@ const FLOW_COMMANDS = new Set<RibbonCommandId>([
 ]);
 
 /** Whether a command should be offered in the discovery surfaces now. */
+const COLLAB_COMMANDS = new Set<RibbonCommandId>([
+  'collabStartSession',
+  'collabJoinSession',
+  'collabCopyShareCode',
+  'collabInviteStarred',
+  'collabEndSession',
+]);
+
 export function isRibbonCommandAvailable(id: RibbonCommandId): boolean {
   if (FLOW_COMMANDS.has(id)) return isWindowsHost();
   if (id === 'toggleVoice') return getElectronHost() !== null;
+  // The dev console is Chromium DevTools via the Electron host; on the
+  // web the browser's own DevTools exist and we can't open them anyway.
+  if (id === 'openDevConsole') return getElectronHost() !== null;
   // Reads the clipboard — Electron host IPC OR the browser's async Clipboard
   // API (Chromium). The command self-guards and falls through where no read is
   // available (e.g. Firefox/Safari), so hide it only where neither exists.
@@ -47,6 +59,7 @@ export function isRibbonCommandAvailable(id: RibbonCommandId): boolean {
     );
   }
   if (id === 'openCardCutter') return settings.get('cardCutterEnabled') === true;
+  if (COLLAB_COMMANDS.has(id)) return collabEnabled();
   return true;
 }
 

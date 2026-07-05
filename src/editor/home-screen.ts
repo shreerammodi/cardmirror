@@ -31,6 +31,13 @@ import { openLearnManage } from './learn-manage-ui.js';
 import type { Scope } from './learn-store.js';
 import { isAnyOverlayOpen } from './overlay-stack.js';
 import { isEditableTarget } from './editable-target.js';
+import { collabEnabled } from './collab/collab-gate.js';
+import {
+  listSessionRecords,
+  deleteSessionRecord,
+  subscribeSessionRecords,
+  type PersistedSessionRecord,
+} from './collab/collab-store.js';
 
 export interface HomeScreenCallbacks {
   newDoc: () => void;
@@ -51,11 +58,16 @@ export interface HomeScreenCallbacks {
   /** Open the (temporary) bulk-compress migration tool. Electron-only,
    *  same as bulkConvert. */
   bulkCompress?: () => void;
+  /** Resume a persisted collaboration session in this window (M3).
+   *  Only consulted while the collab gate is open. */
+  resumeSession?: (roomId: string) => void;
 }
 
 class HomeScreen {
   private root!: HTMLDivElement;
   private recentsEl!: HTMLDivElement;
+  private sessionsSection!: HTMLElement;
+  private sessionsEl!: HTMLDivElement;
   private learnEl!: HTMLDivElement;
   private backBtn!: HTMLButtonElement;
   private callbacks: HomeScreenCallbacks | null = null;
@@ -163,6 +175,24 @@ class HomeScreen {
     recentsSection.appendChild(this.recentsEl);
     inner.appendChild(recentsSection);
 
+    // Collaboration sessions — a DEDICATED section right below Recent,
+    // deliberately NOT merged into the recents list: normal doc churn
+    // caps recents at 6 and would displace a shared session, and a
+    // session someone shared with you must never get lost. The list
+    // scrolls when long (CSS max-height). Hidden entirely when the
+    // collab gate is closed or no session records exist.
+    this.sessionsSection = document.createElement('section');
+    this.sessionsSection.className = 'pmd-home-sessions-section';
+    this.sessionsSection.hidden = true;
+    const sessionsTitle = document.createElement('h2');
+    sessionsTitle.className = 'pmd-home-section-title';
+    sessionsTitle.textContent = 'Sessions';
+    this.sessionsSection.appendChild(sessionsTitle);
+    this.sessionsEl = document.createElement('div');
+    this.sessionsEl.className = 'pmd-home-sessions';
+    this.sessionsSection.appendChild(this.sessionsEl);
+    inner.appendChild(this.sessionsSection);
+
     // Utilities — below Recent. Each is its own labeled group (heading
     // + button) sitting side by side in a card-width grid. Order:
     // Clean, Convert, Compress, Quick Cards (matching the number-key
@@ -245,7 +275,9 @@ class HomeScreen {
 
     this.unsubscribe = subscribeRecents(() => this.renderRecents());
     learnStore.subscribe(() => this.renderLearn());
+    subscribeSessionRecords(() => void this.renderSessions());
     this.renderRecents();
+    void this.renderSessions();
     this.renderLearn();
   }
 
@@ -270,6 +302,7 @@ class HomeScreen {
     // opened a file); re-read. Same for the learn counts (cards may
     // have been created while a doc was open).
     this.renderRecents();
+    void this.renderSessions();
     this.renderLearn();
   }
 
@@ -354,6 +387,66 @@ class HomeScreen {
     for (const r of recents) {
       this.recentsEl.appendChild(this.recentRow(r));
     }
+  }
+
+  /** Rebuild the Sessions section from the collab store. Hidden when
+   *  the gate is closed or no records exist; otherwise one row per
+   *  persisted session, newest first (the list scrolls via CSS). */
+  private async renderSessions(): Promise<void> {
+    if (!this.sessionsSection) return;
+    if (!collabEnabled()) {
+      this.sessionsSection.hidden = true;
+      return;
+    }
+    const records = await listSessionRecords();
+    this.sessionsSection.hidden = records.length === 0;
+    this.sessionsEl.innerHTML = '';
+    for (const r of records) {
+      this.sessionsEl.appendChild(this.sessionRow(r));
+    }
+  }
+
+  private sessionRow(record: PersistedSessionRecord): HTMLDivElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'pmd-home-session';
+
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'pmd-home-session-open';
+    row.title = 'Resume this collaboration session';
+
+    const chip = document.createElement('span');
+    chip.className = 'pmd-home-recent-format pmd-home-session-role';
+    chip.textContent = record.role === 'host' ? 'HOST' : 'JOINED';
+    row.appendChild(chip);
+
+    const name = document.createElement('span');
+    name.className = 'pmd-home-recent-name';
+    name.textContent = record.docTitle || 'Collaboration session';
+    name.title = name.textContent;
+    row.appendChild(name);
+
+    const meta = document.createElement('span');
+    meta.className = 'pmd-home-recent-path';
+    meta.textContent = `last synced ${relativeTime(record.updatedAt)}`;
+    row.appendChild(meta);
+
+    row.addEventListener('click', () => this.callbacks?.resumeSession?.(record.roomId));
+    wrap.appendChild(row);
+
+    const forget = document.createElement('button');
+    forget.type = 'button';
+    forget.className = 'pmd-home-session-forget';
+    forget.textContent = '✕';
+    forget.title = 'Forget this session (your partner is unaffected)';
+    forget.setAttribute('aria-label', 'Forget this session');
+    forget.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void deleteSessionRecord(record.roomId);
+    });
+    wrap.appendChild(forget);
+
+    return wrap;
   }
 
   /** Rebuild the Learn section from the local store: an "all due"
@@ -483,6 +576,15 @@ class HomeScreen {
     }
     return row;
   }
+}
+
+/** Compact "3m ago" / "2h ago" / "5d ago" for session rows. */
+function relativeTime(ts: number): string {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
 }
 
 /** A heading stacked above a single action card — used for the

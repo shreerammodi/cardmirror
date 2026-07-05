@@ -1,8 +1,11 @@
-// Wire-contract suite for the relay (20 checks): mailbox CRUD, gzip and
-// malformed bodies, ordering, recipient isolation, SSE hello/push/heartbeat,
-// dormant auth endpoints. Old-client compatibility gate: run before AND
-// after any relay change — the results must be identical (see the relay
-// hardening, 2026-07-04).
+// Wire-contract suite for the relay: mailbox CRUD, gzip and malformed
+// bodies, ordering, recipient isolation, SSE hello/push/heartbeat,
+// dormant auth endpoints, and the rooms protocol (create/update/page/
+// snapshot-fast-path/presence/tombstone/participant-cap). Old-client
+// compatibility gate: run before AND after any relay change — the
+// results must be identical (see the relay hardening, 2026-07-04).
+// Relays without rooms (legacy mailbox-only) skip the rooms section:
+// set ROOMS=0.
 //
 // Usage:  BASE=http://127.0.0.1:8411/relay TOKEN=<token> [HB=1] node dev/relay-contract.mjs
 // (HB=1 adds the 25s heartbeat check; omit for fast runs.)
@@ -129,5 +132,131 @@ if (process.env.HB === '1') {
   const w = await fetch(`${BASE}/ghost-webhook`, { method: 'POST', body: '{}' });
   check('webhook 404 while dormant', w.status === 404, String(w.status));
 }
+// ── Rooms (collaboration sessions) ──────────────────────────────────
+if (process.env.ROOMS !== '0') {
+  // 7. create + auth
+  const mk = await fetch(`${BASE}/rooms`, { method: 'POST', headers: AUTH });
+  check('rooms: create 201 + roomId', mk.status === 201, String(mk.status));
+  const { roomId } = await mk.json();
+  const noAuth = await fetch(`${BASE}/rooms`, { method: 'POST' });
+  check('rooms: create unauthenticated 401', noAuth.status === 401, String(noAuth.status));
+
+  // 8. raw-bytes updates get global, increasing seqs
+  const postU = (bytes) =>
+    fetch(`${BASE}/rooms/${roomId}/updates`, {
+      method: 'POST', headers: { ...AUTH, 'Content-Type': 'application/octet-stream' }, body: bytes,
+    });
+  const u1 = await postU(Buffer.from('update-one'));
+  check('rooms: POST update 202', u1.status === 202, String(u1.status));
+  const seq1 = (await u1.json()).seq;
+  const seq2 = (await (await postU(Buffer.from('update-two'))).json()).seq;
+  check('rooms: seqs increase', Number.isInteger(seq1) && seq2 > seq1, `${seq1} → ${seq2}`);
+  const empty = await postU(Buffer.alloc(0));
+  check('rooms: empty update 400', empty.status === 400, String(empty.status));
+
+  // 9. cursor paging
+  const g0 = await (await fetch(`${BASE}/rooms/${roomId}/updates?after=0`, { headers: AUTH })).json();
+  check('rooms: GET after=0 returns both, in order, lastSeq set',
+    g0.updates?.length === 2 && g0.updates[0].seq === seq1 && g0.updates[1].seq === seq2
+      && g0.lastSeq === seq2 && g0.more === false && !g0.snapshot,
+    JSON.stringify({ n: g0.updates?.length, lastSeq: g0.lastSeq, more: g0.more }));
+  const g1 = await (await fetch(`${BASE}/rooms/${roomId}/updates?after=${seq1}`, { headers: AUTH })).json();
+  check('rooms: GET after=seq1 returns only the tail',
+    g1.updates?.length === 1 && g1.updates[0].seq === seq2, JSON.stringify(g1.updates?.map((u) => u.seq)));
+
+  // 10. stream: hello carries the cursor; updates and presence push; the
+  // store never records presence.
+  {
+    const frames = [];
+    let helloSeq = null;
+    const ctl = new AbortController();
+    const done = (async () => {
+      const res = await fetch(`${BASE}/rooms/${roomId}/stream`, { headers: AUTH, signal: ctl.signal });
+      check('rooms: stream 200 event-stream',
+        res.status === 200 && (res.headers.get('content-type') || '').includes('text/event-stream'), String(res.status));
+      let buf = ''; const dec = new TextDecoder();
+      try {
+        for await (const chunk of res.body) {
+          buf += dec.decode(chunk, { stream: true });
+          let i;
+          while ((i = buf.indexOf('\n\n')) >= 0) {
+            const frame = buf.slice(0, i); buf = buf.slice(i + 2);
+            if (frame.includes('event: hello')) helloSeq = JSON.parse(frame.slice(frame.indexOf('data:') + 5).trim()).lastSeq;
+            else if (frame.startsWith('data:')) frames.push(JSON.parse(frame.slice(5).trim()));
+          }
+        }
+      } catch { /* aborted */ }
+    })();
+    await new Promise((r) => setTimeout(r, 400));
+    check('rooms: hello lastSeq = current cursor', helloSeq === seq2, String(helloSeq));
+    const seq3 = (await (await postU(Buffer.from('update-three'))).json()).seq;
+    const pres = await fetch(`${BASE}/rooms/${roomId}/presence`, {
+      method: 'POST', headers: { ...AUTH, 'Content-Type': 'application/octet-stream' }, body: Buffer.from('cursor-blob'),
+    });
+    check('rooms: presence 202', pres.status === 202, String(pres.status));
+    await new Promise((r) => setTimeout(r, 500));
+    const uFrame = frames.find((f) => f.t === 'u');
+    const pFrame = frames.find((f) => f.t === 'p');
+    check('rooms: update pushed over stream', !!uFrame && uFrame.seq === seq3 && typeof uFrame.blob === 'string', JSON.stringify(frames));
+    check('rooms: presence pushed over stream', !!pFrame && typeof pFrame.blob === 'string');
+    const gAll = await (await fetch(`${BASE}/rooms/${roomId}/updates?after=0`, { headers: AUTH })).json();
+    check('rooms: presence never stored', gAll.updates?.length === 3, String(gAll.updates?.length));
+    ctl.abort();
+    await done;
+
+    // 11. snapshot compaction + fast-path
+    const snap = await fetch(`${BASE}/rooms/${roomId}/snapshot`, {
+      method: 'POST', headers: { ...AUTH, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blob: Buffer.from('snapshot-state').toString('base64'), coversThroughSeq: seq3 }),
+    });
+    check('rooms: snapshot 204', snap.status === 204, String(snap.status));
+    const gS = await (await fetch(`${BASE}/rooms/${roomId}/updates?after=0`, { headers: AUTH })).json();
+    check('rooms: snapshot fast-path (blob + truncated log)',
+      gS.snapshot?.coversThroughSeq === seq3 && gS.updates?.length === 0 && gS.lastSeq === seq3,
+      JSON.stringify({ covers: gS.snapshot?.coversThroughSeq, n: gS.updates?.length }));
+    const stale = await fetch(`${BASE}/rooms/${roomId}/snapshot`, {
+      method: 'POST', headers: { ...AUTH, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blob: Buffer.from('older').toString('base64'), coversThroughSeq: seq1 }),
+    });
+    check('rooms: stale snapshot 204 no-op', stale.status === 204, String(stale.status));
+    const gS2 = await (await fetch(`${BASE}/rooms/${roomId}/updates?after=0`, { headers: AUTH })).json();
+    check('rooms: stale snapshot did not replace', gS2.snapshot?.coversThroughSeq === seq3);
+    const badSnap = await fetch(`${BASE}/rooms/${roomId}/snapshot`, {
+      method: 'POST', headers: { ...AUTH, 'Content-Type': 'application/json' }, body: '{nope',
+    });
+    check('rooms: malformed snapshot 400', badSnap.status === 400, String(badSnap.status));
+  }
+
+  // 12. participant cap: MAX streams hold, the next connect is 409.
+  {
+    const CAP = Number(process.env.ROOM_CAP || 10);
+    const ctls = [];
+    let opened = 0;
+    for (let i = 0; i < CAP; i++) {
+      const ctl = new AbortController();
+      ctls.push(ctl);
+      const res = await fetch(`${BASE}/rooms/${roomId}/stream`, { headers: AUTH, signal: ctl.signal });
+      // hold the stream OPEN — canceling the body frees the server slot
+      if (res.status === 200) opened++;
+    }
+    const over = await fetch(`${BASE}/rooms/${roomId}/stream`, { headers: AUTH });
+    check(`rooms: participant cap (${CAP} ok, next 409)`, opened === CAP && over.status === 409,
+      `opened=${opened} over=${over.status}`);
+    over.body?.cancel?.();
+    for (const c of ctls) c.abort();
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
+  // 13. unknown room vs tombstone
+  const g404 = await fetch(`${BASE}/rooms/never-existed/updates?after=0`, { headers: AUTH });
+  check('rooms: unknown room 404', g404.status === 404, String(g404.status));
+  const del = await fetch(`${BASE}/rooms/${roomId}`, { method: 'DELETE', headers: AUTH });
+  check('rooms: DELETE 204', del.status === 204, String(del.status));
+  const g410 = await fetch(`${BASE}/rooms/${roomId}/updates?after=0`, { headers: AUTH });
+  check('rooms: tombstone 410 (ended ≠ never existed)', g410.status === 410, String(g410.status));
+  const s410 = await fetch(`${BASE}/rooms/${roomId}/stream`, { headers: AUTH });
+  check('rooms: tombstoned stream 410', s410.status === 410, String(s410.status));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

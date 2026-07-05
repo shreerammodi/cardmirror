@@ -555,6 +555,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('host:pairing-inbox-remove', id),
   pairingInboxClear: () => ipcRenderer.invoke('host:pairing-inbox-clear'),
   pairingInboxMarkAllRead: () => ipcRenderer.invoke('host:pairing-inbox-mark-read'),
+  collabRelayDefaults: () =>
+    ipcRenderer.invoke('host:collab-relay-defaults') as Promise<{ url: string; token: string }>,
+  toggleDevTools: () => ipcRenderer.invoke('host:toggle-devtools') as Promise<void>,
+  onPowerResumed: (handler: () => void) => {
+    const listener = () => handler();
+    ipcRenderer.on('host:power-resumed', listener);
+    return () => ipcRenderer.removeListener('host:power-resumed', listener);
+  },
   onPairingInboxChanged(handler: (items: PairingInboxItemIpc[]) => void): () => void {
     const listener = (_evt: unknown, items: PairingInboxItemIpc[]): void => handler(items);
     ipcRenderer.on('pairing:inbox-changed', listener);
@@ -573,6 +581,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ): void => handler(info);
     ipcRenderer.on('pairing:version-mismatch', listener);
     return () => ipcRenderer.removeListener('pairing:version-mismatch', listener);
+  },
+  onPairingUnauthorized(handler: () => void) {
+    const listener = () => handler();
+    ipcRenderer.on('pairing:unauthorized', listener);
+    return () => ipcRenderer.removeListener('pairing:unauthorized', listener);
   },
   /** Blog-account entitlement (dormant without PAIRING_AUTH=1 in main). */
   pairingConnectAccount: (payload: { connectCode: string; confirmEvict?: boolean }) =>

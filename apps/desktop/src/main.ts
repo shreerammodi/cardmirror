@@ -388,6 +388,15 @@ function bytesToBuffer(bytes: unknown): Buffer {
  *  needs a per-press permission grant under Chromium's web policy. */
 ipcMain.handle('host:clipboard-read-text', () => clipboard.readText());
 
+/** Toggle DevTools on the window that asked. Backs the rebindable
+ *  "Open Developer Console" ribbon command: the packaged app sets a
+ *  null application menu on Windows/Linux, so the stock accelerators
+ *  (F12 / Ctrl+Shift+I) don't exist there — without this, a packaged
+ *  build has no console access at all. */
+ipcMain.handle('host:toggle-devtools', (event) => {
+  BrowserWindow.fromWebContents(event.sender)?.webContents.toggleDevTools();
+});
+
 /** Trigger an electron-updater check from the renderer. Mirrors
  *  the Help → Check for Updates… menu item so the same flow can
  *  be reached from Settings → General → "About this install".

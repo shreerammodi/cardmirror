@@ -40,6 +40,16 @@ export const RIBBON_GROUPS: RibbonGroup[] = [
     ],
   },
   {
+    title: 'Collaboration',
+    commands: [
+      'collabStartSession',
+      'collabJoinSession',
+      'collabCopyShareCode',
+      'collabInviteStarred',
+      'collabEndSession',
+    ],
+  },
+  {
     title: 'Quick Cards',
     commands: ['addQuickCard', 'manageQuickCards'],
   },
@@ -180,6 +190,10 @@ export const RIBBON_GROUPS: RibbonGroup[] = [
       'chromeScaleDown',
       'chromeScaleReset',
     ],
+  },
+  {
+    title: 'Diagnostics',
+    commands: ['openDevConsole'],
   },
   {
     title: 'Comments',

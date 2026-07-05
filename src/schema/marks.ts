@@ -102,6 +102,20 @@ export const marks: { [name: string]: MarkSpec } = {
         validate: (v: unknown) =>
           typeof v === 'number' && Number.isInteger(v) && v > 0,
       },
+      // Provenance: 'shrink' when the protection-aware sizing machinery
+      // (shrink/regrow cycle, smart shrink) applied the size; null for
+      // sizes the user chose (size chip, ± nudge, pasted content). The
+      // collab invariant heal strips ONLY 'shrink'-origin sizes that
+      // fuse with underline/emphasis at CRDT merge — Peritext range
+      // marks cover concurrently-inserted interior text, so a partner's
+      // underlined typing inside a shrunk span inherits the small size
+      // with no op recording it. Intentionally absent from parseDOM/
+      // toDOM: clipboard round-trips demote to null (= manual), so the
+      // heal can only under-fire, never eat a deliberate size.
+      origin: {
+        default: null,
+        validate: (v: unknown) => v === null || v === 'shrink',
+      },
     },
     parseDOM: [
       {
