@@ -6173,7 +6173,12 @@ body.pmd-steady-cursor .pmd-italic-caret,
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.85rem;
-  min-width: 360px;
+  /* Shrink to fit narrow windows instead of overflowing past the screen
+     edge. min() keeps the 360px target but caps it at the viewport width
+     (fixed position → % resolves against the viewport) so min-width never
+     forces an overflow. */
+  min-width: min(360px, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
 }
 .pmd-find-bar[hidden] { display: none; }
 .pmd-find-row,
@@ -6181,6 +6186,10 @@ body.pmd-steady-cursor .pmd-italic-caret,
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  /* When the row can't fit on one line (small windows), wrap the controls
+     onto additional lines rather than overflowing — every control stays
+     reachable. */
+  flex-wrap: wrap;
 }
 .pmd-find-input {
   flex: 1 1 auto;
