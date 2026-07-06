@@ -30,7 +30,7 @@
  * into Word) and `text/plain` (fallback) to the clipboard.
  */
 
-import { DOMSerializer, Fragment, type Node as PMNode } from 'prosemirror-model';
+import { DOMSerializer, Fragment, type Mark, type Node as PMNode } from 'prosemirror-model';
 import type { Command, EditorState } from 'prosemirror-state';
 import { schema } from '../schema/index.js';
 import { collectCiteText } from './headings.js';
@@ -117,6 +117,15 @@ export interface CreateReferenceOptions {
    *  where the cite goes, otherwise the cite is prepended. Empty =
    *  the default label. */
   customHeading: string;
+  /** Make the heading line bold. */
+  headingBold: boolean;
+  /** Make the heading line italic. */
+  headingItalic: boolean;
+  /** Apply the emphasis style to the heading line. Wins over `headingUnderlined`
+   *  when both are set (emphasis and underline are mutually exclusive). */
+  headingEmphasized: boolean;
+  /** Underline the heading line. Ignored when `headingEmphasized` is also on. */
+  headingUnderlined: boolean;
   /** Reduce every run's font size by `shrinkPt`. */
   shrink: boolean;
   /** Points to reduce by when `shrink` is on (result floors at 1pt). */
@@ -184,13 +193,19 @@ export function buildReferenceNodes(
 
   const outNodes: PMNode[] = [];
 
-  // Heading paragraph — plain 11pt body text, always black, no
-  // marks. Generic `paragraph` so it pastes cleanly into any
-  // context (PM normalization will reshape it to card_body if the
-  // paste lands inside a card).
+  // Heading paragraph — 11pt body text, always black. Optionally bold /
+  // italic / emphasized per the Create Reference settings. Generic
+  // `paragraph` so it pastes cleanly into any context (PM normalization
+  // will reshape it to card_body if the paste lands inside a card).
   if (opts.includeHeading) {
+    const headingMarks: Mark[] = [];
+    if (opts.headingBold) headingMarks.push(schema.marks['bold']!.create());
+    if (opts.headingItalic) headingMarks.push(schema.marks['italic']!.create());
+    // Emphasis and underline are mutually exclusive; emphasis wins if both set.
+    if (opts.headingEmphasized) headingMarks.push(schema.marks['emphasis_mark']!.create());
+    else if (opts.headingUnderlined) headingMarks.push(schema.marks['underline_mark']!.create());
     outNodes.push(
-      schema.nodes['paragraph']!.create(null, schema.text(headingText)),
+      schema.nodes['paragraph']!.create(null, schema.text(headingText, headingMarks)),
     );
   }
 

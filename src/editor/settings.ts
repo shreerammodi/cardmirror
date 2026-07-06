@@ -889,6 +889,15 @@ export interface Settings {
    *  `%Cite%` (any case) marks where the cite goes; without it the
    *  cite is prepended as in the default heading. Empty = default. */
   createReferenceCustomHeading: string;
+  /** Bold the Create Reference heading line. */
+  createReferenceHeadingBold: boolean;
+  /** Italicize the Create Reference heading line. */
+  createReferenceHeadingItalic: boolean;
+  /** Apply the emphasis style to the heading line. Wins over underline
+   *  when both are on (they're mutually exclusive). */
+  createReferenceHeadingEmphasized: boolean;
+  /** Underline the heading line. Ignored when emphasized is also on. */
+  createReferenceHeadingUnderlined: boolean;
   /** When true (default), Create Reference reduces every run's font
    *  size in the copied excerpt (by `createReferenceShrinkPt`). Off
    *  keeps each run's size untouched. */
@@ -1351,6 +1360,10 @@ const DEFAULTS: Settings = {
   createReferenceDelimiter: '<<',
   createReferenceIncludeCite: true,
   createReferenceCustomHeading: '',
+  createReferenceHeadingBold: false,
+  createReferenceHeadingItalic: false,
+  createReferenceHeadingEmphasized: false,
+  createReferenceHeadingUnderlined: false,
   createReferenceShrinks: true,
   createReferenceShrinkPt: 3,
   createReferenceHighlightMode: 'shading',
@@ -2419,6 +2432,48 @@ export const SETTING_METADATA: SettingMeta[] = [
     aliases: ['create reference custom heading', 'reference heading text'],
   },
   {
+    key: 'createReferenceHeadingBold',
+    label: 'Bold heading',
+    description: 'Make the FOR REFERENCE heading line bold in the copied excerpt.',
+    kind: 'toggle',
+    category: 'editing',
+    section: 'Create Reference',
+    dependsOn: 'createReferenceIncludeHeading',
+    aliases: ['create reference bold heading', 'reference heading bold'],
+  },
+  {
+    key: 'createReferenceHeadingItalic',
+    label: 'Italic heading',
+    description: 'Italicize the FOR REFERENCE heading line in the copied excerpt.',
+    kind: 'toggle',
+    category: 'editing',
+    section: 'Create Reference',
+    dependsOn: 'createReferenceIncludeHeading',
+    aliases: ['create reference italic heading', 'reference heading italic'],
+  },
+  {
+    key: 'createReferenceHeadingEmphasized',
+    label: 'Emphasize heading',
+    description:
+      'Apply the emphasis style to the heading line. Mutually exclusive with Underline heading — if both are on, emphasis wins.',
+    kind: 'toggle',
+    category: 'editing',
+    section: 'Create Reference',
+    dependsOn: 'createReferenceIncludeHeading',
+    aliases: ['create reference emphasize heading', 'reference heading emphasis'],
+  },
+  {
+    key: 'createReferenceHeadingUnderlined',
+    label: 'Underline heading',
+    description:
+      'Underline the heading line. Ignored when Emphasize heading is also on (emphasis wins).',
+    kind: 'toggle',
+    category: 'editing',
+    section: 'Create Reference',
+    dependsOn: 'createReferenceIncludeHeading',
+    aliases: ['create reference underline heading', 'reference heading underline'],
+  },
+  {
     key: 'createReferenceShrinks',
     label: 'Reduce text size',
     description:
@@ -3201,6 +3256,22 @@ function sanitize(s: Settings): Settings {
       typeof s.createReferenceCustomHeading === 'string'
         ? s.createReferenceCustomHeading
         : DEFAULTS.createReferenceCustomHeading,
+    createReferenceHeadingBold:
+      s.createReferenceHeadingBold === undefined
+        ? DEFAULTS.createReferenceHeadingBold
+        : !!s.createReferenceHeadingBold,
+    createReferenceHeadingItalic:
+      s.createReferenceHeadingItalic === undefined
+        ? DEFAULTS.createReferenceHeadingItalic
+        : !!s.createReferenceHeadingItalic,
+    createReferenceHeadingEmphasized:
+      s.createReferenceHeadingEmphasized === undefined
+        ? DEFAULTS.createReferenceHeadingEmphasized
+        : !!s.createReferenceHeadingEmphasized,
+    createReferenceHeadingUnderlined:
+      s.createReferenceHeadingUnderlined === undefined
+        ? DEFAULTS.createReferenceHeadingUnderlined
+        : !!s.createReferenceHeadingUnderlined,
     createReferenceShrinks:
       s.createReferenceShrinks === undefined
         ? DEFAULTS.createReferenceShrinks

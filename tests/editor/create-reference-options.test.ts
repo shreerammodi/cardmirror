@@ -54,6 +54,10 @@ const DEFAULTS: CreateReferenceOptions = {
   delimiter: '<<',
   includeCite: true,
   customHeading: '',
+  headingBold: false,
+  headingItalic: false,
+  headingEmphasized: false,
+  headingUnderlined: false,
   shrink: true,
   shrinkPt: 3,
   highlightMode: 'shading',
@@ -226,5 +230,50 @@ describe('referenceHeadingText', () => {
     expect(
       referenceHeadingText('Smith 24', { ...H, includeCite: false, customHeading: '%Cite%' }),
     ).toBe('<<FOR REFERENCE>>');
+  });
+});
+
+describe('buildReferenceNodes — heading marks', () => {
+  const mkDoc = () => doc(card(tag('T'), body(t('read', hl()))));
+  const headingRun = (opts: CreateReferenceOptions): PMNode => {
+    const out = buildReferenceNodes(selectBody(mkDoc()), effectivePt, opts)!;
+    return firstRun(out[0]!);
+  };
+
+  it('default: heading carries no bold/italic/emphasis/underline', () => {
+    const run = headingRun(DEFAULTS);
+    for (const m of ['bold', 'italic', 'emphasis_mark', 'underline_mark']) {
+      expect(markOf(run, m)).toBeUndefined();
+    }
+  });
+
+  it('bold and italic apply independently and together', () => {
+    expect(markOf(headingRun({ ...DEFAULTS, headingBold: true }), 'bold')).toBeDefined();
+    expect(markOf(headingRun({ ...DEFAULTS, headingItalic: true }), 'italic')).toBeDefined();
+    const both = headingRun({ ...DEFAULTS, headingBold: true, headingItalic: true });
+    expect(markOf(both, 'bold')).toBeDefined();
+    expect(markOf(both, 'italic')).toBeDefined();
+  });
+
+  it('emphasized applies the emphasis mark; underlined applies the underline mark', () => {
+    expect(markOf(headingRun({ ...DEFAULTS, headingEmphasized: true }), 'emphasis_mark')).toBeDefined();
+    expect(markOf(headingRun({ ...DEFAULTS, headingUnderlined: true }), 'underline_mark')).toBeDefined();
+  });
+
+  it('emphasis wins when both emphasis and underline are set', () => {
+    const run = headingRun({ ...DEFAULTS, headingEmphasized: true, headingUnderlined: true });
+    expect(markOf(run, 'emphasis_mark')).toBeDefined();
+    expect(markOf(run, 'underline_mark')).toBeUndefined();
+  });
+
+  it('heading marks do not leak onto the body paragraphs', () => {
+    const out = buildReferenceNodes(selectBody(mkDoc()), effectivePt, {
+      ...DEFAULTS,
+      headingBold: true,
+      headingUnderlined: true,
+    })!;
+    const bodyRun = firstRun(out[1]!); // out[0] is the heading, out[1] is a body paragraph
+    expect(markOf(bodyRun, 'bold')).toBeUndefined();
+    expect(markOf(bodyRun, 'underline_mark')).toBeUndefined();
   });
 });

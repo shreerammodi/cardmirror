@@ -78,6 +78,8 @@ COLOR_AUDIT.md
 PAIRING_V2_PLAN.md
 PAIRING_AUTH_TURNKEY.md
 COLLAB_CRDT_PLAN.md
+TRANSCLUSION_PLAN.md
+UNTESTED_CHANGES.md
 
 # Collab bake-off harness (M1 measurement rig — throwaway, deps installed
 # with --no-save; see COLLAB_CRDT_PLAN.md §9 M1)
