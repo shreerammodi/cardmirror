@@ -54,6 +54,9 @@ import {
 import { applyPlainPasteFromText, togglePlainPaste } from './paste-plugin.js';
 import { lockHighlighting } from './create-reference.js';
 import { showToast } from './toast.js';
+import { selectedTransclusion } from './transclusion.js';
+import { refreshZoneAtPos, detachZoneAtPos } from './transclusion-actions.js';
+import { refreshFailMessage } from './transclusion-resolve.js';
 import { getElectronHost, getHost } from './host/index.js';
 import { classifyChar, isWordChar } from './word-break.js';
 import { moveContainerUp, moveContainerDown } from './move-container.js';
@@ -4503,6 +4506,9 @@ export type RibbonCommandId =
   | 'sendToSpeechAtCursor'
   | 'sendToSpeechAtEnd'
   | 'sendToDropzone'
+  | 'insertLiveZone'
+  | 'refreshLiveZone'
+  | 'detachLiveZone'
   | 'sendToStarred'
   | 'insertReceivedAtCursor'
   | 'insertReceivedAtEnd'
@@ -4706,6 +4712,9 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'sendToSpeechAtCursor',
   'sendToSpeechAtEnd',
   'sendToDropzone',
+  'insertLiveZone',
+  'refreshLiveZone',
+  'detachLiveZone',
   'sendToStarred',
   'insertReceivedAtCursor',
   'insertReceivedAtEnd',
@@ -4869,6 +4878,9 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   sendToSpeechAtCursor: 'Send to Speech (At Cursor)',
   sendToSpeechAtEnd: 'Send to Speech (At End)',
   sendToDropzone: 'Send to Dropzone',
+  insertLiveZone: 'Insert Live Zone',
+  refreshLiveZone: 'Refresh Live Zone',
+  detachLiveZone: 'Detach Live Zone',
   sendToStarred: 'Send to Starred Recipient',
   insertReceivedAtCursor: 'Insert Received Card (At Cursor)',
   insertReceivedAtEnd: 'Insert Received Card (At End)',
@@ -4996,6 +5008,9 @@ export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly st
   cycleTheme: ['dark mode', 'light mode', 'toggle theme', 'switch theme', 'appearance'],
   cycleTimerPreset: ['switch timer preset', 'toggle timer preset', 'next timer preset', 'change timer preset', 'timer profile', 'timer preset'],
   insertFootnote: ['footnote', 'endnote', 'add footnote', 'new footnote', 'note'],
+  insertLiveZone: ['transclude', 'transclusion', 'live zone', 'living zone', 'link section'],
+  refreshLiveZone: ['refresh transclusion', 'update live zone', 'sync live zone'],
+  detachLiveZone: ['detach transclusion', 'unlink live zone', 'break live zone link'],
   timerToggleVisible: ['show timer', 'hide timer', 'toggle timer', 'timer panel'],
   timerStartPause: ['start timer', 'pause timer', 'speech timer', 'play timer'],
   timerPreset1: ['timer 9', 'first speech preset'],
@@ -5136,6 +5151,9 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   saveSendDoc: 'Mod-Alt-s',
   saveMarkedCards: 'Mod-Alt-m',
   toggleAutosave: '',
+  insertLiveZone: '',
+  refreshLiveZone: '',
+  detachLiveZone: '',
   // Verbatim's "Send to speech" — bare backtick (next to 1 on US
   // layouts) for at-cursor, Alt-backtick for at-end-of-doc. Same
   // chord as the desktop app. Trade-off: a bare backtick keystroke
@@ -5353,6 +5371,8 @@ export interface RibbonContext {
   sendToSpeechAtCursor: () => void;
   sendToSpeechAtEnd: () => void;
   sendToDropzone: () => void;
+  /** Open the picker to insert a live zone (transclusion). Desktop-only UI. */
+  insertLiveZone: () => void;
   /** Send the cursor's card (or selection) to the starred recipient/group. */
   sendToStarred: () => void;
   /** Insert the most-recently-received card (from the receive pill) into the
@@ -5496,6 +5516,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   markActiveAsSpeech: () => {},
   sendToSpeechAtCursor: () => {},
   sendToDropzone: () => {},
+  insertLiveZone: () => {},
   sendToStarred: () => {},
   insertReceivedAtCursor: () => {},
   insertReceivedAtEnd: () => {},
@@ -5941,6 +5962,35 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return (_state, dispatch) => {
         if (!dispatch) return true;
         ctx.sendToDropzone();
+        return true;
+      };
+    case 'insertLiveZone':
+      // Opens the picker (desktop-only UI); the palette builds the node.
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.insertLiveZone();
+        return true;
+      };
+    case 'refreshLiveZone':
+      // Acts on the selected live zone via the command's own view, so it works
+      // in single-doc and every multi-pane slot. Available only over a zone.
+      return (state, dispatch, view) => {
+        if (!selectedTransclusion(state.selection)) return false;
+        if (!dispatch) return true;
+        const sel = selectedTransclusion(view ? view.state.selection : state.selection);
+        if (view && sel) {
+          void refreshZoneAtPos(view, sel.pos).then((o) => {
+            if (!o.ok) showToast(refreshFailMessage(o.reason));
+          });
+        }
+        return true;
+      };
+    case 'detachLiveZone':
+      return (state, dispatch, view) => {
+        if (!selectedTransclusion(state.selection)) return false;
+        if (!dispatch) return true;
+        const sel = selectedTransclusion(view ? view.state.selection : state.selection);
+        if (view && sel) detachZoneAtPos(view, sel.pos);
         return true;
       };
     case 'sendToStarred':

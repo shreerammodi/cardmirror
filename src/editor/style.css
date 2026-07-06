@@ -740,6 +740,8 @@ button {
   --pmd-c-image-placeholder-bg: #f0f0f0;
   --pmd-c-image-placeholder-border: #999;
   --pmd-c-highlight-default: #ffff66;  /* default user-applied highlight color */
+  --pmd-c-transclusion: #2f8a8a;       /* live-zone (transclusion) rail — reserved slate-teal, chrome not content */
+  --pmd-c-transclusion-soft: #e5f2f2;  /* live-zone header wash */
 
   /* ── Theme-invariant tokens ──
      These deliberately do NOT get dark-theme overrides:
@@ -936,6 +938,8 @@ button {
   /* Editor decorations */
   --pmd-c-card-hover: #555;
   --pmd-c-emphasis-box: #888;
+  --pmd-c-transclusion: #5ec4c4;       /* live-zone rail — brighter on dark chrome */
+  --pmd-c-transclusion-soft: #14383a;
   --pmd-c-image-placeholder-bg: #2a2a2a;
   --pmd-c-image-placeholder-border: #555;
   --pmd-c-highlight-default: #5a5a00;
@@ -1124,6 +1128,8 @@ button {
   --pmd-c-hover-strong: #e0e0e0;
   --pmd-c-card-hover: #c0c0c0;
   --pmd-c-emphasis-box: #333;
+  --pmd-c-transclusion: #2f8a8a;        /* rail renders inside the paper-white doc → light value */
+  --pmd-c-transclusion-soft: #e5f2f2;
   --pmd-c-highlight-default: #ffff66;
   --pmd-c-image-placeholder-bg: #f0f0f0;
   --pmd-c-image-placeholder-border: #999;
@@ -2314,6 +2320,118 @@ code {
 .pmd-card:hover,
 .pmd-analytic-unit:hover {
   border-left-color: var(--pmd-c-card-hover);
+}
+
+/* ── Transclusion "live zone" (TRANSCLUSION_PLAN.md §4) ──
+   Reuses the card-unit rail grammar (2px border-left in the same 0.5rem
+   gutter) but PERSISTENT and in the reserved --pmd-c-transclusion hue, with a
+   link glyph at the rail head + a reveal-on-hover header. Reads as chrome, not
+   content. */
+.pmd-transclusion {
+  border-left: 2px solid var(--pmd-c-transclusion);
+  padding-left: 0.5rem;
+  margin: 0.25rem 0;
+  position: relative;
+}
+.pmd-transclusion.ProseMirror-selectednode {
+  outline: 2px solid var(--pmd-c-transclusion);
+  outline-offset: 2px;
+}
+/* Header: quiet at rest (just the glyph shows), revealed on hover/select. */
+.pmd-transclusion-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--pmd-c-transclusion);
+  min-height: 1.2em;
+}
+.pmd-transclusion-glyph {
+  color: var(--pmd-c-transclusion);
+  flex: 0 0 auto;
+}
+/* Everything after the glyph reveals on hover / selection. */
+.pmd-transclusion-crumb,
+.pmd-transclusion-status,
+.pmd-transclusion-actions {
+  opacity: 0;
+  transition: opacity 90ms ease;
+}
+.pmd-transclusion:hover > .pmd-transclusion-header .pmd-transclusion-crumb,
+.pmd-transclusion:hover > .pmd-transclusion-header .pmd-transclusion-status,
+.pmd-transclusion:hover > .pmd-transclusion-header .pmd-transclusion-actions,
+.pmd-transclusion.ProseMirror-selectednode > .pmd-transclusion-header .pmd-transclusion-crumb,
+.pmd-transclusion.ProseMirror-selectednode > .pmd-transclusion-header .pmd-transclusion-status,
+.pmd-transclusion.ProseMirror-selectednode > .pmd-transclusion-header .pmd-transclusion-actions {
+  opacity: 1;
+}
+.pmd-transclusion-crumb {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+.pmd-transclusion-status {
+  color: var(--pmd-c-text-muted, #888);
+  white-space: nowrap;
+}
+.pmd-transclusion[data-status='unreachable'] .pmd-transclusion-status {
+  color: var(--pmd-c-warn, #b26a00);
+}
+.pmd-transclusion-actions {
+  display: flex;
+  gap: 0.15rem;
+  margin-left: auto;
+}
+.pmd-transclusion-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--pmd-c-transclusion);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  font-size: 13px;
+}
+.pmd-transclusion-btn:hover {
+  background: var(--pmd-c-transclusion-soft);
+}
+.pmd-transclusion-btn:focus-visible {
+  outline: 2px solid var(--pmd-c-transclusion);
+  outline-offset: 1px;
+}
+/* The rendered cache. Cards inside a zone are read-only and selected as a
+   unit, so suppress their own per-card hover rail (else two rails stack). */
+.pmd-transclusion-body .pmd-card:hover,
+.pmd-transclusion-body .pmd-analytic-unit:hover {
+  border-left-color: transparent;
+}
+.pmd-transclusion-placeholder {
+  color: var(--pmd-c-text-muted, #888);
+  font-style: italic;
+  font-size: 12px;
+  padding: 0.2rem 0;
+}
+.pmd-transclusion-placeholder[data-kind='cycle'],
+.pmd-transclusion-placeholder[data-kind='depth'] {
+  color: var(--pmd-c-warn, #b26a00);
+}
+/* Nested zone: a lighter inset rail so depth reads without shouting. */
+.pmd-transclusion-nested {
+  border-left-width: 2px;
+  border-left-style: dashed;
+  margin: 0.15rem 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pmd-transclusion-crumb,
+  .pmd-transclusion-status,
+  .pmd-transclusion-actions {
+    transition: none;
+  }
 }
 
 /* Heading containers (pocket / hat / block) — same containment as

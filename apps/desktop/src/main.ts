@@ -35,6 +35,7 @@ import {
   writeAccessibilityTreeEnabled,
 } from './accessibility-pref.js';
 import { installMacAccessibilitySuppression } from './ax-suppress-mac.js';
+import { resolveCmirCandidates } from './transclusion-path.js';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { gzip as zlibGzip, gunzip as zlibGunzip } from 'node:zlib';
@@ -612,6 +613,42 @@ ipcMain.handle('host:read-file-at-path', async (_event, filePath: string) => {
     return null;
   }
 });
+
+// Resolve + read a source .cmir for a transclusion refresh. Given the
+// transcluding doc's own absolute path and a RELATIVE ref, resolve against the
+// doc's directory, then HARD-SCOPE the result to the configured library roots
+// (or the doc's own folder) and reject any `..` escape — the ref can travel
+// inside a document authored by someone else (TRANSCLUSION_PLAN.md §3.2). It
+// only ever parses a .cmir looking for a heading; it executes nothing. Returns
+// null (never throws) on any failure, which the renderer treats as
+// "unreachable — render from cache."
+ipcMain.handle(
+  'host:read-cmir-file',
+  async (
+    _event,
+    docPath: unknown,
+    sourceRef: unknown,
+    base: unknown,
+    roots: unknown,
+  ) => {
+    if (typeof docPath !== 'string') return null;
+    if (typeof sourceRef !== 'string') return null;
+    const refBase: 'doc' | 'root' = base === 'root' ? 'root' : 'doc';
+    const rootList = Array.isArray(roots)
+      ? roots.filter((r): r is string => typeof r === 'string')
+      : [];
+    const candidates = resolveCmirCandidates(docPath, sourceRef, refBase, rootList);
+    for (const abs of candidates) {
+      try {
+        const bytes = await fs.readFile(abs);
+        return { bytes: new Uint8Array(bytes), name: path.basename(abs) };
+      } catch {
+        // try the next candidate root
+      }
+    }
+    return null;
+  },
+);
 
 // Bulk-convert support: recursively list files of a given extension
 // under a directory, and write bytes to an arbitrary path. Used by the

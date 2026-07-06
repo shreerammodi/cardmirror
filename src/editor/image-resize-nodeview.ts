@@ -19,6 +19,7 @@ import type { Node as PMNode } from 'prosemirror-model';
 import type { EditorView, NodeView } from 'prosemirror-view';
 import { NodeSelection } from 'prosemirror-state';
 import { settings } from './settings.js';
+import { transclusionNodeViews } from './transclusion-nodeview.js';
 
 const EMU_PER_PX = 9525;
 const MIN_PX = 16;
@@ -240,4 +241,5 @@ export const editorNodeViews = {
     view: EditorView,
     getPos: () => number | undefined,
   ): NodeView => new ImageResizeView(node, view, getPos),
+  ...transclusionNodeViews,
 };

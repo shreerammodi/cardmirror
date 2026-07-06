@@ -165,6 +165,7 @@ import { buildPastePlugin } from './paste-plugin.js';
 import { buildImageNodeFromBlob, insertImageNode } from './image-insert.js';
 import { imageContextMenuPlugin } from './image-context-menu-plugin.js';
 import { editorNodeViews } from './image-resize-nodeview.js';
+import { setViewDocPath, getViewDocPath } from './transclusion-doc-path.js';
 import { linkContextMenuPlugin } from './link-context-menu-plugin.js';
 import { wordSelectionPlugin } from './word-selection-plugin.js';
 import { typeOverBoundaryPlugin } from './type-over-boundary.js';
@@ -1406,6 +1407,21 @@ const ribbonContext: RibbonContext = {
       paneEl,
       runCommand: runRibbonCommandById,
       openFilePath: openFileByPath,
+    });
+  },
+  insertLiveZone: () => {
+    // Same picker, in transclude mode: pick a file, drill to a header, insert a
+    // live zone. Needs the current doc's path to build a portable source ref.
+    const paneEl =
+      (view?.dom.closest('.pmd-pane') as HTMLElement | null) ?? editorEl ?? null;
+    const docPath = view ? getViewDocPath(view) : null;
+    quickCardSearchUI.open({
+      view,
+      paneEl,
+      runCommand: runRibbonCommandById,
+      openFilePath: openFileByPath,
+      transcludeMode: true,
+      docPath,
     });
   },
   insertImage: () => {
@@ -3390,6 +3406,7 @@ const VIEWLESS_RIBBON_COMMANDS = new Set<RibbonCommandId>([
   // Quick-card search palette — opens browse-only without a doc, so
   // its Mod-Shift-Space binding must work view-less too.
   'openQuickCardSearch',
+  'insertLiveZone',
   // Opens the Quick Cards manager overlay — no active doc required.
   'manageQuickCards',
   // Multi-pane workspace commands — fire on the shell, not a
@@ -3433,6 +3450,7 @@ function runViewlessRibbon(id: RibbonCommandId): void {
     case 'toggleNavPane': ribbonContext.toggleNavPane(); return;
     case 'goHome': ribbonContext.goHome(); return;
     case 'openQuickCardSearch': ribbonContext.openQuickCardSearch(); return;
+    case 'insertLiveZone': ribbonContext.insertLiveZone(); return;
     case 'manageQuickCards': ribbonContext.manageQuickCards(); return;
     case 'toggleVoice': ribbonContext.toggleVoice(); return;
     case 'startFlowHost': ribbonContext.startFlowHost(); return;
@@ -4751,6 +4769,8 @@ let currentDocHandle: unknown | null = null;
 function setCurrentDocHandle(next: unknown | null): void {
   const prev = currentDocHandle;
   currentDocHandle = next;
+  // Keep the transclusion refresh resolver's view→docPath map current.
+  if (view) setViewDocPath(view, typeof next === 'string' ? next : null);
   if (prev === next) return;
   const electron = getElectronHost();
   if (!electron) return;

@@ -96,7 +96,7 @@ function readIndentFromStyle(dom: HTMLElement): number {
  * (see its content expression).
  */
 const BLOCK_CONTENT =
-  '(paragraph | pocket | hat | block | card | analytic_unit | undertag | cite_paragraph | card_body | table)*';
+  '(paragraph | pocket | hat | block | card | analytic_unit | undertag | cite_paragraph | card_body | table | transclusion_ref)*';
 
 export const nodes: { [name: string]: NodeSpec } = {
   /** Top-level container. Sequence of block-level content. */
@@ -308,6 +308,115 @@ export const nodes: { [name: string]: NodeSpec } = {
         class: `pmd-footnote-ref pmd-footnote-kind-${String(node.attrs['kind'])}`,
         'data-kind': String(node.attrs['kind']),
         'data-content': JSON.stringify(node.attrs['content'] ?? []),
+      },
+    ],
+  },
+
+  /**
+   * Transclusion "live zone" — a read-only region rendering the contents
+   * under a heading in another CardMirror file (see TRANSCLUSION_PLAN.md).
+   *
+   * A block-level ATOM (no editable content). The transcluded cards live in
+   * `cached_content` as a serialized ProseMirror fragment (an array of node
+   * JSON — the output of `Fragment.toJSON`), so the zone is self-contained:
+   * a `.cmir` renders its zones anywhere it's moved, and a judge with none
+   * of the source files still sees the evidence. Refresh (desktop only)
+   * re-reads the source and replaces the fragment; `.docx` export flattens
+   * the fragment to plain content (dropping the transclusion identity).
+   *
+   * Read-only + isolating: the caret can't enter; the zone is selected and
+   * moved as a unit, and edited only via the explicit Detach command (which
+   * materializes the cache as ordinary content). Rendering is the NodeView's
+   * job (transclusion-nodeview.ts); toDOM/parseDOM exist only so the node
+   * survives HTML copy-paste. The `.cmir` path round-trips via `toJSON`
+   * (attrs are serialized generically), independent of toDOM.
+   */
+  transclusion_ref: {
+    atom: true,
+    isolating: true,
+    defining: true,
+    attrs: {
+      /** Path to the source `.cmir`. Relative to the transcluding doc when
+       *  `source_ref_base` is 'doc', or relative to a shared library root when
+       *  'root' (both files live in the same team Dropbox folder). */
+      source_ref: {
+        default: '',
+        validate: (v: unknown) => typeof v === 'string',
+      },
+      /** How `source_ref` is anchored: 'doc' (relative to this document) or
+       *  'root' (relative to a configured library/Dropbox root — survives the
+       *  doc being moved within the shared folder). */
+      source_ref_base: {
+        default: 'doc',
+        validate: (v: unknown) => v === 'doc' || v === 'root',
+      },
+      /** Stable heading UUID of the target section in the source. */
+      source_heading_id: {
+        default: '',
+        validate: (v: unknown) => typeof v === 'string',
+      },
+      /** Hash of the cached fragment — staleness compare vs the live source. */
+      content_hash: {
+        default: '',
+        validate: (v: unknown) => typeof v === 'string',
+      },
+      /** The transcluded content: `Fragment.toJSON()` (array of node JSON)
+       *  or null when empty/unresolved. Stored as ONE opaque value so a
+       *  refresh is a clean last-writer-wins replacement under co-editing
+       *  (TRANSCLUSION_PLAN.md §11). Validate never throws — a malformed
+       *  cache must not fail the whole `.cmir` load. */
+      cached_content: {
+        default: null as unknown[] | null,
+        validate: (v: unknown) => v === null || Array.isArray(v),
+      },
+      /** Epoch ms of the last successful resolve (0 = never refreshed). */
+      last_refreshed: {
+        default: 0,
+        validate: (v: unknown) => typeof v === 'number' && Number.isFinite(v),
+      },
+      /** Human breadcrumb for the header bar, e.g. "Impacts › Decline…". */
+      source_label: {
+        default: '',
+        validate: (v: unknown) => typeof v === 'string',
+      },
+    },
+    parseDOM: [
+      {
+        tag: 'div.pmd-transclusion-ref',
+        getAttrs: (dom: HTMLElement) => {
+          let cached: unknown = null;
+          try {
+            const raw = dom.getAttribute('data-cached-content');
+            cached = raw ? JSON.parse(raw) : null;
+          } catch {
+            cached = null;
+          }
+          if (cached !== null && !Array.isArray(cached)) cached = null;
+          const lr = Number(dom.getAttribute('data-last-refreshed') ?? '0');
+          return {
+            source_ref: dom.getAttribute('data-source-ref') ?? '',
+            source_ref_base:
+              dom.getAttribute('data-source-ref-base') === 'root' ? 'root' : 'doc',
+            source_heading_id: dom.getAttribute('data-source-heading-id') ?? '',
+            content_hash: dom.getAttribute('data-content-hash') ?? '',
+            cached_content: cached,
+            last_refreshed: Number.isFinite(lr) ? lr : 0,
+            source_label: dom.getAttribute('data-source-label') ?? '',
+          };
+        },
+      },
+    ],
+    toDOM: (node) => [
+      'div',
+      {
+        class: 'pmd-transclusion-ref',
+        'data-source-ref': String(node.attrs['source_ref'] ?? ''),
+        'data-source-ref-base': String(node.attrs['source_ref_base'] ?? 'doc'),
+        'data-source-heading-id': String(node.attrs['source_heading_id'] ?? ''),
+        'data-content-hash': String(node.attrs['content_hash'] ?? ''),
+        'data-cached-content': JSON.stringify(node.attrs['cached_content'] ?? null),
+        'data-last-refreshed': String(node.attrs['last_refreshed'] ?? 0),
+        'data-source-label': String(node.attrs['source_label'] ?? ''),
       },
     ],
   },

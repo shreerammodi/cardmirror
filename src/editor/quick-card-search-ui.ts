@@ -53,6 +53,15 @@ import { CATEGORY_TABS, visibleCategoryTabs, type SettingsTarget } from './setti
 import { appVersion } from './install-info.js';
 import { getHost, getElectronHost, isWindowsHost } from './host/index.js';
 import { showToast } from './toast.js';
+import {
+  extractSection,
+  chooseSourceRef,
+  createTransclusionNode,
+  fragmentFromCache,
+  directZoneIdentities,
+  zoneIdentity,
+} from './transclusion.js';
+import { insertZoneAtSelection, crumbLabel } from './transclusion-actions.js';
 import { AUTOFILL_IGNORE_ATTRS } from './autofill-ignore.js';
 import { insertSpeechSlice } from './speech-doc-send.js';
 import { quickCardsStore, distinctTags, normalizeTag } from './quick-cards-store.js';
@@ -259,6 +268,12 @@ export interface QuickCardSearchOptions {
   runCommand: (id: RibbonCommandId) => void;
   /** Open a `.cmir` file by absolute path (the file source's Enter). */
   openFilePath: (path: string, name: string) => void;
+  /** When true, selecting a header inside a file inserts a live zone
+   *  (transclusion) instead of a copy. Desktop-only entry point. */
+  transcludeMode?: boolean;
+  /** The transcluding document's own on-disk path, needed to compute a
+   *  portable `source_ref`. Only used in transclude mode. */
+  docPath?: string | null;
 }
 
 /** A unified palette row — a quick card, dropzone item, command,
@@ -744,6 +759,8 @@ class QuickCardSearchUI {
   private paneEl: HTMLElement | null = null;
   private runCommand: (id: RibbonCommandId) => void = () => {};
   private openFilePath: (path: string, name: string) => void = () => {};
+  private transcludeMode = false;
+  private docPath: string | null = null;
 
   private results: PaletteResult[] = [];
   /** Full ranked list for the current query; `results` holds the rendered
@@ -797,6 +814,8 @@ class QuickCardSearchUI {
     this.paneEl = opts.paneEl;
     this.runCommand = opts.runCommand;
     this.openFilePath = opts.openFilePath;
+    this.transcludeMode = opts.transcludeMode ?? false;
+    this.docPath = opts.docPath ?? null;
     this.fileList = null;
     this.rootLists = new Map();
     this.fileListLoading = false;
@@ -1619,6 +1638,17 @@ class QuickCardSearchUI {
       showToast('No editable document to insert into.');
       return;
     }
+    // Transclude mode: a selected header inside a file becomes a live zone,
+    // not a copy. Keeps the palette open so several can be grabbed in a row.
+    if (
+      this.transcludeMode &&
+      result.source === 'fileobject' &&
+      result.fileRange &&
+      this.inFile
+    ) {
+      this.insertLiveZoneFromFileObject(result);
+      return;
+    }
     let slice: Slice;
     try {
       if (result.source === 'fileobject' && result.fileRange && this.inFile) {
@@ -1658,6 +1688,54 @@ class QuickCardSearchUI {
     // pull focus back to the bar so a keep-open insert leaves you ready to
     // search again.
     if (keepOpen) this.input.focus();
+  }
+
+  /** Build and insert a live zone from a selected header inside the dived-into
+   *  file. Snapshots the section now (the file is already parsed), computes a
+   *  portable source ref, and guards against direct self-embedding. */
+  private insertLiveZoneFromFileObject(result: PaletteResult): void {
+    const view = this.view;
+    if (!view || !this.inFile || !result.fileRange) return;
+    const srcDoc = this.inFile.doc;
+    const headingNode = srcDoc.nodeAt(result.fileRange.from);
+    const headingId =
+      headingNode && typeof headingNode.attrs['id'] === 'string' ? headingNode.attrs['id'] : '';
+    if (!headingId) {
+      showToast('That heading has no stable id — open and save the source in CardMirror, then retry.');
+      return;
+    }
+    const section = extractSection(srcDoc, headingId);
+    if (!section) {
+      showToast('Could not read that section from the source.');
+      return;
+    }
+    if (!this.docPath) {
+      showToast('Save this document first, then insert a live zone.');
+      return;
+    }
+    const roots = (settings.get('fileSearchRoots') as string[] | undefined) ?? [];
+    const chosen = chooseSourceRef(this.docPath, this.inFile.path, roots);
+    if (!chosen) {
+      showToast('Couldn’t make a portable link to that file.');
+      return;
+    }
+    const attrs = {
+      source_ref: chosen.ref,
+      source_ref_base: chosen.base,
+      source_heading_id: headingId,
+      content_hash: section.contentHash,
+      cached_content: section.cachedContent,
+      last_refreshed: Date.now(),
+      source_label: crumbLabel(this.inFile.name, section.headingLabel),
+    };
+    const node = createTransclusionNode(schema, attrs);
+    if (directZoneIdentities(fragmentFromCache(schema, section.cachedContent)).has(zoneIdentity(node))) {
+      showToast('That section transcludes itself — can’t create a cycle.');
+      return;
+    }
+    insertZoneAtSelection(view, attrs);
+    showToast(`Inserted live zone "${section.headingLabel}".`);
+    this.input.focus();
   }
 
   // ── Inline tag filter (Tab) ───────────────────────────────────────

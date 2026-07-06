@@ -169,6 +169,12 @@ interface ElectronAPI {
     handle: string;
     format: 'cmir' | 'docx';
   } | null>;
+  readCmirFile(
+    docPath: string,
+    sourceRef: string,
+    base: 'doc' | 'root',
+    roots: string[],
+  ): Promise<{ bytes: Uint8Array; name: string } | null>;
   saveAs(
     suggestedName: string,
     bytes: Uint8Array,
@@ -498,6 +504,23 @@ export class ElectronHost implements Host {
       bytes: result.bytes instanceof Uint8Array ? result.bytes : new Uint8Array(result.bytes),
       handle: result.handle,
       format: result.format,
+    };
+  }
+
+  /** Resolve a doc-relative `.cmir` ref and read it (for a transclusion
+   *  refresh). Main handles resolution + library-root scoping + traversal
+   *  rejection; null means "couldn't safely read." ElectronHost-only. */
+  async readCmirFile(
+    docPath: string,
+    sourceRef: string,
+    base: 'doc' | 'root',
+    roots: string[],
+  ): Promise<{ bytes: Uint8Array; name: string } | null> {
+    const result = await api().readCmirFile(docPath, sourceRef, base, roots);
+    if (!result) return null;
+    return {
+      bytes: result.bytes instanceof Uint8Array ? result.bytes : new Uint8Array(result.bytes),
+      name: result.name,
     };
   }
 

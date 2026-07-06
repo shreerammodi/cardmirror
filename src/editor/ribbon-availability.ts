@@ -59,6 +59,9 @@ export function isRibbonCommandAvailable(id: RibbonCommandId): boolean {
     );
   }
   if (id === 'openCardCutter') return settings.get('cardCutterEnabled') === true;
+  // Creating/refreshing a live zone reads other files from disk — desktop only.
+  // Detach works on an already-cached zone, so it stays available everywhere.
+  if (id === 'insertLiveZone' || id === 'refreshLiveZone') return getElectronHost() !== null;
   if (COLLAB_COMMANDS.has(id)) return collabEnabled();
   return true;
 }

@@ -150,6 +150,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       format: 'cmir' | 'docx';
     } | null>,
 
+  /** Resolve a doc-relative `.cmir` ref and read it, for a transclusion
+   *  refresh. Path resolution + library-root scoping + traversal rejection
+   *  happen in main. Resolves null when the source can't be safely read. */
+  readCmirFile: (
+    docPath: string,
+    sourceRef: string,
+    base: 'doc' | 'root',
+    roots: string[],
+  ) =>
+    ipcRenderer.invoke('host:read-cmir-file', docPath, sourceRef, base, roots) as Promise<{
+      bytes: Uint8Array;
+      name: string;
+    } | null>,
+
   saveAs: (
     suggestedName: string,
     bytes: Uint8Array,
