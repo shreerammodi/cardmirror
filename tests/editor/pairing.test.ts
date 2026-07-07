@@ -182,7 +182,9 @@ describe('mergeRecentSenders (block-a-recent-sender ledger)', () => {
   it('ignores empty sender codes and caps the list', () => {
     expect(mergeRecentSenders([], [item('', 1), item('   ', 2)])).toEqual([]);
     const many = Array.from({ length: 50 }, (_, i) => item(`cmk1.c${i}`, i));
-    expect(mergeRecentSenders([], many, 40)).toHaveLength(40);
+    expect(mergeRecentSenders([], many)).toHaveLength(10); // default cap
+    // Keeps the 10 newest (highest receivedAt).
+    expect(mergeRecentSenders([], many)[0]!.code).toBe('cmk1.c49');
   });
 });
 

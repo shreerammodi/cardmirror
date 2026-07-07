@@ -207,7 +207,7 @@ function blockedKey(): string {
 // blockable afterward, and across restarts.
 
 const RECENT_SENDERS_KEY = 'pmd-pairing-recent-senders';
-const RECENT_SENDERS_CAP = 40;
+const RECENT_SENDERS_CAP = 10;
 
 export interface RecentSender {
   /** Sender's pairing code, as received. */
