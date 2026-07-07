@@ -35,7 +35,7 @@ import {
 } from './settings.js';
 import { CATEGORY_TABS, visibleCategoryTabs, type SettingsTarget } from './settings-categories.js';
 import { generateGroupId, normalizePairingCode } from './pairing/pairing-ids.js';
-import { inboxStore } from './pairing/inbox-store.js';
+import { inboxStore, recentSenders } from './pairing/inbox-store.js';
 import { regenerateOwnCode } from './pairing/pairing-wiring.js';
 import { isFontAvailable } from './font-detect.js';
 import {
@@ -2449,20 +2449,21 @@ function buildPairingBlockedEditor(): HTMLElement {
       list.appendChild(row);
     });
 
-    // Recent senders — distinct, newest-first, excluding already-blocked.
-    // inboxStore.list() already omits blocked senders and is newest-last, so
-    // walk it backward and dedupe by code.
+    // Recent senders — from the persistent ledger (already deduped +
+    // newest-first), so it includes people whose item is no longer in the
+    // inbox: a collaboration invite is consumed on Join, but its sender
+    // stays blockable here. Card shares AND invites are covered. Exclude
+    // anyone already blocked.
     recentWrap.innerHTML = '';
-    const seen = new Set<string>();
+    const blockedNorm = new Set(
+      settings.get('pairingBlockedCodes').map((c) => normalizePairingCode(c)),
+    );
     const recents: { code: string; label: string }[] = [];
-    const items = inboxStore.list();
-    for (let i = items.length - 1; i >= 0; i--) {
-      const it = items[i]!;
-      const code = normalizePairingCode(it.senderCode);
-      if (!code || seen.has(code)) continue;
-      seen.add(code);
-      const label = nicknameFor(code) || (it.senderName || '').trim() || `…${code.slice(-6)}`;
-      recents.push({ code: it.senderCode, label });
+    for (const r of recentSenders()) {
+      const code = normalizePairingCode(r.code);
+      if (!code || blockedNorm.has(code)) continue;
+      const label = nicknameFor(code) || (r.name || '').trim() || `…${code.slice(-6)}`;
+      recents.push({ code: r.code, label });
     }
     if (recents.length > 0) {
       const heading = document.createElement('div');

@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { SettingsStore } from '../../src/editor/settings.js';
 import { resolveStarredTarget } from '../../src/editor/pairing/send-to-starred.js';
-import { filterBlockedItems, type InboxItem } from '../../src/editor/pairing/inbox-store.js';
+import {
+  filterBlockedItems,
+  mergeRecentSenders,
+  type InboxItem,
+  type RecentSender,
+} from '../../src/editor/pairing/inbox-store.js';
 
 // SettingsStore.replaceAll runs everything through sanitize(), so these exercise
 // the pairing sanitizers (sanitizePairingPartners/Groups/Starred).
@@ -127,6 +132,57 @@ describe('filterBlockedItems', () => {
     const items = [item('1', ''), item('2', 'cmk1.aaa')];
     // A stray '' in the block list must not vacuum up unsigned items.
     expect(filterBlockedItems(items, ['', 'cmk1.aaa']).map((i) => i.id)).toEqual(['1']);
+  });
+});
+
+describe('mergeRecentSenders (block-a-recent-sender ledger)', () => {
+  const item = (
+    senderCode: string,
+    receivedAt: number,
+    senderName = '',
+    type = 'card',
+  ): InboxItem => ({
+    id: `id-${receivedAt}`,
+    label: 'x',
+    type,
+    sliceJson: {},
+    senderName,
+    senderCode,
+    receivedAt,
+    read: false,
+  });
+
+  it('records card AND collaboration-invite senders alike', () => {
+    const out = mergeRecentSenders(
+      [],
+      [item('cmk1.aaa', 1, 'Alice'), item('cmk1.bbb', 2, 'Bob', 'room-invite')],
+    );
+    // Both surface as blockable recent senders; invite is not special-cased.
+    expect(out.map((r) => r.code).sort()).toEqual(['cmk1.aaa', 'cmk1.bbb']);
+    expect(out.find((r) => r.code === 'cmk1.bbb')?.name).toBe('Bob');
+  });
+
+  it('dedupes by code, newest-first, keeping the newest name', () => {
+    const out = mergeRecentSenders(
+      [],
+      [item('cmk1.aaa', 1, 'Old'), item('cmk1.aaa', 5, 'New'), item('cmk1.ccc', 3)],
+    );
+    expect(out.map((r) => r.code)).toEqual(['cmk1.aaa', 'cmk1.ccc']); // 5 > 3
+    expect(out[0]!.name).toBe('New');
+  });
+
+  it('persists a prior sender even when this batch no longer has them', () => {
+    // The invite arrived earlier (in `existing`); a later batch that doesn't
+    // include it (it was consumed on Join) must NOT drop the sender.
+    const existing: RecentSender[] = [{ code: 'cmk1.invite', name: 'Carol', at: 10 }];
+    const out = mergeRecentSenders(existing, [item('cmk1.aaa', 20)]);
+    expect(out.map((r) => r.code)).toContain('cmk1.invite');
+  });
+
+  it('ignores empty sender codes and caps the list', () => {
+    expect(mergeRecentSenders([], [item('', 1), item('   ', 2)])).toEqual([]);
+    const many = Array.from({ length: 50 }, (_, i) => item(`cmk1.c${i}`, i));
+    expect(mergeRecentSenders([], many, 40)).toHaveLength(40);
   });
 });
 

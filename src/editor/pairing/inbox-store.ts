@@ -60,20 +60,20 @@ class InboxStore {
     const electron = getElectronHost();
     if (electron?.pairingInboxList) {
       try {
-        this.items = await electron.pairingInboxList();
+        this.ingest(await electron.pairingInboxList());
       } catch {
         this.items = [];
       }
       this.hostUnsubscribe =
         electron.onPairingInboxChanged?.((items) => {
-          this.items = items;
+          this.ingest(items);
           this.fire();
         }) ?? null;
     } else {
-      this.items = readLocal();
+      this.ingest(readLocal());
       window.addEventListener('storage', (e) => {
         if (e.key !== STORAGE_KEY) return;
-        this.items = readLocal();
+        this.ingest(readLocal());
         this.fire();
       });
     }
@@ -89,6 +89,15 @@ class InboxStore {
       this.fire();
     });
     this.fire();
+  }
+
+  /** Adopt a fresh backend snapshot and record its senders into the recent-
+   *  senders ledger BEFORE they can be consumed — a collaboration invite is
+   *  deleted from the inbox on Join, so this is the only chance to remember
+   *  who sent it for the "block a recent sender" list. */
+  private ingest(items: InboxItem[]): void {
+    this.items = items;
+    recordRecentSenders(items);
   }
 
   /** Drop items whose sender is blocked. Blocked cards stay in the raw
@@ -186,6 +195,84 @@ export function filterBlockedItems(items: InboxItem[], blockedCodes: string[]): 
  *  re-firing on unrelated settings updates. */
 function blockedKey(): string {
   return settings.get('pairingBlockedCodes').join('\n');
+}
+
+// ── Recent-senders ledger ────────────────────────────────────────────
+// A persistent record of who has recently sent you a card OR a
+// collaboration invite. Backs the "block a recent sender" list in
+// Settings → Card Sharing. It exists because the live inbox isn't enough:
+// a collaboration invite is CONSUMED (removed) on Join, so by the time you
+// go to block that person, the item — and its sender — is gone from the
+// inbox. Recording the sender the moment the item arrives keeps them
+// blockable afterward, and across restarts.
+
+const RECENT_SENDERS_KEY = 'pmd-pairing-recent-senders';
+const RECENT_SENDERS_CAP = 40;
+
+export interface RecentSender {
+  /** Sender's pairing code, as received. */
+  code: string;
+  /** Latest self-declared name seen for this code (may be ''). */
+  name: string;
+  /** Newest receivedAt seen for this code (epoch ms). */
+  at: number;
+}
+
+/** Fold the senders of `items` into the ledger: deduped by normalized code
+ *  (newest name + timestamp win), newest-first, capped. Items with no sender
+ *  code are ignored — there's nothing to block. Pure; exported for tests. */
+export function mergeRecentSenders(
+  existing: RecentSender[],
+  items: InboxItem[],
+  cap = RECENT_SENDERS_CAP,
+): RecentSender[] {
+  const byCode = new Map<string, RecentSender>();
+  for (const r of existing) {
+    const code = normalizeCode(r?.code ?? '');
+    if (code) byCode.set(code, { code: r.code, name: r.name ?? '', at: typeof r.at === 'number' ? r.at : 0 });
+  }
+  for (const it of items) {
+    const code = normalizeCode(it.senderCode);
+    if (!code) continue;
+    const at = typeof it.receivedAt === 'number' ? it.receivedAt : 0;
+    const incomingName = (it.senderName || '').trim();
+    const prev = byCode.get(code);
+    const name = incomingName && at >= (prev?.at ?? -1) ? incomingName : prev?.name || incomingName;
+    byCode.set(code, { code: it.senderCode, name, at: Math.max(at, prev?.at ?? 0) });
+  }
+  return [...byCode.values()].sort((a, b) => b.at - a.at).slice(0, cap);
+}
+
+function readRecentSenders(): RecentSender[] {
+  try {
+    const raw = localStorage.getItem(RECENT_SENDERS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((r): r is RecentSender => !!r && typeof r.code === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Record the senders of freshly-loaded inbox items into the ledger. */
+function recordRecentSenders(items: InboxItem[]): void {
+  if (items.length === 0) return;
+  try {
+    localStorage.setItem(
+      RECENT_SENDERS_KEY,
+      JSON.stringify(mergeRecentSenders(readRecentSenders(), items)),
+    );
+  } catch {
+    /* no localStorage / quota — the live inbox still covers current items */
+  }
+}
+
+/** People who've recently sent you a card or a collaboration invite,
+ *  newest-first — survives item removal and app restarts. */
+export function recentSenders(): RecentSender[] {
+  return readRecentSenders();
 }
 
 function readLocal(): InboxItem[] {
