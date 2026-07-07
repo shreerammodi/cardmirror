@@ -135,6 +135,10 @@ interface InitialDocPayload {
    *  after mounting. Passed through opaquely (stored + returned via
    *  get-initial-doc); the renderer resolves it. */
   focusAnchor?: { quote: string; prefix: string; suffix: string; approxPos: number };
+  /** Join a collaboration share code instead of mounting a doc. Passed
+   *  through opaquely (stored + returned via get-initial-doc); the renderer
+   *  runs the join. */
+  joinShareCode?: string;
 }
 const pendingInitialDocs = new Map<number, InitialDocPayload>();
 

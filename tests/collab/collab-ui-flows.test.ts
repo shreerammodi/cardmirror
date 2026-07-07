@@ -213,4 +213,39 @@ describe('collab UI flows through the editor seams', () => {
     await host.end();
     v.destroy();
   }, 20_000);
+
+  it('offloads the join to a new window instead of creating a session here', async () => {
+    const client = new RoomsClient({ baseUrl: () => mock.url, token: () => mock.token });
+    const { session: host, shareCode } = await CollabSession.host({
+      pmDoc: simpleDoc('host doc'),
+      client,
+    });
+    const v = mkIndexStyleView();
+    let spawnedWith: string | null = null;
+    let newSessionDocCalled = false;
+    const deps = {
+      getView: () => v,
+      refreshPlugins: () => {
+        v.updateState(v.state.reconfigure({ plugins: buildMiniPlugins() }));
+      },
+      newSessionDoc: () => {
+        newSessionDocCalled = true;
+        return true;
+      },
+      // Stand in for "this window has a real doc open" → spawn a new window.
+      spawnJoinWindow: (code: string) => {
+        spawnedWith = code;
+        return true;
+      },
+    };
+    await collabUi.joinSessionWithCode(deps, shareCode);
+    await settle();
+    // The join was handed off: no session was created in this window, and the
+    // in-window doc swap never ran.
+    expect(spawnedWith).toBe(shareCode);
+    expect(collabUi.activeSession()).toBeNull();
+    expect(newSessionDocCalled).toBe(false);
+    await host.end();
+    v.destroy();
+  }, 20_000);
 });

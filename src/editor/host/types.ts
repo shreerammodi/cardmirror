@@ -246,4 +246,10 @@ export interface SpawnWindowPayload {
    *  `AnchorDescriptor` (kept inline so host types don't depend on the
    *  editor layer). */
   focusAnchor?: { quote: string; prefix: string; suffix: string; approxPos: number };
+  /** When set, the spawned window JOINS this collaboration share code
+   *  instead of mounting a doc — it opens a blank starter and runs the full
+   *  join (session + Loro binding land together in the new window). Used so
+   *  accepting an invite while a real doc is open doesn't overwrite it. The
+   *  doc fields above are placeholders in this case. */
+  joinShareCode?: string;
 }

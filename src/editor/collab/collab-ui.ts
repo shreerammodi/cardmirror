@@ -56,6 +56,13 @@ export interface CollabUiDeps {
    *  the Sessions list just say "collaboration session" (field bug,
    *  2026-07-03). */
   setDocTitle?(title: string): void;
+  /** Desktop multi-window: when the current window has a real doc open (not
+   *  the disposable starter), spawn a NEW window to host the joined session
+   *  and return true — the caller then aborts, and the spawned window runs
+   *  the full join itself (so the session + Loro binding land together,
+   *  never stranded). Returns false to join in THIS window (starter open, or
+   *  single-window / web). */
+  spawnJoinWindow?(shareCode: string): boolean;
 }
 
 interface ActiveState {
@@ -294,6 +301,13 @@ export async function joinSessionFlow(deps: CollabUiDeps): Promise<void> {
  *  pill's invite Join both land here. */
 export async function joinSessionWithCode(deps: CollabUiDeps, code: string): Promise<void> {
   if (!guardReady(deps)) return;
+  // Don't overwrite the doc you're working in — or bump the session you're
+  // already in: unless this window holds the disposable starter, hand the
+  // join to a fresh window (which re-enters here with the starter open, so it
+  // joins in place). Runs BEFORE the `active` guard and the session creation,
+  // so an active-session window opens the new join elsewhere instead of
+  // refusing, and the session + binding are born in the window that keeps them.
+  if (deps.spawnJoinWindow?.(code.trim())) return;
   if (active) {
     showToast('Already in a session — end or leave it first');
     return;

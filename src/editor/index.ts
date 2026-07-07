@@ -984,6 +984,30 @@ const collabDeps = {
   // "synced" chip here). The Loro binding replaces the empty content
   // from the session's CRDT state after the swap.
   newSessionDoc: () => replaceWithSessionDoc(),
+  // Accepting an invite shouldn't overwrite the doc you're working in: on
+  // desktop multi-window, if this window holds a real doc (not the disposable
+  // starter), open the session in a NEW window instead. Returns true when it
+  // spawned — the caller aborts the in-window join, and the spawned window
+  // re-enters the join with a starter open, so it joins in place. Web /
+  // single-window (or the starter already open) → false → join here.
+  spawnJoinWindow: (shareCode: string): boolean => {
+    const host = getHost();
+    if (!host.canSpawnWindow || isPristineStarter) return false;
+    void host
+      .spawnWindow({
+        filename: '',
+        bytes: new Uint8Array(),
+        handle: null,
+        format: null,
+        uid: null,
+        joinShareCode: shareCode,
+      })
+      .catch((err) => {
+        console.error('Spawn-to-join failed:', err);
+        showToast('Could not open a new window for the session.');
+      });
+    return true;
+  },
 };
 
 const ribbonContext: RibbonContext = {
@@ -6959,6 +6983,10 @@ async function initSingleDocBoot(): Promise<void> {
     console.warn('getInitialDoc failed:', err);
   }
   if (payload) {
+    if (payload.joinShareCode) {
+      await mountJoinedSession(payload.joinShareCode);
+      return;
+    }
     await mountFromSpawnPayload(payload);
     return;
   }
@@ -7031,6 +7059,21 @@ async function initSingleDocBoot(): Promise<void> {
         24 * 60 * 60 * 1000,
       );
     }
+  }
+}
+
+/** A window spawned to accept a collaboration invite: mount a fresh pristine
+ *  starter, then run the FULL join here so the session + Loro binding install
+ *  together in this window (join's `newSessionDoc` swaps the starter for the
+ *  session doc; pristine → no save prompt, and `spawnJoinWindow` returns false
+ *  so there's no second spawn). */
+async function mountJoinedSession(shareCode: string): Promise<void> {
+  mountView(currentDoc);
+  syncSingleDocSpeechRegistration();
+  try {
+    await loadCollabUi().then((m) => m.joinSessionWithCode(collabDeps, shareCode));
+  } catch (err) {
+    console.error('Join in spawned window failed:', err);
   }
 }
 
