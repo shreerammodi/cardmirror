@@ -5,7 +5,7 @@ changes in each release, written for users of the editor. For
 in-depth rationale and implementation context behind each entry,
 see `DETAILED_CHANGELOG.md`.
 
-## 0.1.0-beta.9 — 2026-07-06
+## 0.1.0-beta.9 — 2026-07-07
 
 ### Added
 
@@ -28,6 +28,16 @@ see `DETAILED_CHANGELOG.md`.
   block, or one-click block someone who recently shared with you. Blocked
   items never appear in the Receive pill or its unread count; unblock to
   bring their earlier cards back.
+
+- **Remove downloaded dictation models.** Settings → Voice: delete the
+  standard (~130 MB) or large (~1.8 GB) recognition model to reclaim disk
+  space. Voice re-offers the download whenever it next needs a missing model.
+
+- **Custom ribbon buttons.** Add up to six of your own buttons to the ribbon
+  (Settings → Appearance → Custom ribbon buttons), each running a command you
+  choose — including the new Toggle / Cycle setting commands — with an icon you
+  pick. They sit to the right of the comments buttons and hide when none are
+  configured.
 
 ### Fixed
 
@@ -63,6 +73,22 @@ see `DETAILED_CHANGELOG.md`.
   command bar's settings search now carry their section — "Bold heading"
   reads as "Create Reference: Bold heading" — so fragment labels are clear
   outside the Settings dialog, and you can find them by section too.
+
+### Preview — collaboration sessions (desktop only, off by default)
+
+Refinements to the experimental collaboration preview (still opt-in via the
+developer console, as in beta.8):
+
+- **Invite from the Send pill.** Each recipient/group row now has an "Invite
+  to collaborate" button (shown when you click the Send pill and collaboration
+  is on), instead of a separate invite mode.
+
+- **See who's in the room.** The session status chip shows a colored dot per
+  participant — hover a dot for their name.
+
+- **Accepting an invite opens a new window.** Joining a session no longer
+  overwrites the document you're working in — it opens in a new window (unless
+  you're on a blank starter, which it reuses).
 
 ## 0.1.0-beta.8 — 2026-07-04
 

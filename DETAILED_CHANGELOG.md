@@ -5,7 +5,75 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
-## 0.1.0-beta.9 — 2026-07-06
+## 0.1.0-beta.9 — 2026-07-07
+
+- **Custom ribbon buttons** (`index.html`, `index.ts`, `settings.ts`,
+  `settings-ui.ts`, `setting-commands.ts` NEW, `icons.ts`,
+  `scripts/gen-icons.mjs`, `icons.css`, `style.css`,
+  `tests/editor/ribbon-custom-buttons.test.ts`). Up to 6 user buttons
+  (`ribbonCustomButtons: { command, icon }[]`) in a static `#custom-ribbon-panel`
+  to the right of the comments cluster, populated live from settings
+  (`renderCustomRibbonButtons`, re-run on the settings subscriber; the whole
+  panel hides when none are configured). Inserted at cascade index 2 so it's the
+  third panel to hide when the ribbon narrows, and added to the resize-observe
+  list so a populate/empty re-runs the cascade. The command picker offers every
+  available `RibbonCommandId` PLUS the generated Toggle/Cycle setting commands —
+  which aren't ribbon commands, so a new `setting-commands.ts` module models them
+  as `toggle:<key>` / `cycle:<key>` ids and runs / labels / enumerates them
+  (`runSettingCommand`, `settingCommandLabel`, `settingCommandOptions`); the
+  command palette's toggle/cycle activation now shares those helpers. Icons: a
+  curated general-purpose set (star, bookmark, flag, bold, italic, underline,
+  list, check, heart, trash, copy, download, upload, printer, bell, zap,
+  lightbulb, scissors) added to the gen-icons MAP + `IconName` and regenerated
+  into `icons.css` (both modern SVG + classic glyph); `CUSTOM_BUTTON_ICONS` is
+  the curated picker list.
+
+- **Collab: presence dots on the session chip** (`collab-cursors.ts`,
+  `collab-ui.ts`, `style.css`, `tests/collab/collab-cursors.test.ts`). New
+  `CursorsHandle.presence()` reads the cursor presence store — self plus
+  visible remotes, each with a display name and the deterministic per-peer
+  color. The chip renders a dot strip (a text label + dots kept as stable
+  children), refreshed on a 3s timer since chip text only updates on
+  connection-status changes. Remotes require `collabShowCursors` (default on),
+  since presence rides the cursor channel; self is always shown.
+
+- **Collab: accepting an invite opens in a new window** (`host/types.ts`,
+  `preload.ts`, `main.ts`, `collab-ui.ts`, `index.ts`,
+  `tests/collab/collab-ui-flows.test.ts`). New optional
+  `CollabUiDeps.spawnJoinWindow`, checked at the top of `joinSessionWithCode`
+  (before the session is created and before the "already in a session" guard):
+  index.ts spawns a window when `canSpawnWindow && !isPristineStarter`. A
+  `joinShareCode` rides the existing SpawnWindowPayload (passed through main +
+  preload opaquely); the spawned window runs the FULL join
+  (`mountJoinedSession`) so the session and its Loro binding are born together —
+  avoiding the stranded-binding field bug. Pristine-starter / web /
+  single-window join in place.
+
+- **Send pill: per-contact "invite to collaborate" button** (`send-pill-ui.ts`,
+  `style.css`). Replaced the click-to-invite mode's top header + whole-row
+  click with a two-people button on each recipient/group row, revealed only by
+  the `pmd-send-invite-mode` class (click-open) so a drag-to-send never shows
+  it. The bar gains a hover recolor when it's actually clickable (collab on +
+  card sharing on). Receive-pill empty state simplified to "You haven't
+  received anything yet."
+
+- **Block senders: recent-senders ledger covers invite senders**
+  (`pairing/inbox-store.ts`, `settings-ui.ts`, `tests/editor/pairing.test.ts`).
+  A collaboration invite is consumed (deleted from the inbox) on Join, so it
+  never lingered to appear as a "recent sender". A persistent localStorage
+  ledger (`recentSenders` / `mergeRecentSenders`, deduped by code, cap 10)
+  records each arriving item's sender the moment it lands (new `ingest` path),
+  before it can be consumed; the Blocked-senders UI drives its recent list from
+  the ledger (minus already-blocked) instead of the live inbox.
+
+- **Voice: delete installed dictation models** (`apps/desktop/src/voice/ipc.ts`,
+  `preload.ts`, `settings-ui.ts`, `style.css`). Two IPC handlers
+  (`host:voice-delete-{base,dictation}-model`) `fs.rmSync` the userData model
+  dir — base (~130 MB) and large (~1.8 GB, plus its bundled-Node runtime) —
+  refused while a download is in flight, safe while voice runs (the worker
+  holds the model in memory). Per-model Delete buttons appear when a model is
+  installed; the large model deletion falls voice back to standard, the base
+  re-offers download on next start.
 
 - **Command bar can toggle and cycle settings** (`quick-card-search-ui.ts`,
   `settings.ts`, `tests/editor/setting-toggles.test.ts`). Every `kind: 'toggle'`
