@@ -1656,6 +1656,12 @@ body:not(.pmd-inplace-save) #autosave-btn { display: none; }
 .ribbon-doc-ops-panel-3col {
   grid-template-columns: auto auto auto;
 }
+/* Custom buttons vary in count (0–6): fill column-major (2 per column, adding
+   columns rightward) so a few buttons stay compact instead of leaving a gappy
+   half-empty row. Capped at 3 columns by the -3col template = 6 buttons. */
+#custom-ribbon-panel {
+  grid-auto-flow: column;
+}
 /* `#ribbon button` forces `display: inline-flex`, which defeats the UA
    `[hidden]` rule — restore it so the Ask-AI button can hide when AI is
    off. */
@@ -7585,6 +7591,39 @@ body:has(#comments-column:not([hidden])) :is(#editor, .pmd-pane-editor) .pmd-com
   color: var(--pmd-c-text-muted);
   font-style: italic;
   font-size: 0.85rem;
+}
+
+/* Custom ribbon buttons editor: per-row icon preview + icon picker + command
+   picker + remove. */
+.pmd-custom-ribbon-editor,
+.pmd-custom-ribbon-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.pmd-custom-ribbon-editor {
+  margin-top: 0.4rem;
+}
+.pmd-custom-ribbon-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.pmd-custom-ribbon-preview {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pmd-c-text);
+}
+.pmd-custom-ribbon-icon {
+  flex: 0 0 7rem;
+}
+.pmd-custom-ribbon-cmd {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .pmd-settings-folder-path {
   flex: 1 1 0;

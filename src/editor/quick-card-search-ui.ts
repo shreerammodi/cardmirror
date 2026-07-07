@@ -39,7 +39,6 @@ import {
   SETTING_METADATA,
   toggleableSettingMetas,
   toggleCommandName,
-  cleanToggleLabel,
   settingSearchName,
   cyclableSettings,
   cycleCommandName,
@@ -49,6 +48,7 @@ import {
   type Settings,
   type SettingsCategory,
 } from './settings.js';
+import { runSettingToggle, runSettingCycle } from './setting-commands.js';
 import { CATEGORY_TABS, visibleCategoryTabs, type SettingsTarget } from './settings-categories.js';
 import { appVersion } from './install-info.js';
 import { getHost, getElectronHost, isWindowsHost } from './host/index.js';
@@ -1585,30 +1585,14 @@ class QuickCardSearchUI {
     // The settings subscriber propagates the change to the live view / other
     // windows, so there's nothing else to wire here.
     if (result.source === 'settingtoggle') {
-      const key = result.toggleSettingKey!;
       this.close();
-      settings.set(key, (settings.get(key) !== true) as never);
-      // Report the ACTUAL post-set value: a subscriber may reject/revert the
-      // change (e.g. the workspace switch's confirm-and-revert), so read it
-      // back rather than trusting the intended flip.
-      const applied = settings.get(key) === true;
-      const raw = SETTING_METADATA.find((m) => m.key === key)?.label ?? String(key);
-      showToast(`${cleanToggleLabel(raw)}: ${applied ? 'On' : 'Off'}`);
+      runSettingToggle(result.toggleSettingKey!);
       return;
     }
     // Setting cycle: advance the enum/mode setting to its next value.
     if (result.source === 'settingcycle') {
-      const key = result.cycleSettingKey!;
       this.close();
-      const setting = CYCLABLE_SETTINGS.find((c) => c.key === key);
-      if (setting) {
-        const next = nextCycleValue(setting, settings.get(key));
-        settings.set(key, next.value as never);
-        // Read back the actual value in case a subscriber rejected the change.
-        const applied = currentCycleLabel(setting, settings.get(key));
-        const raw = SETTING_METADATA.find((m) => m.key === key)?.label ?? String(key);
-        showToast(`${cleanToggleLabel(raw)}: ${applied}`);
-      }
+      runSettingCycle(result.cycleSettingKey!);
       return;
     }
     // Settings: close the palette, then open the dialog to the tab and

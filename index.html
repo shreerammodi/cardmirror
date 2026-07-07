@@ -211,6 +211,11 @@
           <button id="ask-ai-btn" class="ribbon-doc-ops-btn" type="button" hidden
                   title="Ask AI about selection" aria-label="Ask AI about selection"><span class="pmd-icon pmd-icon-ai" aria-hidden="true"></span></button>
         </div>
+        <!-- Custom user-configured buttons (up to 6), populated from settings
+             by renderCustomRibbonButtons(). Sits to the right of the comments
+             cluster; hidden entirely when none are configured, and the third
+             panel to disappear in the ribbon's narrow cascade. -->
+        <div id="custom-ribbon-panel" class="ribbon-doc-ops-panel ribbon-doc-ops-panel-3col" role="group" aria-label="Custom buttons" hidden></div>
       </div>
       <div class="ribbon-section ribbon-center">
         <!-- Active doc filename chip. Opt-in via Settings →

@@ -31,6 +31,8 @@ import {
   type ShrinkProtection,
   type PairingPartner,
   type PairingGroup,
+  type RibbonCustomButton,
+  MAX_RIBBON_CUSTOM_BUTTONS,
   condenseWarningCloseFor,
 } from './settings.js';
 import { CATEGORY_TABS, visibleCategoryTabs, type SettingsTarget } from './settings-categories.js';
@@ -53,7 +55,10 @@ import { launchBenchmarkOverlay } from './benchmark-ui.js';
 import { resetTimer } from './timer-state.js';
 import { applyTimerProfile } from './timer-profile.js';
 import { showToast } from './toast.js';
-import { setIcon } from './icons';
+import { setIcon, CUSTOM_BUTTON_ICONS, type IconName } from './icons';
+import { availableRibbonCommandIds } from './ribbon-availability.js';
+import { RIBBON_COMMAND_LABELS } from './ribbon-commands.js';
+import { settingCommandOptions } from './setting-commands.js';
 import {
   FILE_OBJECT_KINDS,
   FILE_OBJECT_KIND_LABELS,
@@ -888,6 +893,10 @@ class SettingsModal {
       const slot = document.createElement('div');
       row.appendChild(slot);
       requestAnimationFrame(() => slot.appendChild(buildKeybindingsEditor()));
+      return row;
+    } else if (meta.kind === 'ribbonCustomButtons') {
+      row.appendChild(text);
+      row.appendChild(buildRibbonCustomButtonsEditor());
       return row;
     } else if (meta.kind === 'folder') {
       // Path display + Browse… / Clear buttons, mounted UNDER the
@@ -2341,6 +2350,119 @@ function buildPairingPartnersEditor(): HTMLElement {
   render();
   const unsub = settings.subscribe(() => render());
   registerRowCleanup(wrap, () => unsub());
+  return wrap;
+}
+
+/** Custom ribbon buttons editor: up to 6 rows, each choosing an icon + a
+ *  command. The ribbon rebuilds live via the settings subscriber. */
+function buildRibbonCustomButtonsEditor(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'pmd-custom-ribbon-editor';
+
+  const list = document.createElement('div');
+  list.className = 'pmd-custom-ribbon-list';
+  wrap.appendChild(list);
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'pmd-readers-add';
+  addBtn.textContent = '+ Add button';
+  wrap.appendChild(addBtn);
+
+  const get = (): RibbonCustomButton[] => settings.get('ribbonCustomButtons');
+  const commit = (arr: RibbonCustomButton[]): void => {
+    settings.set('ribbonCustomButtons', arr as never);
+    render();
+  };
+
+  // Bindable actions, by label: every ribbon command (with a label) plus the
+  // generated Toggle/Cycle setting commands, sorted alphabetically.
+  const options: { value: string; label: string }[] = [
+    ...settingCommandOptions().map((o) => ({ value: o.command, label: o.label })),
+    ...availableRibbonCommandIds()
+      .filter((id) => RIBBON_COMMAND_LABELS[id])
+      .map((id) => ({ value: id as string, label: RIBBON_COMMAND_LABELS[id] })),
+  ].sort((a, b) => a.label.localeCompare(b.label));
+
+  function render(): void {
+    list.innerHTML = '';
+    const buttons = get();
+    if (buttons.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'pmd-pairing-empty';
+      empty.textContent = 'No custom buttons yet. Add one to place it on the ribbon.';
+      list.appendChild(empty);
+    }
+    buttons.forEach((cfg, idx) => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'pmd-custom-ribbon-row';
+
+      const preview = document.createElement('span');
+      preview.className = 'pmd-custom-ribbon-preview';
+      setIcon(preview, cfg.icon);
+
+      const iconSelect = document.createElement('select');
+      iconSelect.className = 'pmd-custom-ribbon-icon';
+      iconSelect.title = 'Icon';
+      for (const name of CUSTOM_BUTTON_ICONS) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        if (name === cfg.icon) opt.selected = true;
+        iconSelect.appendChild(opt);
+      }
+      iconSelect.addEventListener('change', () => {
+        setIcon(preview, iconSelect.value as IconName);
+        commit(
+          get().map((b, i) => (i === idx ? { ...b, icon: iconSelect.value as IconName } : b)),
+        );
+      });
+
+      const cmdSelect = document.createElement('select');
+      cmdSelect.className = 'pmd-custom-ribbon-cmd';
+      cmdSelect.title = 'Command';
+      // A saved command that's no longer offered (obsolete / gated off on this
+      // host) still needs a slot so the row shows it rather than silently
+      // snapping to the first option.
+      if (cfg.command && !options.some((o) => o.value === cfg.command)) {
+        const opt = document.createElement('option');
+        opt.value = cfg.command;
+        opt.textContent = `${cfg.command} (unavailable)`;
+        opt.selected = true;
+        cmdSelect.appendChild(opt);
+      }
+      for (const o of options) {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.label;
+        if (o.value === cfg.command) opt.selected = true;
+        cmdSelect.appendChild(opt);
+      }
+      cmdSelect.addEventListener('change', () => {
+        commit(get().map((b, i) => (i === idx ? { ...b, command: cmdSelect.value } : b)));
+      });
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'pmd-pairing-delete';
+      setIcon(del, 'close');
+      del.title = 'Remove button';
+      del.addEventListener('click', () => commit(get().filter((_, i) => i !== idx)));
+
+      rowEl.append(preview, iconSelect, cmdSelect, del);
+      list.appendChild(rowEl);
+    });
+    addBtn.style.display = buttons.length >= MAX_RIBBON_CUSTOM_BUTTONS ? 'none' : '';
+  }
+
+  addBtn.addEventListener('click', () => {
+    if (get().length >= MAX_RIBBON_CUSTOM_BUTTONS) return;
+    const first = options[0];
+    if (!first) return;
+    commit([...get(), { command: first.value, icon: CUSTOM_BUTTON_ICONS[0]! }]);
+  });
+
+  render();
   return wrap;
 }
 

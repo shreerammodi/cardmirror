@@ -67,6 +67,27 @@ const MAP = {
   note: { svg: 'file-02', glyph: '📝' },
   edit: { svg: 'edit-02', glyph: '✎' },
   ai: { svg: 'stars-02', glyph: '✨' },
+  // Curated general-purpose set for user-configurable custom ribbon buttons
+  // (their meaning is defined by the command the user binds, so these are
+  // deliberately generic).
+  star: { svg: 'star-01', glyph: '⭐' },
+  bookmark: { svg: 'bookmark', glyph: '🔖' },
+  flag: { svg: 'flag-01', glyph: '🚩' },
+  bold: { svg: 'bold-01', glyph: 'B' },
+  italic: { svg: 'italic-01', glyph: 'I' },
+  underline: { svg: 'underline-01', glyph: 'U' },
+  list: { svg: 'list', glyph: '≣' },
+  check: { svg: 'check', glyph: '✓' },
+  heart: { svg: 'heart', glyph: '♥' },
+  trash: { svg: 'trash-01', glyph: '🗑' },
+  copy: { svg: 'copy-01', glyph: '⧉' },
+  download: { svg: 'download-01', glyph: '⤓' },
+  upload: { svg: 'upload-01', glyph: '⤒' },
+  printer: { svg: 'printer', glyph: '🖨' },
+  bell: { svg: 'bell-01', glyph: '🔔' },
+  zap: { svg: 'zap', glyph: '⚡' },
+  lightbulb: { svg: 'lightbulb-05', glyph: '💡' },
+  scissors: { svg: 'scissors-01', glyph: '✂' },
 };
 
 /** SVG → CSS-safe data-URL. Force opaque #000 (mask uses alpha, the

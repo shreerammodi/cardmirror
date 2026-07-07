@@ -50,7 +50,56 @@ export type IconName =
   | 'flashcard'
   | 'note'
   | 'edit'
-  | 'ai';
+  | 'ai'
+  // Curated general-purpose set for custom ribbon buttons.
+  | 'star'
+  | 'bookmark'
+  | 'flag'
+  | 'bold'
+  | 'italic'
+  | 'underline'
+  | 'list'
+  | 'check'
+  | 'heart'
+  | 'trash'
+  | 'copy'
+  | 'download'
+  | 'upload'
+  | 'printer'
+  | 'bell'
+  | 'zap'
+  | 'lightbulb'
+  | 'scissors';
+
+/** Curated set of icons offered when a user picks an icon for a custom
+ *  ribbon button — a sensible general-purpose spread from the Untitled UI
+ *  pack (the full set is far too many to browse). Order is the picker order. */
+export const CUSTOM_BUTTON_ICONS: IconName[] = [
+  'star',
+  'bookmark',
+  'flag',
+  'check',
+  'heart',
+  'zap',
+  'lightbulb',
+  'bell',
+  'bold',
+  'italic',
+  'underline',
+  'list',
+  'edit',
+  'highlight',
+  'tag',
+  'link',
+  'search',
+  'copy',
+  'scissors',
+  'trash',
+  'download',
+  'upload',
+  'printer',
+  'timer',
+];
 
 /** Create an icon span. Decorative by default (`aria-hidden`); pass a
  *  `label` for standalone icon buttons whose accessible name should be

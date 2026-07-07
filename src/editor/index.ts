@@ -188,8 +188,12 @@ import { keepCursorInLeadingBlockOnBlockedMerge } from './boundary-cursor-keymap
 import { indentParagraph, outdentParagraph } from './indent-keymap.js';
 import {
   registerRibbonTooltip,
+  unregisterRibbonTooltip,
   reapplyAllRibbonTooltips,
 } from './ribbon-tooltips.js';
+import { availableRibbonCommandIds } from './ribbon-availability.js';
+import { setIcon } from './icons.js';
+import { runSettingCommand, settingCommandLabel } from './setting-commands.js';
 import {
   buildRibbonKeymap,
   getRibbonCommand,
@@ -2094,6 +2098,51 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') refreshFlashcardDueDot();
 });
 refreshFlashcardDueDot();
+
+/** Rebuild the user-configured custom ribbon buttons from settings. Each runs
+ *  a chosen command with a chosen icon; entries whose command is no longer
+ *  available are skipped, and the whole panel is hidden when nothing valid is
+ *  configured. Called at boot and whenever `ribbonCustomButtons` changes. */
+function renderCustomRibbonButtons(): void {
+  const panel = document.getElementById('custom-ribbon-panel');
+  if (!panel) return;
+  // Release tooltips for the buttons we're about to discard, then rebuild.
+  for (const old of panel.querySelectorAll('button')) unregisterRibbonTooltip(old);
+  panel.replaceChildren();
+  const available = new Set(availableRibbonCommandIds());
+  let shown = 0;
+  for (const cfg of settings.get('ribbonCustomButtons')) {
+    const cmd = cfg.command;
+    // A custom button binds a ribbon command OR a setting command
+    // (toggle:/cycle:). Resolve a label from whichever it is; skip when it's
+    // neither available nor a known setting command (obsolete / gated-off).
+    const settingLabel = settingCommandLabel(cmd);
+    const ribbonLabel =
+      !settingLabel && available.has(cmd as RibbonCommandId)
+        ? RIBBON_COMMAND_LABELS[cmd as RibbonCommandId]
+        : undefined;
+    const label = settingLabel ?? ribbonLabel;
+    if (!label) continue;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ribbon-doc-ops-btn';
+    setIcon(btn, cfg.icon);
+    btn.setAttribute('aria-label', label);
+    // Keep the editor selection alive across the click (selection commands).
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', () => {
+      if (!runSettingCommand(cmd)) runRibbonCommandById(cmd as RibbonCommandId);
+    });
+    // Ribbon commands use the managed tooltip (label + live shortcut); setting
+    // commands aren't in that registry, so give them a plain title.
+    if (settingLabel) btn.title = settingLabel;
+    else registerRibbonTooltip({ el: btn, commandId: cmd as RibbonCommandId });
+    panel.appendChild(btn);
+    shown++;
+  }
+  panel.hidden = shown === 0;
+}
+renderCustomRibbonButtons();
 if (askAiBtn) {
   askAiBtn.addEventListener('mousedown', (e) => e.preventDefault());
   askAiBtn.addEventListener('click', () => runRibbonCommandById('aiAskAboutSelection'));
@@ -2930,6 +2979,7 @@ settings.subscribe((s) => {
   applyUiFont(s.uiFont);
   applyAskAiButtonVisibility(s.aiFeaturesEnabled);
   refreshFlashcardDueDot(); // the due-dot setting may have toggled
+  renderCustomRibbonButtons(); // the custom-button config may have changed
   reapplyAllRibbonTooltips();
   pushNativeMenuBindings();
   applyPillVisibility();
@@ -2992,7 +3042,8 @@ function initRibbonResizer(): void {
   const panelIds: string[][] = [
     ['cite-panel'],              // (a) Character styles
     ['formatting-panel'],        // (b) Structural styles
-    ['doc-name-chip'],           // (c) Active-doc filename pill (opt-in)
+    ['custom-ribbon-panel'],     // (c) User custom buttons — hide THIRD
+    ['doc-name-chip'],           // (d) Active-doc filename pill (opt-in)
     ['format-menu-panel'],       // (d) Table / image / sub / sup / strike
     ['doc-ops-panel'],           // (e) Paragraph integrity
     ['font-size-up-btn',         // (f) Font-size step buttons
@@ -3102,7 +3153,7 @@ function initRibbonResizer(): void {
   // ribbon-only observer never fires. Observing these specific
   // elements catches the show / hide → 0 ↔ N transition and
   // re-runs the cascade.
-  for (const id of ['timer-panel', 'doc-name-chip']) {
+  for (const id of ['timer-panel', 'doc-name-chip', 'custom-ribbon-panel']) {
     const el = document.getElementById(id);
     if (el) observer.observe(el);
   }
