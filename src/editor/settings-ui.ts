@@ -2914,8 +2914,10 @@ function buildVoiceDictationModelEditor(): HTMLElement {
     electronAPI?: {
       voiceBaseModelInfo(): Promise<{ present: boolean; downloading: boolean }>;
       voiceDownloadBaseModel(): Promise<{ ok: boolean; error?: string }>;
+      voiceDeleteBaseModel(): Promise<{ ok: boolean; error?: string }>;
       voiceDictationModelInfo(): Promise<{ present: boolean; downloading: boolean }>;
       voiceDownloadDictationModel(): Promise<{ ok: boolean; error?: string }>;
+      voiceDeleteDictationModel(): Promise<{ ok: boolean; error?: string }>;
       onVoiceDownloadProgress(
         h: (p: { model?: string; pct: number; extracting?: boolean }) => void,
       ): () => void;
@@ -2953,21 +2955,42 @@ function buildVoiceDictationModelEditor(): HTMLElement {
     const baseButton = document.createElement('button');
     baseButton.type = 'button';
     baseButton.className = 'pmd-voice-model-download';
-    wrap.append(baseStatus, baseButton);
+    const baseDeleteBtn = document.createElement('button');
+    baseDeleteBtn.type = 'button';
+    baseDeleteBtn.className = 'pmd-voice-model-delete';
+    baseDeleteBtn.textContent = 'Delete standard model';
+    baseDeleteBtn.style.display = 'none';
+    wrap.append(baseStatus, baseButton, baseDeleteBtn);
     const refreshBase = async (): Promise<void> => {
       const info = await api.voiceBaseModelInfo();
       if (info.present) {
         baseStatus.textContent = 'Standard model downloaded ✓';
         baseButton.style.display = 'none';
+        baseDeleteBtn.style.display = '';
       } else {
         baseStatus.textContent = info.downloading
           ? 'Downloading standard model…'
           : 'Standard model not downloaded.';
         baseButton.style.display = info.downloading ? 'none' : '';
         baseButton.textContent = 'Download standard model (~130 MB)';
+        baseDeleteBtn.style.display = 'none';
       }
     };
     void refreshBase();
+    baseDeleteBtn.addEventListener('click', () => {
+      if (
+        !window.confirm(
+          "Delete the standard voice model? Voice control won't work until you download it again.",
+        )
+      )
+        return;
+      baseDeleteBtn.style.display = 'none';
+      baseStatus.textContent = 'Deleting…';
+      void api.voiceDeleteBaseModel().then((res) => {
+        if (!res.ok) baseStatus.textContent = `Delete failed: ${res.error ?? 'unknown'}`;
+        void refreshBase();
+      });
+    });
     baseButton.addEventListener('click', () => {
       baseButton.style.display = 'none';
       const unsub = api.onVoiceDownloadProgress((p) => {
@@ -2987,25 +3010,49 @@ function buildVoiceDictationModelEditor(): HTMLElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'pmd-voice-model-download';
-  wrap.append(status, button);
+  const deleteButton = document.createElement('button');
+  deleteButton.type = 'button';
+  deleteButton.className = 'pmd-voice-model-delete';
+  deleteButton.textContent = 'Delete large model';
+  deleteButton.style.display = 'none';
+  wrap.append(status, button, deleteButton);
 
   const refresh = async (): Promise<void> => {
     if (!api) {
       status.textContent = 'Desktop only.';
       button.style.display = 'none';
+      deleteButton.style.display = 'none';
       return;
     }
     const info = await api.voiceDictationModelInfo();
     if (info.present) {
       status.textContent = 'Large model downloaded ✓';
       button.style.display = 'none';
+      deleteButton.style.display = '';
     } else {
       status.textContent = info.downloading ? 'Downloading…' : 'Large model not downloaded.';
       button.style.display = info.downloading ? 'none' : '';
       button.textContent = 'Download large model (1.8 GB)';
+      deleteButton.style.display = 'none';
     }
   };
   void refresh();
+
+  deleteButton.addEventListener('click', () => {
+    if (!api) return;
+    if (
+      !window.confirm(
+        'Delete the large dictation model (1.8 GB)? Voice will fall back to the standard model.',
+      )
+    )
+      return;
+    deleteButton.style.display = 'none';
+    status.textContent = 'Deleting…';
+    void api.voiceDeleteDictationModel().then((res) => {
+      if (!res.ok) status.textContent = `Delete failed: ${res.error ?? 'unknown'}`;
+      void refresh();
+    });
+  });
 
   button.addEventListener('click', () => {
     if (!api) return;

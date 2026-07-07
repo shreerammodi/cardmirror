@@ -417,6 +417,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ok: boolean;
       error?: string;
     }>,
+  /** Remove the installed base model from userData to reclaim space. */
+  voiceDeleteBaseModel: () =>
+    ipcRenderer.invoke('host:voice-delete-base-model') as Promise<{
+      ok: boolean;
+      error?: string;
+    }>,
   /** Opt-in large dictation model (~1.8 GB, stored in userData). */
   voiceDictationModelInfo: () =>
     ipcRenderer.invoke('host:voice-dictation-model-info') as Promise<{
@@ -425,6 +431,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }>,
   voiceDownloadDictationModel: () =>
     ipcRenderer.invoke('host:voice-download-dictation-model') as Promise<{
+      ok: boolean;
+      error?: string;
+    }>,
+  /** Remove the installed large model (and its bundled-Node runtime). */
+  voiceDeleteDictationModel: () =>
+    ipcRenderer.invoke('host:voice-delete-dictation-model') as Promise<{
       ok: boolean;
       error?: string;
     }>,

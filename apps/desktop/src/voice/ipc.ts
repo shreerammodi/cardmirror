@@ -518,6 +518,37 @@ export function registerVoiceIpc(): void {
     downloadBaseModel(event.sender),
   );
 
+  // Delete installed models to reclaim disk space. Only the userData copy is
+  // removed (a `--full` install's bundled `resources/voice/model` or a
+  // CARDMIRROR_VOICE_DIR copy is not user-managed). Refused mid-download.
+  // Safe while voice is running — the worker holds the model in memory; the
+  // next `voiceStart` re-checks presence and offers a re-download if missing.
+  ipcMain.handle('host:voice-delete-dictation-model', async () => {
+    if (downloadInFlight) return { ok: false, error: 'A download is in progress.' };
+    try {
+      fs.rmSync(largeModelDir(), { recursive: true, force: true });
+      // The bundled-Node runtime is fetched only for the large model — remove
+      // it too so deleting actually frees the space it cost.
+      fs.rmSync(path.join(app.getPath('userData'), 'voice-runtime'), {
+        recursive: true,
+        force: true,
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  ipcMain.handle('host:voice-delete-base-model', async () => {
+    if (downloadInFlight) return { ok: false, error: 'A download is in progress.' };
+    try {
+      fs.rmSync(baseModelDir(), { recursive: true, force: true });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
   // Native clipboard ops for voice editing verbs — webContents.copy/
   // cut/paste are the same paths as Mod-C/X/V, so ProseMirror slice
   // semantics and structural paste rules are inherited (spec §5).

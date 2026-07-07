@@ -11250,6 +11250,22 @@ body.pmd-voice-m-asleep #editor { box-shadow: none; }
 .pmd-voice-model-download:hover {
   background: var(--pmd-c-hover);
 }
+/* Delete an installed model to reclaim disk — subtle destructive styling. */
+.pmd-voice-model-delete {
+  margin-top: 0.25rem;
+  padding: 0.3rem 0.6rem;
+  font: inherit;
+  font-size: 0.8rem;
+  background: var(--pmd-c-bg);
+  border: 1px solid var(--pmd-c-border);
+  border-radius: 5px;
+  color: var(--pmd-c-danger);
+  cursor: pointer;
+}
+.pmd-voice-model-delete:hover {
+  background: var(--pmd-c-hover);
+  border-color: var(--pmd-c-danger);
+}
 
 /* ════════════════════════════════════════════════ Mobile shell
    View-first chrome for phones/tablets on the web edition
