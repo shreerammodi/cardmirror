@@ -157,6 +157,7 @@ import { findReplacePlugin } from './find-replace-plugin.js';
 import { repairParagraphPlugin } from './repair-paragraph-plugin.js';
 import { frozenSelectionPlugin } from './frozen-selection-plugin.js';
 import { pilcrowSelectionPlugin } from './pilcrow-selection-plugin.js';
+import { transclusionSelectionGuard } from './transclusion-selection-guard.js';
 import { buildMacroKeymap } from './keyboard-macros.js';
 import { FindReplaceBar } from './find-replace-ui.js';
 import { RepairParagraphBar } from './repair-paragraph-ui.js';
@@ -4372,6 +4373,7 @@ export function buildEditorPlugins(): Plugin[] {
     editCoordinatorPlugin,
     cardCutterPreviewPlugin,
     italicCaretPlugin,
+    transclusionSelectionGuard,
     frozenSelectionPlugin,
     pilcrowSelectionPlugin,
     absorbPlugin,

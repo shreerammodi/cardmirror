@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { EditorState, TextSelection, NodeSelection } from 'prosemirror-state';
+import { deleteSelection } from 'prosemirror-commands';
 import { EditorView } from 'prosemirror-view';
 import { Fragment, Node as PMNode } from 'prosemirror-model';
 import { schema, newHeadingId } from '../../src/schema/index.js';
@@ -21,6 +22,7 @@ import {
   insertZoneAtSelection,
 } from '../../src/editor/transclusion-actions.js';
 import { collectHeadings, computeHeadingRange } from '../../src/editor/headings.js';
+import { transclusionSelectionGuard } from '../../src/editor/transclusion-selection-guard.js';
 
 function card(tag: string, body: string): PMNode {
   return schema.nodes['card']!.createChecked(null, [
@@ -200,6 +202,38 @@ describe('enclosingZonePos (drag/move boundary primitive)', () => {
     // Exactly at the zone's opening boundary counts as outside (a drop there
     // lands before the zone, not in it).
     expect(enclosingZonePos(doc, zonePos)).toBeNull();
+    view.destroy();
+  });
+
+  it('clamps a cross-boundary selection so cut/delete can’t pull content out of the zone', () => {
+    const doc = schema.nodes['doc']!.create(null, [
+      schema.nodes['paragraph']!.create(null, schema.text('AAA')),
+      freshZone([card('T', 'BBB')]),
+      schema.nodes['paragraph']!.create(null, schema.text('CCC')),
+    ]);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const view = new EditorView(container, {
+      state: EditorState.create({ doc, plugins: [transclusionSelectionGuard] }),
+      nodeViews: editorNodeViews,
+    });
+    const d = view.state.doc;
+    let bPos = -1;
+    d.descendants((n, p) => {
+      if (bPos < 0 && n.isText && n.text?.includes('BBB')) bPos = p + 1;
+      return true;
+    });
+    // A selection a mouse drag from outside into the zone would form.
+    view.dispatch(view.state.tr.setSelection(TextSelection.between(d.resolve(2), d.resolve(bPos))));
+    // The guard clamped it back to one side of the boundary.
+    const sel = view.state.selection;
+    expect(enclosingZonePos(view.state.doc, sel.from)).toBe(
+      enclosingZonePos(view.state.doc, sel.to),
+    );
+    // So deleting the (clamped) selection leaves the zone intact.
+    deleteSelection(view.state, view.dispatch.bind(view));
+    expect(countTypes(view).zones).toBe(1);
+    expect(view.state.doc.textContent).toContain('BBB');
     view.destroy();
   });
 
