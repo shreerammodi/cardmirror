@@ -89,6 +89,23 @@ describe('resolveCmirCandidates — root base tries each root', () => {
       '/Users/x/OtherLib/Impacts/Src.cmir',
     ]);
   });
+  it('root base prefers the root that also contains the doc (Dropbox tie-break)', () => {
+    // Both roots hold the same relative path, and R1 contains the doc — but it's
+    // listed SECOND. The doc's own root must still win the tie so a mirrored
+    // second library can't shadow it.
+    const c = resolveCmirCandidates(DOC2, 'Impacts/Src.cmir', 'root', [R2, R1]);
+    expect(c[0]).toBe('/Users/x/Dropbox/Debate/Impacts/Src.cmir');
+    expect(c).toEqual([
+      '/Users/x/Dropbox/Debate/Impacts/Src.cmir',
+      '/Users/x/OtherLib/Impacts/Src.cmir',
+    ]);
+  });
+  it('among nested roots that both contain the doc, the most specific wins', () => {
+    const PARENT = '/Users/x/Dropbox';
+    // Both PARENT and R1 contain the doc; R1 (deeper) should be tried first.
+    const c = resolveCmirCandidates(DOC2, 'Impacts/Src.cmir', 'root', [PARENT, R1]);
+    expect(c[0]).toBe('/Users/x/Dropbox/Debate/Impacts/Src.cmir');
+  });
   it('root base keeps each candidate scoped to its own root (no escape)', () => {
     // A malicious root-relative ref with .. is rejected under every root.
     expect(resolveCmirCandidates(DOC2, '../../../etc/passwd.cmir', 'root', [R1, R2])).toEqual([]);

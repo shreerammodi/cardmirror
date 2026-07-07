@@ -51,7 +51,16 @@ export function resolveCmirCandidates(
     if (allowed.some((b) => isWithin(b, abs))) out.push(abs);
   };
   if (base === 'root') {
-    for (const root of cleanRoots) {
+    // Tie-break when the same relative path exists under more than one root:
+    // prefer the root that also contains the transcluding doc (teammates share
+    // that library/Dropbox folder), most-specific first, so a mirrored second
+    // root can't shadow the intended file. Remaining roots keep their list order.
+    const containsDoc = (r: string): boolean => isWithin(r, docPath);
+    const ordered = [
+      ...cleanRoots.filter(containsDoc).sort((a, b) => b.length - a.length),
+      ...cleanRoots.filter((r) => !containsDoc(r)),
+    ];
+    for (const root of ordered) {
       let abs: string;
       try {
         abs = path.resolve(root, sourceRef);
