@@ -5740,7 +5740,16 @@ body.pmd-steady-cursor .pmd-italic-caret,
 /* Shared scaffolding (wrapping row).
    Diverge by pulling a selector out, not by re-copying. */
 .pmd-shrink-protection-row,
-.pmd-settings-folder,
+/* Folder picker (single + each folder-list row): path grows, Browse/Clear
+   (or the remove ×) sit inline; wraps when narrow. Kept a ROW — grouping it
+   with the column `.pmd-pairing-account` below collapsed the path's height
+   (its `flex: 1 1 0` basis-0 applied to the vertical axis). */
+.pmd-settings-folder {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
 /* Blog-account row (hidden unless the entitlement flow is enabled). */
 .pmd-pairing-account {
   display: flex;
