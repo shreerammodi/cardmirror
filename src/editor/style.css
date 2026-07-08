@@ -3202,34 +3202,35 @@ body.pmd-override-shading [data-shading] {
 /* Underline / emphasis (and cite under the citeUnderlined flag) own
    `text-decoration: underline` as the OUTER span in the mark stack
    (their schema order is before highlight / shading). The decoration
-   line is painted by THAT outer element, so its `text-decoration-
-   color` defaults to its own `color` — which in dark mode is the
-   themed light text. Inside a highlight or shading band, the inner
-   span has color #000 (light band) or #fff (dark band), but the
-   outer underline keeps painting with the body color → the
-   underline reads as a light line cutting through black-on-yellow
-   text. These `:has()` rules force the outer span's
-   `text-decoration-color` to match the band's mandated color so
-   the underline aligns with the text it underlines.
+   line is painted by THAT outer element in its own `color`, which in
+   dark mode is the themed light text — and, crucially, spans the WHOLE
+   run. A run that's only PARTLY highlighted is still one outer span,
+   so recolouring it to the band's text color (the old `:has()` rule)
+   dragged the underline dark across the *unhighlighted* stretch too,
+   where it vanished against the dark page.
 
-   The selectors target `[data-*-band]` attributes pre-computed at
-   render time (see `HIGHLIGHT_BAND` and `colorBand()` in
-   `src/schema/marks.ts`) rather than enumerating every named
-   highlight color via its own `:has()` clause. With ~16 OOXML
-   highlight names that would have been 16+ `:has()` evaluations
-   per `.pmd-underline` on every cv:auto card materialization;
-   the band approach collapses it to two checks per band. Style
-   recalc on big docs drops from ~44ms / pass to single digits. */
-:is(.pmd-underline, .pmd-emphasis, #editor.pmd-cite-underlined .pmd-cite):is(
-  :has([data-highlight-band="light"]),
-  :has([data-shading-band="light"])
-) {
+   Fix: leave the outer underline in the body color so the unhighlighted
+   stretch keeps the theme's text color, and give the INNER band span its
+   own underline in the band's mandated color (dark on light bands, light
+   on dark). That inner line paints over the outer one across ONLY the
+   highlighted stretch — so the highlighted part reads dark-on-yellow while
+   the rest stays light. (These three always carry an underline, so the
+   inner line never appears where there was none.)
+
+   Selectors match the `[data-*-band]` attribute pre-computed at render
+   time (`HIGHLIGHT_BAND` / `colorBand()` in `src/schema/marks.ts`) via a
+   plain descendant combinator — cheaper than the previous per-color
+   `:has()` chain, and no per-`.pmd-underline` recalc blowup on cv:auto
+   cards. A run wholly INSIDE a band already inherits the band's `color`,
+   so its underline is band-coloured for free (currentColor). */
+:is(.pmd-underline, .pmd-emphasis, #editor.pmd-cite-underlined .pmd-cite)
+  :is([data-highlight-band="light"], [data-shading-band="light"]) {
+  text-decoration: underline;
   text-decoration-color: var(--pmd-c-band-fg-light);
 }
-:is(.pmd-underline, .pmd-emphasis, #editor.pmd-cite-underlined .pmd-cite):is(
-  :has([data-highlight-band="dark"]),
-  :has([data-shading-band="dark"])
-) {
+:is(.pmd-underline, .pmd-emphasis, #editor.pmd-cite-underlined .pmd-cite)
+  :is([data-highlight-band="dark"], [data-shading-band="dark"]) {
+  text-decoration: underline;
   text-decoration-color: var(--pmd-c-band-fg-dark);
 }
 
