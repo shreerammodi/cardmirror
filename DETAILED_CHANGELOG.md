@@ -97,6 +97,45 @@ in each release, see `CHANGELOG.md`.
   `.docx` save still flattens live zones to plain cards — docx has no
   transclusion concept — so the link survives only in `.cmir`.)
 
+- **Tiered file-search ranking + a tie-break setting** (`file-search.ts`,
+  `settings.ts`, `settings-ui.ts`, `quick-card-search-ui.ts`, tests). Replaced
+  the old rank-by-first-token-`indexOf` with a tiered `matchTier`: exact (0) →
+  prefix (1) → word-start (2) → substring (3) → secondary-field-only (4), lower
+  wins, ties broken by a caller-supplied comparator. `searchFiles` keys tiers off
+  the file NAME and now treats the folder (`dirName(relPath)`) as the secondary
+  field, so a folder term matches (ranked at tier 4 below a name hit) — closing
+  the old "name-only, path unsearchable" gap. `searchFileObjects` (within-file)
+  uses the same ranker with the tag/heading label as primary and the card cite as
+  secondary, tie-broken by a stable no-op so same-tier hits keep document order.
+  New `fileSearchTiebreak: 'recency' | 'alphabetical'` (default recency) drives
+  same-tier file ordering AND the no-query browse list: recency sorts by
+  `mtimeMs` desc, alphabetical by name. It's a `CYCLABLE_SETTINGS` entry (so the
+  command bar gets a Cycle command for free, electron-gated via the meta) with a
+  radio in Settings → Files. Manual pins are still partitioned to the top in the
+  caller — unaffected. `startsAtWordBoundary` powers the word-start tier
+  (boundary = string start or a non-`[a-z0-9]` char before the token).
+
+- **Timer accepts keypad-style digit entry** (`timer-ui.ts`, tests).
+  `parseTimeInput`'s no-colon branch changed from `parseInt(s) * 1000` (raw
+  seconds) to keypad/microwave semantics: the last two digits are seconds, the
+  rest minutes — `800` → 8:00, `1230` → 12:30. One- or two-digit input is pure
+  seconds so it's unchanged (`90` → 1:30, since 90 seconds carry), and a
+  seconds part ≥ 60 carries (`870` → 9:10). `MM:SS` is still parsed literally.
+  Exported for tests.
+
+- **Opening an un-materialized cloud file no longer dies in the parser**
+  (`native/index.ts`, `apps/desktop/src/main.ts`, tests). A Dropbox / iCloud
+  "online only" placeholder reads back as 0 bytes, which surfaced as "Not a
+  CardMirror file: failed to parse JSON (Unexpected end of JSON input)".
+  `parseNative` now special-cases an empty read with an actionable message
+  (the file may be an online-only cloud placeholder — make it available offline
+  and retry). A new main-process `readDocumentBytes` reads tolerant of
+  placeholders: a materialized file returns on the first read; a short/empty
+  read is re-tried on a 400 ms interval for up to 20 s (each re-open re-posts
+  the provider's fetch) to let an in-flight download finish. Wired into the
+  Finder/"Open with", in-app Open dialog, Open Recent, and transclusion
+  source-read paths.
+
 ## 0.1.0-beta.9 — 2026-07-07
 
 - **Custom ribbon buttons** (`index.html`, `index.ts`, `settings.ts`,

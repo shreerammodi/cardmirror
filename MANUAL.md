@@ -747,6 +747,18 @@ so you can take an insert back without closing the palette.
 your pinned and recent files are warmed in the background, and the file
 list refreshes itself as files change on disk.
 
+**How file results are ordered.** Matches rank by how well the query hits the
+**name** — an exact name first, then a name the query *starts*, then a
+word-start match (`war` → **War**ming, not Soft**war**e), then a match
+anywhere in the name. You can now match on the **folder** too: `neg warming`
+finds `Neg/Warming DA`, ranked below a plain name hit. Files that tie on match
+quality — and the whole browse list before you've typed — fall back to your
+**tie-break** setting: **Recency** (most-recently-edited first, the default)
+or **Alphabetical**, under Settings → Files (or cycle it from the command
+bar). Pinned files still sort above everything. Searching *inside* a file
+ranks the same way, on each object's tag/heading text (or its cite),
+breaking ties by document order.
+
 **Quick Card tags.** With a quick-card result selected, **Tab** opens the
 tag filter (the same active-tag filter the ribbon's Tag Picker controls),
 so you can narrow cards by topic.
@@ -961,9 +973,11 @@ preset** buttons, and the **Aff** and **Neg** prep clocks.
   the time shown is prep, and whose.
 
 - **Edit a clock.** While a clock is **paused**, click the big display to type a
-  new time — handy if you started or stopped a beat late. For a prep clock the
-  edit is saved to that side's prep balance, so it sticks when you switch clocks
-  and back (until you Reset).
+  new time — either **`MM:SS`**, or bare digits keypad-style, where the last two
+  digits are seconds (`800` → 8:00, `130` → 1:30; one or two digits are just
+  seconds, so `90` → 1:30). Handy if you started or stopped a beat late. For a
+  prep clock the edit is saved to that side's prep balance, so it sticks when
+  you switch clocks and back (until you Reset).
 
 - **Switching profiles.** The **Cycle Timer Preset** command (unbound by default
   — assign a key under Settings → Keybindings) cycles the profile College → High
@@ -1650,6 +1664,9 @@ file search scans.
   dive into a file.
 - **File search: default outline depth** *(desktop)* — how far a file's
   outline is expanded the moment you dive in.
+- **File search: tie-break order** *(desktop)* — how equally-relevant file
+  results (and the browse list before you type) are ordered: **Recency**
+  (most-recently-edited first, the default) or **Alphabetical**.
 - **File search: auto-pin recent & frequent files** *(desktop)* — keeps
   recent and frequent files warm for instant dives; turn off to warm only
   files you pin by hand.

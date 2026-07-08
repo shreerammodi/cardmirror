@@ -38,6 +38,33 @@ see `DETAILED_CHANGELOG.md`.
   of the sharing features, that you keep all rights to your content, and the
   beta "keep your own backups" disclaimer.
 
+### Changed
+
+- **Smarter file search, with a sort you choose.** File-search results now
+  rank by how well the query hits the file **name** — exact, then a name that
+  *starts* with it, then a word-start match (`war` → **War**ming, not
+  Soft**war**e), then a match anywhere — and you can now match on the
+  **folder** too, so `neg warming` finds `Neg/Warming DA`. Files that tie on
+  match quality (and the browse list before you type) fall back to a new
+  **tie-break** setting under Settings → Files: **Recency** (most-recently-
+  edited first, the default) or **Alphabetical** — also cyclable from the
+  command bar. Pinned files still sort above everything. Searching *inside* a
+  file ranks the same way and breaks ties by document order.
+
+- **Type timer values keypad-style.** Typing a number into the timer without a
+  colon now reads the last two digits as seconds — `800` is 8:00, `130` is
+  1:30 — instead of that many seconds. One- or two-digit entries are unchanged
+  (`90` is still 1:30), and `MM:SS` still works exactly as before.
+
+### Fixed
+
+- **Opening an un-downloaded cloud file no longer errors out.** A `.cmir` or
+  `.docx` in Dropbox or iCloud Drive that's set to "online only" and hasn't
+  downloaded yet used to fail to open with a confusing "Not a CardMirror file"
+  message. CardMirror now waits for the download to finish and then opens it;
+  if it still can't, it tells you the file may not be downloaded (and to make
+  it available offline) instead of the cryptic error.
+
 ## 0.1.0-beta.9 — 2026-07-07
 
 ### Added
