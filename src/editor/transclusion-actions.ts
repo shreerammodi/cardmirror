@@ -48,6 +48,8 @@ export function crumbLabel(sourceName: string, headingLabel: string): string {
 export type BuildZoneReason =
   | 'no-heading-id'
   | 'no-section'
+  /** The source heading exists but has no content — nothing to transclude. */
+  | 'empty-section'
   | 'no-doc-path'
   | 'no-portable-ref';
 
@@ -79,6 +81,8 @@ export function buildLiveZoneAttrs(
   if (!headingId) return { ok: false, reason: 'no-heading-id' };
   const section = extractSection(sourceDoc, headingId);
   if (!section) return { ok: false, reason: 'no-section' };
+  // An empty source heading would create an invisible, phantom zone — refuse.
+  if (section.content.size === 0) return { ok: false, reason: 'empty-section' };
   if (!docPath) return { ok: false, reason: 'no-doc-path' };
   const chosen = chooseSourceRef(docPath, sourceAbsPath, roots);
   if (!chosen) return { ok: false, reason: 'no-portable-ref' };
@@ -104,6 +108,8 @@ export function buildZoneErrorMessage(reason: BuildZoneReason | undefined): stri
       return 'That heading has no stable id — open and save the source in CardMirror, then retry.';
     case 'no-section':
       return 'Could not read that section from the source.';
+    case 'empty-section':
+      return 'That heading has no content to transclude.';
     case 'no-doc-path':
       return 'Save this document first, then insert a live zone.';
     case 'no-portable-ref':
@@ -170,6 +176,11 @@ export async function refreshZoneAtPos(
     String(node.attrs['source_abs'] ?? ''),
   );
   if (!outcome.ok || !outcome.result) return outcome;
+  // The heading is still there but has been emptied since the last sync — refuse
+  // rather than blank the zone (which would leave an invisible husk). Keep cache.
+  if (outcome.result.content.size === 0) {
+    return { ok: false, reason: 'source-empty', sourceName: outcome.sourceName };
+  }
 
   // Re-locate the target AFTER the await. findZonePos returns null when the pos
   // went stale AND duplicate-identity zones make the target ambiguous — refuse
@@ -279,6 +290,19 @@ export function detachZoneAtPos(view: EditorView, pos: number): boolean {
   if (!node || !isTransclusionNode(node)) return false;
   const slice = detachSlice(node);
   const tr = view.state.tr.replaceRange(pos, pos + node.nodeSize, slice);
+  view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
+/**
+ * Delete the zone at `pos` outright — the wrapper AND its contents — unlike
+ * detach, which keeps the content as loose cards. Undo-able. Returns false if
+ * there's no zone there.
+ */
+export function deleteZoneAtPos(view: EditorView, pos: number): boolean {
+  const node = view.state.doc.nodeAt(pos);
+  if (!node || !isTransclusionNode(node)) return false;
+  const tr = view.state.tr.delete(pos, pos + node.nodeSize);
   view.dispatch(tr.scrollIntoView());
   return true;
 }

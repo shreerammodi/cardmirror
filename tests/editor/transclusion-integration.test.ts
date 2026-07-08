@@ -19,10 +19,14 @@ import {
 } from '../../src/editor/transclusion.js';
 import {
   detachZoneAtPos,
+  deleteZoneAtPos,
   insertZoneAtSelection,
 } from '../../src/editor/transclusion-actions.js';
 import { collectHeadings, computeHeadingRange, zoneRangeForEntry } from '../../src/editor/headings.js';
-import { transclusionSelectionGuard } from '../../src/editor/transclusion-selection-guard.js';
+import {
+  transclusionSelectionGuard,
+  transclusionEmptyZoneReaper,
+} from '../../src/editor/transclusion-selection-guard.js';
 
 function card(tag: string, body: string): PMNode {
   return schema.nodes['card']!.createChecked(null, [
@@ -171,12 +175,23 @@ describe('live zone in a real EditorView (editable)', () => {
     expect(view.dom.querySelector('.pmd-transclusion-menu')).toBeNull();
     glyphBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     const items = view.dom.querySelectorAll('.pmd-transclusion-menu .pmd-transclusion-menu-item');
-    // Open source file · Refresh from source · Re-pick source · Unlink (detach)
-    expect(items.length).toBe(4);
+    // Open source file · Refresh from source · Re-pick source · Unlink · Delete
+    expect(items.length).toBe(5);
     const unlink = Array.from(items).find((el) => el.textContent?.includes('Unlink')) as HTMLElement;
     unlink.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(countTypes(view).zones).toBe(0);
     expect(countTypes(view).cards).toBe(1);
+    view.destroy();
+  });
+
+  it('the menu Delete removes the zone AND its content (unlike Unlink)', () => {
+    const view = makeView([freshZone([card('T', 'ev')])]);
+    const glyphBtn = view.dom.querySelector('.pmd-transclusion-glyph-btn') as HTMLElement;
+    glyphBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const items = view.dom.querySelectorAll('.pmd-transclusion-menu .pmd-transclusion-menu-item');
+    const del = Array.from(items).find((el) => el.textContent?.includes('Delete')) as HTMLElement;
+    del.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(countTypes(view)).toEqual({ zones: 0, cards: 0 }); // content gone too
     view.destroy();
   });
 });
@@ -268,6 +283,68 @@ describe('enclosingZonePos (drag/move boundary primitive)', () => {
     // A heading outside any zone has no zone range.
     const outside = entries.find((e) => e.text === 'Outside Block')!;
     expect(zoneRangeForEntry(doc, outside)).toBeNull();
+    view.destroy();
+  });
+});
+
+/** Position of the (single) zone node in the doc. */
+function zonePosOf(view: EditorView): number {
+  let pos = -1;
+  view.state.doc.forEach((n, offset) => {
+    if (pos < 0 && isTransclusionNode(n)) pos = offset;
+  });
+  return pos;
+}
+/** A view with the empty-zone reaper plugin installed. */
+function makeReaperView(children: PMNode[]): EditorView {
+  const doc = schema.nodes['doc']!.create(null, children);
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  return new EditorView(container, {
+    state: EditorState.create({ doc, plugins: [transclusionEmptyZoneReaper] }),
+    nodeViews: editorNodeViews,
+  });
+}
+
+describe('empty-zone reaper', () => {
+  it('removes a zone the moment its last content is deleted', () => {
+    const view = makeReaperView([card('Outside', 'out-ev'), freshZone([card('In', 'inside-ev')])]);
+    const zpos = zonePosOf(view);
+    const znode = view.state.doc.nodeAt(zpos)!;
+    // Delete everything inside the zone (its one card) → an empty zone the reaper
+    // then removes on the same transaction group.
+    view.dispatch(view.state.tr.delete(zpos + 1, zpos + znode.nodeSize - 1));
+    expect(countTypes(view).zones).toBe(0);
+    expect(view.state.doc.textContent).toContain('out-ev'); // sibling untouched
+    view.destroy();
+  });
+
+  it('keeps a zone that still has content after a partial delete', () => {
+    const view = makeReaperView([freshZone([card('A', 'a-ev'), card('B', 'b-ev')])]);
+    const zpos = zonePosOf(view);
+    const aSize = view.state.doc.nodeAt(zpos)!.child(0).nodeSize;
+    view.dispatch(view.state.tr.delete(zpos + 1, zpos + 1 + aSize)); // drop only card A
+    expect(countTypes(view).zones).toBe(1);
+    expect(view.state.doc.textContent).toContain('b-ev');
+    expect(view.state.doc.textContent).not.toContain('a-ev');
+    view.destroy();
+  });
+});
+
+describe('deleteZoneAtPos', () => {
+  it('removes the zone AND its contents (unlike detach)', () => {
+    const view = makeView([card('Keep', 'keep-ev'), freshZone([card('Z', 'z-ev')])]);
+    const zpos = zonePosOf(view);
+    expect(deleteZoneAtPos(view, zpos)).toBe(true);
+    expect(countTypes(view).zones).toBe(0);
+    expect(view.state.doc.textContent).toContain('keep-ev');
+    expect(view.state.doc.textContent).not.toContain('z-ev');
+    view.destroy();
+  });
+
+  it('returns false when there is no zone at the position', () => {
+    const view = makeView([card('Only', 'only-ev')]);
+    expect(deleteZoneAtPos(view, 0)).toBe(false);
     view.destroy();
   });
 });

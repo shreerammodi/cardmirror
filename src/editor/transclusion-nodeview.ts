@@ -20,6 +20,7 @@ import { isZoneEdited } from './transclusion.js';
 import {
   refreshZoneAtPos,
   detachZoneAtPos,
+  deleteZoneAtPos,
   rePickZoneAtPos,
   openZoneSourceAtPos,
 } from './transclusion-actions.js';
@@ -208,6 +209,12 @@ class TransclusionView implements NodeView {
         this.onDetach();
       }),
     );
+    menu.appendChild(
+      this.menuItem('trash', 'Delete', () => {
+        this.closeMenu();
+        this.onDelete();
+      }),
+    );
 
     this.dom.appendChild(menu);
     this.menuEl = menu;
@@ -283,6 +290,11 @@ class TransclusionView implements NodeView {
         // refresh was in flight; the zone itself is fine, so don't flag it
         // unreachable (that would stick). No error chrome.
         this.transient = null;
+      } else if (outcome.reason === 'source-empty') {
+        // The source was reachable but that heading is now empty — we kept the
+        // cache. The zone is healthy, so no "unreachable" chrome; just tell why.
+        this.transient = null;
+        showToast(refreshFailMessage('source-empty'));
       } else {
         this.transient = outcome.reason === 'not-desktop' ? 'web' : 'unreachable';
         showToast(refreshFailMessage(outcome.reason));
@@ -295,6 +307,12 @@ class TransclusionView implements NodeView {
     const pos = this.getPos();
     if (pos == null) return;
     detachZoneAtPos(this.view, pos);
+  }
+
+  private onDelete(): void {
+    const pos = this.getPos();
+    if (pos == null) return;
+    deleteZoneAtPos(this.view, pos);
   }
 
   private async onRePick(): Promise<void> {

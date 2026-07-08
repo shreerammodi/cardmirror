@@ -79,6 +79,27 @@ export function flattenNestedZones(doc: PMNode): PMNode {
   return doc.type.create(doc.attrs, Fragment.fromArray(out), doc.marks);
 }
 
+/**
+ * Drop any live zone that carries NO content. An empty `transclusion_ref`
+ * renders invisibly (no cards, and the rail only shows on hover) yet is still a
+ * real node — counted by "refresh all" and re-filled by a refresh, so it reads
+ * as a phantom zone that materialises out of nowhere. These arise when a zone's
+ * cards are all deleted in place; heal them on load. (Zones live at the doc
+ * root; any nested one is unwrapped by flattenNestedZones first.)
+ */
+export function dropEmptyZones(doc: PMNode): PMNode {
+  let changed = false;
+  const out: PMNode[] = [];
+  doc.forEach((child) => {
+    if (child.type.name === 'transclusion_ref' && child.content.size === 0) {
+      changed = true; // drop the empty zone entirely
+      return;
+    }
+    out.push(child);
+  });
+  return changed ? doc.type.create(doc.attrs, Fragment.fromArray(out), doc.marks) : doc;
+}
+
 /** Recursively replace every `transclusion_ref` in a fragment with its content
  *  (any depth). Returns the same fragment when there was nothing to unwrap. */
 function unwrapZonesIn(frag: Fragment): Fragment {

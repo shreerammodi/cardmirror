@@ -215,6 +215,24 @@ describe('replaceZoneAtPos — re-pick identity safety', () => {
   });
 });
 
+describe('refresh refuses to blank a zone from an emptied source', () => {
+  it('keeps the cache and reports source-empty when the heading is now empty', async () => {
+    resolveMock.mockResolvedValue({
+      ok: true,
+      result: { content: Fragment.empty, headingLabel: 'H', headingType: 'block' },
+      sourceName: 'S.cmir',
+    });
+    const view = makeView([zoneNode([card('A', 'cached-ev')], { ...REF, source_heading_id: 'H1' }, false)]);
+    const outcome = await refreshZoneAtPos(view, 0);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.reason).toBe('source-empty');
+    // The zone is untouched — its cached card still renders (no invisible husk).
+    expect(view.state.doc.textContent).toContain('cached-ev');
+    expect(view.state.doc.nodeAt(0)?.type.name).toBe('transclusion_ref');
+    view.destroy();
+  });
+});
+
 describe('refreshAllZones (whole-document refresh)', () => {
   const freshOutcome = () => ({
     ok: true as const,

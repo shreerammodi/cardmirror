@@ -65,6 +65,14 @@ describe('buildLiveZoneAttrs — rejections', () => {
   it('no doc path (unsaved doc)', () => {
     expect(buildLiveZoneAttrs(schema, src, 'wid', 'S.cmir', null, SRCPATH, [ROOT]).reason).toBe('no-doc-path');
   });
+  it('empty section (heading has no content under it) → refuses', () => {
+    // 'wid' is immediately followed by another block heading, so nothing sits
+    // under it — transcluding it would make an invisible phantom zone.
+    const emptySrc = doc([heading('block', 'Warming', 'wid'), heading('block', 'Next', 'nid'), card('T', 'e')]);
+    expect(buildLiveZoneAttrs(schema, emptySrc, 'wid', 'S.cmir', DOCPATH, SRCPATH, [ROOT]).reason).toBe(
+      'empty-section',
+    );
+  });
   it('no portable ref (different drives, no root)', () => {
     const r = buildLiveZoneAttrs(schema, src, 'wid', 'S.cmir', 'C:\\a\\Doc.cmir', 'D:\\b\\S.cmir', []);
     expect(r.reason).toBe('no-portable-ref');

@@ -16,7 +16,7 @@ import {
   flattenZonesInSlice,
   isTransclusionNode,
 } from '../../src/editor/transclusion.js';
-import { flattenNestedZones } from '../../src/schema/migrate.js';
+import { flattenNestedZones, dropEmptyZones } from '../../src/schema/migrate.js';
 
 function card(tag: string, body: string): PMNode {
   return schema.nodes['card']!.createChecked(null, [
@@ -103,6 +103,30 @@ describe('clipboard live-zone handling', () => {
     const flat = flattenZones(Fragment.fromArray([card('C', 'c'), inner]));
     expect(count(flat)).toEqual({ zones: 0, cards: 2 });
     expect(flat.textBetween(0, flat.size, ' ')).toContain('inner-ev');
+  });
+
+  it('dropEmptyZones (load migration) removes a zero-content zone, keeps the rest', () => {
+    const empty = createTransclusionNode(
+      schema,
+      { source_ref: 'S.cmir', source_ref_base: 'doc', source_heading_id: 'H', source_content_hash: 'x' },
+      Fragment.empty,
+    );
+    const full = zone([card('A', 'a-ev')]);
+    const doc = schema.nodes['doc']!.create(null, [full, empty, card('Sib', 's-ev')]);
+    const healed = dropEmptyZones(doc);
+    let zones = 0;
+    healed.descendants((n) => {
+      if (isTransclusionNode(n)) zones++;
+      return true;
+    });
+    expect(zones).toBe(1); // the empty one is gone, the populated one stays
+    expect(healed.textContent).toContain('a-ev');
+    expect(healed.textContent).toContain('s-ev');
+  });
+
+  it('dropEmptyZones is a no-op when every zone has content (returns same node)', () => {
+    const doc = schema.nodes['doc']!.create(null, [zone([card('A', 'a-ev')]), card('B', 'b-ev')]);
+    expect(dropEmptyZones(doc)).toBe(doc);
   });
 
   it('flattenNestedZones (load migration) unwraps a zone-in-zone, keeping the outer', () => {

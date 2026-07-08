@@ -15,7 +15,7 @@
  * sit at the zone's outer boundary, i.e. the same "outside" zone on both sides).
  */
 import { Plugin, TextSelection } from 'prosemirror-state';
-import { enclosingZonePos } from './transclusion.js';
+import { enclosingZonePos, isTransclusionNode } from './transclusion.js';
 
 export const transclusionSelectionGuard = new Plugin({
   appendTransaction(_trs, _oldState, newState) {
@@ -46,5 +46,33 @@ export const transclusionSelectionGuard = new Plugin({
     return newState.tr.setSelection(
       TextSelection.between(doc.resolve(sel.anchor), doc.resolve(clampedHead), forward ? -1 : 1),
     );
+  },
+});
+
+/**
+ * Remove a live zone the moment an edit leaves it with NO content. A zone edited
+ * down to empty (e.g. selecting all its cards and deleting) would otherwise
+ * linger as an invisible phantom — see `dropEmptyZones` for the load-time twin.
+ * Deleting whole cards is a normal in-zone edit the isolating boundary allows;
+ * this just tidies up the husk left behind. The removal rides on the same
+ * transaction group as the edit, so a single undo restores the whole zone.
+ */
+export const transclusionEmptyZoneReaper = new Plugin({
+  appendTransaction(trs, _oldState, newState) {
+    if (!trs.some((tr) => tr.docChanged)) return null;
+    const empties: number[] = [];
+    newState.doc.forEach((child, offset) => {
+      if (isTransclusionNode(child) && child.content.size === 0) empties.push(offset);
+    });
+    if (empties.length === 0) return null;
+    const tr = newState.tr;
+    // Delete high→low so each earlier offset stays valid as we go.
+    for (const pos of empties.sort((a, b) => b - a)) {
+      const node = tr.doc.nodeAt(pos);
+      if (node && isTransclusionNode(node) && node.content.size === 0) {
+        tr.delete(pos, pos + node.nodeSize);
+      }
+    }
+    return tr.docChanged ? tr : null;
   },
 });
