@@ -9,6 +9,23 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Live zones (transclusion).** Embed a section from another file — a
+  heading and its cards — into your document as a live-linked, editable copy.
+  Find a heading in the Search Everything palette and press Mod-Enter to drop
+  it in; it shows a teal rail, and the navigation pane marks the transcluded
+  headings with a faint green rail. Edit the cards in place, then **Refresh
+  Live Zone** — or **Refresh All Live Zones** — to pull the source's current
+  version back in (it confirms before discarding your edits). The zone's glyph
+  menu can open the source, re-pick it, unlink it (keeping the content as
+  ordinary cards), or delete it. Sources can be `.cmir` or Word `.docx` files
+  — for a Word file, CardMirror adds a tiny bookmark so it can find the
+  section again, and declines rather than make a zone it could never refresh.
+  Live links live only in `.cmir` files: **saving your document to Word
+  (`.docx`) flattens each zone to plain cards and drops its link** (the
+  content stays, but it's no longer live). *(Creating and refreshing are
+  desktop-only; zones you've made render everywhere, including the web version
+  and shared or co-edited copies.)*
+
 - **Privacy policy.** CardMirror now has a privacy policy (`PRIVACY.md`),
   linked from Settings → General and the Help menu. It describes, in plain
   language, what each feature does with your data — no accounts, no tracking,

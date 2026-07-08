@@ -5,6 +5,98 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
+## Unreleased
+
+- **Live zones (transclusion)** (`schema/nodes.ts`, `transclusion.ts` NEW,
+  `transclusion-actions.ts` NEW, `transclusion-nodeview.ts` NEW,
+  `transclusion-resolve.ts` NEW, `transclusion-selection-guard.ts` NEW,
+  `transclusion-doc-path.ts` NEW, `schema/migrate.ts`, `paste-plugin.ts`,
+  `nav-panel.ts`, `drag-controller.ts`, `headings.ts`, `ribbon-commands.ts`,
+  `ribbon-groups.ts`, `ribbon-availability.ts`, `quick-card-search-ui.ts`,
+  `speech-doc-send.ts`, `confirm-dialog.ts` NEW, `index.ts`, `style.css`, and
+  many tests). A `transclusion_ref` block node holds a live-linked, EDITABLE
+  snapshot of a section (a heading + its cards) pulled from another file. It's
+  `isolating` + `defining` with real block children, so the cached cards are
+  edited in place — no unlink-first — while editing ops (backspace, lift,
+  fitting) can't cross the boundary. `source_ref` (portable, root- or
+  doc-relative) + `source_heading_id` identify the source; `source_content_hash`
+  vs the live children drives the "edited" dot. `extractSection` snapshots the
+  heading's content (header line excluded for grouping headings; the whole card
+  for a tag/analytic); `buildLiveZoneAttrs` is the single create choke point,
+  reached from normal file search via Mod-Enter ("⌘↵ transclude"). Rendering is
+  a NodeView: a hover/selection-revealed teal rail (a `::before` overlay in the
+  card's existing 2px gutter, so a transcluded card sits exactly where a normal
+  one would), a rail-head glyph opening a menu (Open source / Refresh from
+  source / Re-pick source… / Unlink / Delete), and an "edited" state. The nav
+  pane mirrors the rail as a faint `--pmd-c-transclusion` `::before` down the
+  transcluded run (start/end caps; offset off the selection accent). Refresh
+  (`refreshZoneAtPos`) re-reads the source, re-locates the target by identity
+  after the async gap (refusing on duplicate-identity ambiguity), and replaces
+  the node with fresh, id-rewritten children; it confirms before discarding
+  local edits via the new in-editor `confirm-dialog.ts` (replacing
+  `window.confirm`). A live zone drags as one doc-level unit; dropping a zone
+  inside another is banned; boundary gestures create headings OUTSIDE the zone
+  at its edges; and a new heading inside a zone can't outrank the zone's own top
+  heading. Nested zones are flattened on load, create, refresh, and paste
+  (`flattenZones`), so a zone's content is always structurally zone-free and
+  can't cycle.
+
+- **Live zones from Word (`.docx`) sources via heading-anchor injection**
+  (`anchor-docx.ts` NEW, `ooxml/parse.ts`, `import/importer.ts`,
+  `import/index.ts`, `quick-card-search-ui.ts`,
+  `apps/desktop/src/{main,preload}.ts`). A `.docx` heading carries no stable id,
+  so before creating a zone from one CardMirror injects a single `pmd-heading-<uuid>`
+  Word bookmark at just that heading (nothing else in the file changes) and
+  imports the id back, so the zone can re-locate the section on refresh. A
+  containment-checked write IPC (same boundary as the source read) performs the
+  surgical byte edit on main; if the anchor can't be written the create declines
+  ("Live zone not created — the Word file was left unchanged") rather than mint a
+  zone that could never refresh. Only CardMirror-anchored (or CardMirror-exported)
+  `.docx` files are refreshable.
+
+- **Empty live zones can't linger as invisible phantoms** (`schema/migrate.ts`,
+  `transclusion-selection-guard.ts`, `transclusion-actions.ts`,
+  `transclusion-resolve.ts`, `transclusion-nodeview.ts`, `native/index.ts`). A
+  zone with no content renders invisibly yet is a real node — counted by refresh
+  and re-filled from source. Four defenses: `dropEmptyZones` heals zero-content
+  zones on load (beside `flattenNestedZones`); `transclusionEmptyZoneReaper`
+  (appendTransaction) removes a zone the moment an edit empties it, riding the
+  same history step so one undo restores it; create refuses an empty source
+  heading (`empty-section`) and refresh refuses to blank a zone whose source was
+  emptied since the last sync (`source-empty`), keeping the cache; and the glyph
+  menu's Delete (`deleteZoneAtPos`) removes a zone and its contents outright.
+  Verified to converge without divergence or phantoms under Loro co-editing —
+  including a zone emptied only by the MERGE of two peers' deletions — since
+  loro-prosemirror routes remote updates through the normal dispatch pipeline, so
+  the reaper fires on merges too.
+
+- **Live-zone commands + clipboard/read-mode/send fixes** (`ribbon-commands.ts`,
+  `ribbon-availability.ts`, `ribbon-groups.ts`, `paste-plugin.ts`, `style.css`,
+  `speech-doc-send.ts`, `transclusion.ts`). *Refresh Live Zone* now acts on the
+  zone the cursor is IN (not only a node-selected one), mirroring the glyph menu;
+  *Refresh All Live Zones* re-pulls every zone bottom-to-top behind one
+  confirmation (per-zone edit prompts suppressed), summarizing successes /
+  unreachable sources. Copy/paste of part of a zone pastes a PLAIN cached copy
+  (no live link travels, and open-depths are corrected so headers keep their
+  formatting); keyboard send-to-dropzone works for a selection inside a zone
+  (snapped to whole transcluded cards); and read / invisibility mode shows tags,
+  cites, and highlighting inside zones (the read-mode allow-list now re-shows the
+  zone + body, hiding only its own chrome).
+
+- **Live zones: colorblind-safe state + rebindable rail hue**
+  (`transclusion-nodeview.ts`, `settings.ts`, `scripts/gen-icons.mjs`,
+  `icons.css`, `icons.ts`, tests). The rail-head glyph now encodes
+  synced-vs-edited as SHAPE, not tint alone — an intact chain (`link`) when
+  synced, a broken chain (`link-broken`, NEW icon) when the zone differs from
+  its source — with the state also on the button's `aria-label`/`title`, so it
+  reads without color. `refreshEditedState` swaps the glyph's icon class (works
+  in both modern-SVG and classic-glyph skins). The `--pmd-c-transclusion` rail
+  hue joins `CUSTOMIZABLE_COLOR_TOKENS` (Annotations group, `customColorOverrides`-
+  backed), so colorblind users can rebind it from Settings → Accessibility; one
+  override cascades to the editor rail, the nav-pane rail, and the glyph. (A
+  `.docx` save still flattens live zones to plain cards — docx has no
+  transclusion concept — so the link survives only in `.cmir`.)
+
 ## 0.1.0-beta.9 — 2026-07-07
 
 - **Custom ribbon buttons** (`index.html`, `index.ts`, `settings.ts`,
