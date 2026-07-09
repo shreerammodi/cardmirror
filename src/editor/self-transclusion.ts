@@ -15,7 +15,7 @@
  */
 
 import { Fragment, Slice, type Node as PMNode, type Schema } from 'prosemirror-model';
-import { extractSection, rewriteHeadingIdsInFragment } from './transclusion.js';
+import { extractSection, rewriteHeadingIdsInFragment, isTransclusionNode } from './transclusion.js';
 
 export const SELF_REF_NODE = 'self_ref';
 
@@ -207,6 +207,14 @@ function inlineNestedRefs(
       // A missing nested source contributes nothing (its own window elsewhere
       // shows "source not found"); a resolved one inlines its content.
       child.content.forEach((n) => out.push(n));
+      return;
+    }
+    if (isTransclusionNode(node)) {
+      // A linked copy inside the mirrored section is shown FLAT — its cached cards
+      // inline, its rail dropped. A live view never stacks a second transclusion
+      // rail inside itself; re-processing the copy's content also inlines any
+      // self_refs it holds.
+      inlineNestedRefs(doc, node.content, onStack, memo, state).forEach((n) => out.push(n));
       return;
     }
     if (node.content.size) {

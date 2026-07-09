@@ -53,7 +53,7 @@ import { schema } from '../schema/index.js';
 import { freshHeadingIds } from './drag-controller.js';
 import { condenseBranchC, condenseMerge } from './condense.js';
 import { buildImageNodeFromBlob, insertImageNode } from './image-insert.js';
-import { fragmentHasZone, flattenZonesInSlice } from './transclusion.js';
+import { fragmentHasZone, flattenZonesInSlice, enclosingZonePos } from './transclusion.js';
 import { recallLinkedCopy } from './clipboard-link-cache.js';
 
 
@@ -362,8 +362,17 @@ export function buildPastePlugin(ctx: PastePluginCtx): Plugin<PluginState> {
         // with the source — freshHeadingIds leaves the source-ref attrs alone, so
         // the link survives). A cross-doc / external paste falls through and gets
         // the flattened clipboard content.
-        const linked = recallLinkedCopy(view, slice);
-        if (linked) return freshHeadingIds(unwrapSingleCellTables(linked));
+        //
+        // EXCEPT when the paste lands INSIDE a live zone: a nested transclusion
+        // would stack two rails updating from different sources. There we skip the
+        // link restore and fall through to flatten (matching drag/create, which
+        // never nest a unit in a zone). `selection.from` is the pre-paste caret —
+        // where PM will drop the slice.
+        const intoZone = enclosingZonePos(view.state.doc, view.state.selection.from) !== null;
+        if (!intoZone) {
+          const linked = recallLinkedCopy(view, slice);
+          if (linked) return freshHeadingIds(unwrapSingleCellTables(linked));
+        }
         const out = freshHeadingIds(unwrapSingleCellTables(slice));
         if (!fragmentHasZone(out.content)) return out;
         // Any zone content on the clipboard pastes as a PLAIN cached copy (its

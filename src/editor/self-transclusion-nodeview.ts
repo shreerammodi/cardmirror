@@ -253,8 +253,10 @@ class SelfRefView implements NodeView {
     return true;
   }
 
-  /** Keep glyph/menu clicks away from PM; let selection inside the read-only
-   *  projection through so text is still selectable/copyable. */
+  /** Keep glyph/menu clicks away from PM. A click on the read-only projection
+   *  falls through to PM, which selects the whole atom (the body is
+   *  `user-select: none`, so a click can't start a native text selection inside
+   *  it — that kept some instances, e.g. adjacent views, from node-selecting). */
   stopEvent(e: Event): boolean {
     const t = e.target as HTMLElement | null;
     return !!t?.closest?.('.pmd-self-ref-glyph, .pmd-transclusion-menu');

@@ -2517,6 +2517,15 @@ code {
 .pmd-self-ref {
   position: relative;
   margin: 0.15em 0;
+  /* A live view is a read-only atom: a click selects the WHOLE node. Suppressing
+     native text selection over the projection (and the glyph menu) is what makes
+     that reliable — otherwise a click can start a native word-selection inside the
+     read-only cards instead (seen only on some instances, e.g. two adjacent views,
+     where posAtCoords resolves into the text). It also stops the atom's node-
+     selection (a native DOM range spanning this element) from highlighting the
+     menu options when the menu is opened on an already-selected view. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 .pmd-self-ref::before {
   content: '';
@@ -2586,6 +2595,11 @@ code {
   top: 1.1em;
   left: 0;
   z-index: 20;
+  /* Never part of a text selection — a node-selected transclusion sets a native
+     DOM range across its element, which would otherwise paint ::selection over
+     these menu rows. */
+  user-select: none;
+  -webkit-user-select: none;
   background: var(--pmd-c-bg);
   border: 1px solid var(--pmd-c-border-soft);
   border-radius: 6px;

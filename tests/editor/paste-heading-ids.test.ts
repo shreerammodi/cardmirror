@@ -1,9 +1,20 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { DOMSerializer, DOMParser as PMDOMParser, type Node as PMNode } from 'prosemirror-model';
+import { EditorState } from 'prosemirror-state';
+import { EditorView } from 'prosemirror-view';
 import { schema, newHeadingId } from '../../src/schema/index.js';
 import { buildPastePlugin } from '../../src/editor/paste-plugin.js';
 import { freshHeadingIds, rewriteHeadingIds } from '../../src/editor/drag-controller.js';
+
+/** A throwaway editor view — `transformPasted` reads `view.state` (selection) to
+ *  decide whether a paste lands inside a live zone. */
+function makeView(): EditorView {
+  const el = document.createElement('div');
+  document.body.appendChild(el);
+  const doc = schema.nodes['doc']!.createChecked(null, [schema.nodes['block']!.create({ id: newHeadingId() }, schema.text('Home'))]);
+  return new EditorView(el, { state: EditorState.create({ doc }) });
+}
 
 function pocket(t: string) {
   return schema.nodes['pocket']!.create({ id: newHeadingId() }, schema.text(t));
@@ -62,7 +73,7 @@ describe('paste heading ids', () => {
     const slice = plugin.props.transformPasted!.call(
       plugin,
       copyPasteParse(pocket('P'), block('B'), cardWith('C')),
-      null as never,
+      makeView(),
       false,
     );
 

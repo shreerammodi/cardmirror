@@ -25,8 +25,15 @@ import { preciseScrollIntoView } from './precise-scroll.js';
 import { READ_MODE_DRAG_META } from './reading-marker.js';
 import { autoScrollUnderPointer } from './drag-autoscroll.js';
 import { getViewDocPath } from './transclusion-doc-path.js';
-import { flattenZones, fragmentHasZone, enclosingZonePos, isTransclusionNode } from './transclusion.js';
-import { flattenSelfRefsInSlice } from './self-transclusion.js';
+import {
+  flattenZones,
+  fragmentHasZone,
+  enclosingZonePos,
+  isTransclusionNode,
+  isZoneEdited,
+  contentHash,
+} from './transclusion.js';
+import { flattenSelfRefsInSlice, isSelfRef } from './self-transclusion.js';
 import { showToast } from './toast.js';
 
 export interface DragItem {
@@ -273,10 +280,15 @@ class DragControllerImpl {
         return false;
       }
       // Backstop (the drop indicators already avoid offering inner-zone slots):
-      // a live zone can't be dropped inside another live zone — no nesting.
-      const draggingZone = items.some((it) => isTransclusionNode(doc.nodeAt(it.from)));
-      if (draggingZone && tgtZone !== null) {
-        showToast('A live zone can’t go inside another live zone.');
+      // no transclusion UNIT — a linked copy (live zone) OR a live view — can be
+      // dropped inside a live zone, or two rails would stack (a nested
+      // transclusion updating from a different source).
+      const draggingUnit = items.some((it) => {
+        const n = doc.nodeAt(it.from);
+        return isTransclusionNode(n) || isSelfRef(n);
+      });
+      if (draggingUnit && tgtZone !== null) {
+        showToast('A live view or linked copy can’t go inside a live zone.');
         this.cancel();
         return false;
       }
@@ -535,7 +547,16 @@ function mapNodeIds(node: PMNode, assign: (node: PMNode) => boolean): PMNode {
   // `type.create` — and they never carry an id attr anyway, so leave
   // them alone. Inline leaves (image) likewise have no id.
   if (node.isText) return node;
+  // A live zone's edit-baseline (`source_content_hash`) is id-DEPENDENT, but the
+  // id rewrite below changes the ids inside it — so without re-baselining, a
+  // copied/pasted UNEDITED zone would read as edited (broken-link glyph). Capture
+  // its edited state BEFORE the rewrite; re-stamp only if it was unedited (an
+  // already-edited zone keeps its old baseline and stays edited).
+  const restampZone = isTransclusionNode(node) && !isZoneEdited(node);
   const newContent = node.isLeaf ? node.content : mapFragmentIds(node.content, assign);
-  const nextAttrs = assign(node) ? { ...node.attrs, id: newHeadingId() } : node.attrs;
+  let nextAttrs = assign(node) ? { ...node.attrs, id: newHeadingId() } : node.attrs;
+  if (restampZone) {
+    nextAttrs = { ...nextAttrs, source_content_hash: contentHash(newContent) };
+  }
   return node.type.create(nextAttrs, newContent, node.marks);
 }

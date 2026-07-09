@@ -12,7 +12,7 @@ import type { EditorView } from 'prosemirror-view';
 import { newHeadingId } from '../schema/index.js';
 import { collectHeadings, computeHeadingRange } from './headings.js';
 import { preciseScrollIntoView } from './precise-scroll.js';
-import { rewriteHeadingIdsInFragment } from './transclusion.js';
+import { rewriteHeadingIdsInFragment, enclosingZonePos } from './transclusion.js';
 import {
   buildInDocCopyAttrs,
   insertZoneAtSelection,
@@ -58,7 +58,25 @@ export function insertSelfRef(view: EditorView, headingId: string): boolean {
   if (!entry) return false;
   const label = `↳ ${entry.text?.trim() || 'Section'}`;
   const node = createSelfRefNode(view.state.schema, headingId, label);
-  const { from } = view.state.selection;
+  const { $from, from } = view.state.selection;
+  // If the cursor sits inside a linked copy, a live view dropped there would stack
+  // two rails (a nested transclusion updating from a different source). Shunt it
+  // out to just after the enclosing zone — mirrors how the linked-copy insert
+  // escapes to the top level (`insertZoneAtSelection`).
+  const zonePos = enclosingZonePos(view.state.doc, $from.pos);
+  if (zonePos !== null) {
+    const zone = view.state.doc.nodeAt(zonePos);
+    const insertPos = zonePos + (zone?.nodeSize ?? 0);
+    let tr = view.state.tr.insert(insertPos, node);
+    try {
+      tr = tr.setSelection(NodeSelection.create(tr.doc, insertPos));
+    } catch {
+      /* selection placement is best-effort */
+    }
+    view.dispatch(tr.scrollIntoView());
+    view.focus();
+    return true;
+  }
   const tr = view.state.tr.replaceSelectionWith(node);
   tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(from, tr.doc.content.size))));
   view.dispatch(tr.scrollIntoView());
