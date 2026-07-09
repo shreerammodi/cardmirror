@@ -32,7 +32,7 @@
  */
 
 import { type Fragment, type Node as PMNode } from 'prosemirror-model';
-import { resolveSelfProjection } from './self-transclusion.js';
+import { makeProjectionResolver } from './self-transclusion.js';
 
 export type NumRole = 'none' | 'number' | 'sub';
 
@@ -83,6 +83,9 @@ export interface Numbering {
 export function computeNumbering(doc: PMNode): Numbering {
   const cards = new Map<number, NumberLabel>();
   const windows = new Map<number, (NumberLabel | null)[]>();
+  // One resolver shared across every window in this pass (memoized — chained
+  // views resolve once total, not once per window).
+  const resolveProjection = makeProjectionResolver(doc);
   let numCount = 0; // last NUMBER assigned in the current run
   let subCount = 0; // last SUB assigned under the current number
 
@@ -134,7 +137,7 @@ export function computeNumbering(doc: PMNode): Numbering {
           // Live view: resolve the projection and flow ITS cards through the same
           // counters. Their labels are host-positional — collected per window, not
           // into `cards` (they have no host positions).
-          const proj = resolveSelfProjection(doc, String(node.attrs['source_heading_id'] ?? ''));
+          const proj = resolveProjection(String(node.attrs['source_heading_id'] ?? ''));
           if (proj.missing) return;
           const labels: (NumberLabel | null)[] = [];
           walk(proj.content, -1, (label) => labels.push(label));

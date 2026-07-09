@@ -102,6 +102,22 @@ function resolveMemo(
   return result;
 }
 
+/** Resolves a heading's projection, memoized. */
+export type ProjectionResolver = (headingId: string) => Projection;
+
+/**
+ * A projection resolver that memoizes across MANY headings in a single pass —
+ * for callers that resolve EVERY self_ref in a doc (numbering, the render plugin,
+ * flatten). Without it, N views that chain (view→section-with-view→…) each
+ * re-resolve their overlapping sub-chain — O(N²); sharing one memo makes the
+ * whole pass resolve each distinct heading once. Each top-level resolution starts
+ * with a fresh cycle stack; the doc must not change under the resolver.
+ */
+export function makeProjectionResolver(doc: PMNode): ProjectionResolver {
+  const memo = new Map<string, Projection>();
+  return (headingId) => resolveMemo(doc, headingId, new Set<string>(), memo);
+}
+
 /**
  * Replace every `self_ref` in `doc` with its resolved projection as real cards
  * (heading ids re-stamped fresh, so the flattened copies don't collide with the
@@ -142,15 +158,21 @@ export function flattenSelfRefsInFragment(
   sourceDoc: PMNode,
   freshId: () => string,
 ): Fragment {
+  // One resolver for the whole fragment so N self_refs share the memo (linear,
+  // not O(N × chain)).
+  return flattenWithResolver(frag, makeProjectionResolver(sourceDoc), freshId);
+}
+
+function flattenWithResolver(frag: Fragment, resolve: ProjectionResolver, freshId: () => string): Fragment {
   const out: PMNode[] = [];
   frag.forEach((node) => {
     if (isSelfRef(node)) {
-      const proj = resolveSelfProjection(sourceDoc, String(node.attrs['source_heading_id'] ?? ''));
+      const proj = resolve(String(node.attrs['source_heading_id'] ?? ''));
       rewriteHeadingIdsInFragment(proj.content, freshId).forEach((n) => out.push(n));
       return;
     }
     if (node.content.size) {
-      out.push(node.type.create(node.attrs, flattenSelfRefsInFragment(node.content, sourceDoc, freshId), node.marks));
+      out.push(node.type.create(node.attrs, flattenWithResolver(node.content, resolve, freshId), node.marks));
       return;
     }
     out.push(node);
