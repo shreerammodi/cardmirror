@@ -30,9 +30,15 @@ interface NumberingState {
 
 export const numberingPluginKey = new PluginKey<NumberingState>('cardNumbering');
 
-/** Prototype glyph format: number → "1.", sub → "a)". */
+/** Transaction meta that forces the numbering set to rebuild even without a doc
+ *  change — the settings subscriber fires it when the format/indent options
+ *  change (they bake into the decorations, unlike the on/off gate). */
+export const NUMBERING_REFRESH = 'pmd-numbering-refresh';
+
+/** Per-user glyph separator (display-only; the .docx carries a canonical form). */
+const FORMAT_SEP: Record<string, string> = { period: '.', paren: ')', dash: ' -' };
 function glyphText(label: NumberLabel): string {
-  return label.kind === 'number' ? `${label.text}.` : `${label.text})`;
+  return `${label.text}${FORMAT_SEP[settings.get('cardNumberingFormat')] ?? '.'}`;
 }
 
 /** The read-only number glyph element. Shared by the widget decorations (host
@@ -58,7 +64,8 @@ function build(doc: PMNode): NumberingState {
   const { cards, windows } = computeNumbering(doc);
   const decos: Decoration[] = [];
 
-  // Computed number / letter glyphs on host cards.
+  // Computed number / letter glyphs on host cards, plus optional per-level indent.
+  const indentMode = settings.get('cardNumberingIndent');
   for (const [cardPos, label] of cards) {
     // card at cardPos → its `tag`/`analytic` heading at +1 → the heading's inline
     // content starts at +2. Sit the number at the very start of that line.
@@ -71,6 +78,21 @@ function build(doc: PMNode): NumberingState {
         ignoreSelection: true,
       }),
     );
+    // Indent by level (display-only): number = 1 step, sub = 2. Applied to the
+    // tag line or the whole card per the setting.
+    if (indentMode !== 'off') {
+      const cardNode = doc.nodeAt(cardPos);
+      if (cardNode) {
+        const step = (label.kind === 'sub' ? 2 : 1) * 1.6;
+        const style = `margin-left: ${step}em`;
+        if (indentMode === 'card') {
+          decos.push(Decoration.node(cardPos, cardPos + cardNode.nodeSize, { style }));
+        } else if (cardNode.firstChild) {
+          const tagSize = cardNode.firstChild.nodeSize;
+          decos.push(Decoration.node(cardPos + 1, cardPos + 1 + tagSize, { style }));
+        }
+      }
+    }
   }
 
   // Restart / continue indicators (§6) — shown only for the NON-default states,
@@ -111,7 +133,7 @@ export const cardNumberingPlugin: Plugin<NumberingState> = new Plugin<NumberingS
     // Always compute (even when display is off) so a live view's NodeView can
     // read window labels and a toggle-on reveals them without a doc edit.
     init: (_config, { doc }) => build(doc),
-    apply: (tr, prev) => (tr.docChanged ? build(tr.doc) : prev),
+    apply: (tr, prev) => (tr.docChanged || tr.getMeta(NUMBERING_REFRESH) ? build(tr.doc) : prev),
   },
   props: {
     decorations(state) {

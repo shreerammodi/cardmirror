@@ -578,6 +578,13 @@ export interface Settings {
    *  are display-only; turning this off hides them without touching the doc.
    *  Authoring a role auto-enables it. See NUMBERING_PLAN.md §6. */
   showCardNumbering: boolean;
+  /** Glyph format for card numbers (display-only, does NOT round-trip — the
+   *  `.docx` carries a canonical `1.`/`a)`). `period` = "1."/"a.", `paren` =
+   *  "1)"/"a)", `dash` = "1 -"/"a -". */
+  cardNumberingFormat: 'period' | 'paren' | 'dash';
+  /** Whether/where numbered cards indent by level (display-only). `off` = none;
+   *  `tag` = indent just the tag line; `card` = indent the whole card. */
+  cardNumberingIndent: 'off' | 'tag' | 'card';
   /** Show a red dot on the ribbon's Manage Flashcards button when one or
    *  more flashcards are due for review today. On by default. */
   flashcardDueDot: boolean;
@@ -1341,6 +1348,8 @@ const DEFAULTS: Settings = {
   includeSpeechDocPocket: true,
   showCitePreview: true,
   showCardNumbering: true,
+  cardNumberingFormat: 'period',
+  cardNumberingIndent: 'off',
   flashcardDueDot: true,
   editorSpellcheck: false,
   smartQuotes: false,
@@ -1541,6 +1550,8 @@ export interface SettingMeta {
     | 'bodyFont'
     | 'uiFont'
     | 'ribbonTooltipMode'
+    | 'cardNumberFormat'
+    | 'cardNumberIndent'
     | 'lineHeights'
     | 'formattingPanelMode'
     | 'headingMode'
@@ -2307,6 +2318,26 @@ export const SETTING_METADATA: SettingMeta[] = [
     category: 'appearance',
     section: 'Nav pane & indicators',
     aliases: ['numbering', 'card numbers', 'auto number'],
+  },
+  {
+    key: 'cardNumberingFormat',
+    label: 'Card number format',
+    description:
+      'How the number/letter reads: “1.” / “a.”, “1)” / “a)”, or “1 -” / “a -”. Display-only — the .docx carries a canonical format each reader can override.',
+    kind: 'cardNumberFormat',
+    category: 'appearance',
+    section: 'Nav pane & indicators',
+    aliases: ['numbering format', 'number style'],
+  },
+  {
+    key: 'cardNumberingIndent',
+    label: 'Card number indent',
+    description:
+      'Whether numbered cards indent by level — none, the tag line only, or the whole card.',
+    kind: 'cardNumberIndent',
+    category: 'appearance',
+    section: 'Nav pane & indicators',
+    aliases: ['numbering indent'],
   },
   {
     key: 'flashcardDueDot',
@@ -3414,6 +3445,14 @@ function sanitize(s: Settings): Settings {
       s.includeSpeechDocPocket === false ? false : true,
     showCitePreview: !!s.showCitePreview,
     showCardNumbering: s.showCardNumbering === false ? false : true,
+    cardNumberingFormat:
+      s.cardNumberingFormat === 'paren' || s.cardNumberingFormat === 'dash'
+        ? s.cardNumberingFormat
+        : 'period',
+    cardNumberingIndent:
+      s.cardNumberingIndent === 'tag' || s.cardNumberingIndent === 'card'
+        ? s.cardNumberingIndent
+        : 'off',
     flashcardDueDot: s.flashcardDueDot === false ? false : true,
     editorSpellcheck: !!s.editorSpellcheck,
     smartQuotes: !!s.smartQuotes,

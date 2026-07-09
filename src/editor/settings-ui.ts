@@ -692,6 +692,10 @@ class SettingsModal {
       label.appendChild(buildFormattingPanelModeEditor());
     } else if (meta.kind === 'ribbonTooltipMode') {
       label.appendChild(buildRibbonTooltipModeEditor());
+    } else if (meta.kind === 'cardNumberFormat') {
+      label.appendChild(buildCardNumberFormatEditor());
+    } else if (meta.kind === 'cardNumberIndent') {
+      label.appendChild(buildCardNumberIndentEditor());
     } else if (meta.kind === 'multiDocLayoutMode') {
       row.appendChild(text);
       row.appendChild(buildMultiDocLayoutModeEditor());
@@ -2802,6 +2806,48 @@ function buildPairingReceiveFlashEditor(): HTMLElement {
   const unsub = settings.subscribe(refresh);
   registerRowCleanup(wrap, () => unsub());
   return wrap;
+}
+
+function buildCardNumberFormatEditor(): HTMLElement {
+  const select = document.createElement('select');
+  select.className = 'pmd-formatting-panel-mode-select';
+  const options: { value: 'period' | 'paren' | 'dash'; label: string }[] = [
+    { value: 'period', label: '1.  ·  a.' },
+    { value: 'paren', label: '1)  ·  a)' },
+    { value: 'dash', label: '1 -  ·  a -' },
+  ];
+  for (const o of options) {
+    const opt = document.createElement('option');
+    opt.value = o.value;
+    opt.textContent = o.label;
+    if (o.value === settings.get('cardNumberingFormat')) opt.selected = true;
+    select.appendChild(opt);
+  }
+  select.addEventListener('change', () => {
+    settings.set('cardNumberingFormat', select.value as 'period' | 'paren' | 'dash');
+  });
+  return select;
+}
+
+function buildCardNumberIndentEditor(): HTMLElement {
+  const select = document.createElement('select');
+  select.className = 'pmd-formatting-panel-mode-select';
+  const options: { value: 'off' | 'tag' | 'card'; label: string }[] = [
+    { value: 'off', label: 'No indent' },
+    { value: 'tag', label: 'Indent the tag' },
+    { value: 'card', label: 'Indent the whole card' },
+  ];
+  for (const o of options) {
+    const opt = document.createElement('option');
+    opt.value = o.value;
+    opt.textContent = o.label;
+    if (o.value === settings.get('cardNumberingIndent')) opt.selected = true;
+    select.appendChild(opt);
+  }
+  select.addEventListener('change', () => {
+    settings.set('cardNumberingIndent', select.value as 'off' | 'tag' | 'card');
+  });
+  return select;
 }
 
 function buildRibbonTooltipModeEditor(): HTMLElement {

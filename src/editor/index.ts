@@ -156,7 +156,7 @@ import { absorbPlugin } from './absorb-plugin.js';
 import { citeClassifierPlugin } from './cite-classifier-plugin.js';
 import { namedStyleNormalizerPlugin } from './named-style-normalizer-plugin.js';
 import { fontSizeClassPlugin } from './font-size-class-plugin.js';
-import { cardNumberingPlugin } from './numbering-plugin.js';
+import { cardNumberingPlugin, NUMBERING_REFRESH } from './numbering-plugin.js';
 import {
   buildSimilarSelectionPlugin,
   selectAllOfStyle,
@@ -2953,7 +2953,9 @@ let lastKeyboardMacros = settings.get('keyboardMacros');
 let lastReadMode = settings.get('readMode');
 let lastReadModeBorders = settings.get('hideEmphasisBordersInReadMode');
 let lastMarkUnread = settings.get('markUnreadAfterMarker');
-let lastShowCardNumbering = settings.get('showCardNumbering');
+const numberingDisplaySig = (): string =>
+  `${settings.get('showCardNumbering')}|${settings.get('cardNumberingFormat')}|${settings.get('cardNumberingIndent')}`;
+let lastNumberingDisplay = numberingDisplaySig();
 
 /** Show/hide the chrome's optional clusters per their (default-off) settings:
  *  the dropzone pill and the Quick Cards button stack. Called from the settings
@@ -3008,11 +3010,13 @@ settings.subscribe((s) => {
     lastMarkUnread = s.markUnreadAfterMarker;
     if (view) view.dispatch(view.state.tr.setMeta(MARK_UNREAD_TOGGLE, true));
   }
-  // Card-numbering display toggle: the plugin gates its decorations on the live
-  // setting, so a no-op transaction is enough to force it to re-evaluate.
-  if (s.showCardNumbering !== lastShowCardNumbering) {
-    lastShowCardNumbering = s.showCardNumbering;
-    if (view) view.dispatch(view.state.tr.setMeta('addToHistory', false));
+  // Card-numbering display changed (on/off, format, or indent): rebuild the
+  // numbering decorations. The on/off gate is read live in the plugin's
+  // decorations prop; format/indent bake into the set, so force a rebuild.
+  const numberingSig = numberingDisplaySig();
+  if (numberingSig !== lastNumberingDisplay) {
+    lastNumberingDisplay = numberingSig;
+    if (view) view.dispatch(view.state.tr.setMeta(NUMBERING_REFRESH, true));
   }
   applyNavPaneVisible(s.navPaneVisible);
   applyFormatNavPaneByType(s.formatNavPaneByType);
