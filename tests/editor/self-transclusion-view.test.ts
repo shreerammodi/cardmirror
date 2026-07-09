@@ -181,6 +181,60 @@ describe('self_ref window — actions', () => {
   });
 });
 
+describe('self_ref window — a spanning selection highlights the view (send-to-speech)', () => {
+  // A doc where the view sits BETWEEN two cards, so a TextSelection can span it.
+  function mid(): EditorView {
+    const doc = schema.nodes['doc']!.create(null, [
+      block('Source', SRC),
+      card('S', 'src-body'),
+      block('Mid', 'mid'),
+      card('Above', 'above'),
+      createSelfRefNode(schema, SRC, '↳ Source'),
+      card('Below', 'below'),
+    ]);
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    return new EditorView(el, {
+      state: EditorState.create({ doc, plugins: [makeSelfRefPlugin()] }),
+      nodeViews: selfRefNodeViews,
+    });
+  }
+  const viewDom = (v: EditorView) => v.dom.querySelector('.pmd-self-ref') as HTMLElement;
+
+  it('adds the in-selection class when a TextSelection spans the view', () => {
+    const view = mid();
+    const sp = selfRefPos(view);
+    const node = view.state.doc.nodeAt(sp)!;
+    // Empty selection → not marked.
+    expect(viewDom(view).classList.contains('pmd-self-ref-in-selection')).toBe(false);
+    // Span from a card above to a card below (crossing the view).
+    view.dispatch(
+      view.state.tr.setSelection(TextSelection.between(view.state.doc.resolve(sp - 4), view.state.doc.resolve(sp + node.nodeSize + 4))),
+    );
+    // The PM selection actually covers the view…
+    expect(view.state.selection.from).toBeLessThanOrEqual(sp);
+    expect(view.state.selection.to).toBeGreaterThanOrEqual(sp + node.nodeSize);
+    // …and the view is marked selected for CSS.
+    expect(viewDom(view).classList.contains('pmd-self-ref-in-selection')).toBe(true);
+    view.destroy();
+  });
+
+  it('does NOT rebuild the projection DOM on a selection-only change (no drag disruption)', () => {
+    const view = mid();
+    const firstCard = view.dom.querySelector('.pmd-self-ref-body .pmd-card') as HTMLElement;
+    expect(firstCard).toBeTruthy();
+    const sp = selfRefPos(view);
+    const node = view.state.doc.nodeAt(sp)!;
+    view.dispatch(
+      view.state.tr.setSelection(TextSelection.between(view.state.doc.resolve(sp - 4), view.state.doc.resolve(sp + node.nodeSize + 4))),
+    );
+    // Same DOM element — the render guard skipped the rebuild (the projection is
+    // unchanged), so a live drag-selection over the view isn't collapsed.
+    expect(view.dom.querySelector('.pmd-self-ref-body .pmd-card')).toBe(firstCard);
+    view.destroy();
+  });
+});
+
 describe('self_ref window — click selects the whole node (but stays span-selectable)', () => {
   function clickOn(view: EditorView, mods: Partial<MouseEvent> = {}): unknown {
     const pos = selfRefPos(view);

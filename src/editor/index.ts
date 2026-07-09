@@ -451,9 +451,26 @@ function selectCurrentHeadingIn(sourceView: EditorView): void {
   const range = resolveCursorStructureRange(sourceView);
   if (!range) return;
   const { doc } = sourceView.state;
-  const sel = TextSelection.between(doc.resolve(range.from), doc.resolve(range.to));
-  sourceView.dispatch(sourceView.state.tr.setSelection(sel).scrollIntoView());
+  sourceView.dispatch(sourceView.state.tr.setSelection(headingContentSelection(doc, range)).scrollIntoView());
   sourceView.focus();
+}
+
+/** A selection covering a structural range. Normally `TextSelection.between`
+ *  (clamps endpoints to textblocks). But a range that ENDS in a block LEAF ATOM
+ *  — a live view (`self_ref`) — has no textblock after it, so `between` snaps the
+ *  end back BEFORE the view, dropping it from the selection ("stops at the top of
+ *  the live view"). `TextSelection.create` honors the exact range, so the trailing
+ *  view is included (the self-ref plugin then highlights the spanned view). */
+function headingContentSelection(doc: PMNode, range: { from: number; to: number }): Selection {
+  const before = doc.resolve(range.to).nodeBefore;
+  if (before && before.isBlock && before.isAtom) {
+    try {
+      return TextSelection.create(doc, range.from, range.to);
+    } catch {
+      /* fall through to the clamped selection */
+    }
+  }
+  return TextSelection.between(doc.resolve(range.from), doc.resolve(range.to));
 }
 
 /** Delete the cursor's enclosing structure (same bounds as

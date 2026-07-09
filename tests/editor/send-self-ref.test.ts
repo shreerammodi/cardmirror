@@ -148,4 +148,30 @@ describe('a text selection SPANNING a live view (click-above → shift-click-bel
     expect(bodies).toContain('below-body');
     view.destroy();
   });
+
+  it('a section ENDING in a live view (TextSelection.create range) still sends the view', () => {
+    // Section H ends with the view — `TextSelection.between` would clamp before it,
+    // but the "select heading and content" command uses `.create` for the exact
+    // range, so the trailing view is in the selection and gets sent.
+    const view = makeView([
+      block('Source', 'src'),
+      card('Alpha', 'alpha'), // src's section
+      block('H', 'H'),
+      card('A', 'a-body'),
+      createSelfRefNode(schema, 'src', '↳ Source'), // last node of section H
+    ]);
+    let hPos = -1;
+    view.state.doc.forEach((n, off) => {
+      if (n.attrs?.['id'] === 'H') hPos = off;
+    });
+    const to = view.state.doc.content.size; // after the trailing view
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, hPos, to)));
+
+    const slice = takeSendSlice(view)!;
+    expect(sliceHasSelfRef(slice)).toBe(false);
+    const bodies = sliceBodies(slice);
+    expect(bodies).toContain('a-body'); // the section's own card
+    expect(bodies).toContain('alpha'); // the trailing view's projected content
+    view.destroy();
+  });
 });

@@ -49,7 +49,24 @@ export function makeSelfRefPlugin(): Plugin<DecorationSet> {
     },
     props: {
       decorations(state) {
-        return selfRefPluginKey.getState(state) ?? DecorationSet.empty;
+        const base = selfRefPluginKey.getState(state) ?? DecorationSet.empty;
+        // A live view is an atom whose read-only projection is `user-select:none`,
+        // so a text selection SPANNING it wouldn't paint any ::selection over it —
+        // it'd look skipped. Mark every self_ref the current selection fully covers
+        // so CSS can show it selected (so click-drag / shift-click across it, and
+        // select→send-to-speech, visibly include the view). `nodesBetween` bounds
+        // the scan to the selection, not the whole doc.
+        const sel = state.selection;
+        if (sel.empty) return base;
+        const extra: Decoration[] = [];
+        state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
+          if (!isSelfRef(node)) return true;
+          if (sel.from <= pos && sel.to >= pos + node.nodeSize) {
+            extra.push(Decoration.node(pos, pos + node.nodeSize, { class: 'pmd-self-ref-in-selection' }));
+          }
+          return false; // atom — nothing to descend into
+        });
+        return extra.length ? base.add(state.doc, extra) : base;
       },
       // A plain click on a live view selects the WHOLE node (the green box) —
       // reliably, and consistently across instances. Without this, a click on some

@@ -2554,12 +2554,28 @@ code {
 .pmd-self-ref-glyph:focus-visible {
   opacity: 1;
 }
-.pmd-self-ref.ProseMirror-selectednode {
+.pmd-self-ref.ProseMirror-selectednode,
+/* A text selection SPANNING the view (decoration from the plugin) reads as
+   selected too, so click-drag / shift-click across it — and select→send-to-speech
+   — visibly include the view. */
+.pmd-self-ref.pmd-self-ref-in-selection {
   outline: 2px solid var(--pmd-c-transclusion);
   outline-offset: 2px;
 }
+.pmd-self-ref.pmd-self-ref-in-selection {
+  background: color-mix(in srgb, var(--pmd-c-transclusion) 14%, transparent);
+  border-radius: 3px;
+}
 .pmd-self-ref-body {
   padding-left: 2px;
+  /* The projection is a READ-ONLY, image-like unit: not individually selectable
+     (so a click can't start a native word-selection inside the cards) and
+     transparent to the pointer (so a drag-select isn't captured by the text —
+     it spans the whole view as one unit, the way it does over an image). The
+     view itself stays selectable, and the plugin highlights it while spanned. */
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
 }
 /* The projected cards render real card DOM; suppress their own grey hover rail
    so the window's dotted green rail is the only one (mirrors .pmd-transclusion-
