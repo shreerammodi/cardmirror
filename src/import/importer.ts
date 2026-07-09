@@ -60,6 +60,12 @@ interface ParaInfo {
    *  line / lineRule / etc.) for round-trip. Null when the source
    *  paragraph had no `<w:spacing>` element. */
   spacing: Record<string, string> | null;
+  /** Word numbering from `<w:numPr>`: the list instance (`w:numId`) and level
+   *  (`w:ilvl`). Set only on a paragraph that carries live-list membership
+   *  (numId > 0). Reconstructed into card `numRole`/`numRestart` — NUMBERING_PLAN
+   *  §5. */
+  numId?: number;
+  ilvl?: number;
   /** When set, the assembler emits this PMNode verbatim at this
    *  position in the doc instead of treating it as a paragraph.
    *  Used for `<w:tbl>` → `table` nodes, which are pre-assembled
@@ -315,6 +321,8 @@ function parseParagraph(pNode: XmlNode, ctx: ImportContext): ParaInfo {
   let pStyle: string | null = null;
   let indent = 0;
   let spacing: Record<string, string> | null = null;
+  let numId: number | undefined;
+  let ilvl: number | undefined;
   if (pPr) {
     const pPrChildren = childrenOf(pPr, 'w:pPr');
     const pStyleEl = findChild(pPrChildren, 'w:pStyle');
@@ -343,6 +351,22 @@ function parseParagraph(pNode: XmlNode, ctx: ImportContext): ParaInfo {
         if (typeof v === 'string') captured[k] = v;
       }
       if (Object.keys(captured).length > 0) spacing = captured;
+    }
+    // `<w:numPr>` — list membership (numId) + level (ilvl). numId 0 means "no
+    // numbering", so only a positive numId counts as live.
+    const numPrEl = findChild(pPrChildren, 'w:numPr');
+    if (numPrEl) {
+      const numPrChildren = childrenOf(numPrEl, 'w:numPr');
+      const numIdEl = findChild(numPrChildren, 'w:numId');
+      const idv = numIdEl ? attrsOf(numIdEl)['w:val'] : undefined;
+      const idn = idv ? parseInt(idv, 10) : NaN;
+      if (Number.isFinite(idn) && idn > 0) {
+        numId = idn;
+        const ilvlEl = findChild(numPrChildren, 'w:ilvl');
+        const lv = ilvlEl ? attrsOf(ilvlEl)['w:val'] : undefined;
+        const ln = lv ? parseInt(lv, 10) : 0;
+        ilvl = Number.isFinite(ln) && ln > 0 ? ln : 0;
+      }
     }
   }
 
@@ -382,7 +406,7 @@ function parseParagraph(pNode: XmlNode, ctx: ImportContext): ParaInfo {
     if (promoted) nodeType = promoted;
   }
 
-  return { nodeType, inlines, headingId, pStyle, indent, spacing };
+  return { nodeType, inlines, headingId, pStyle, indent, spacing, numId, ilvl };
 }
 
 /**
@@ -1253,6 +1277,9 @@ function assembleDoc(
   provenance?: Map<string, number>,
 ): PMNode {
   const docNodes: PMNode[] = [];
+  // Auto-numbering: card/analytic_unit node → the numId/ilvl its tag carried, so
+  // the reconstruction pass below can derive numRole/numRestart (NUMBERING §5).
+  const cardNumInfo = new Map<PMNode, { numId: number; ilvl: number }>();
   let i = 0;
   while (i < paragraphs.length) {
     const para = paragraphs[i]!;
@@ -1310,6 +1337,9 @@ function assembleDoc(
       try {
         const unitNode = schema.nodes['analytic_unit']!.createChecked(null, unitChildren);
         docNodes.push(unitNode);
+        if (para.numId != null) {
+          cardNumInfo.set(unitNode, { numId: para.numId, ilvl: para.ilvl ?? 0 });
+        }
       } catch (_e) {
         // Analytic_unit construction failed — emit children directly at
         // doc level, coercing tags/analytics into wrappers since they
@@ -1377,6 +1407,9 @@ function assembleDoc(
       try {
         const cardNode = schema.nodes['card']!.createChecked(null, cardChildren);
         docNodes.push(cardNode);
+        if (para.numId != null) {
+          cardNumInfo.set(cardNode, { numId: para.numId, ilvl: para.ilvl ?? 0 });
+        }
       } catch (_e) {
         // Card construction failed — emit children directly at doc
         // level, coercing tags/analytics into wrappers. Should be rare
@@ -1399,17 +1432,92 @@ function assembleDoc(
     }
   }
 
+  // Reconstruct the numbering skeleton (numRole / numRestart) from the numId/ilvl
+  // the cards carried — a no-op when the doc had no numbering.
+  const numbered = reconstructNumbering(docNodes, cardNumInfo);
+
   // Wrap in doc node. If schema rejects (which would be surprising given
   // our permissive content expression), coerce stray tags/analytics
   // into legal doc-level children and try again.
   try {
-    return schema.nodes['doc']!.createChecked(null, docNodes);
+    return schema.nodes['doc']!.createChecked(null, numbered);
   } catch (_e) {
     return schema.nodes['doc']!.createChecked(
       null,
-      docNodes.map((n) => coerceToDocChild(n)),
+      numbered.map((n) => coerceToDocChild(n)),
     );
   }
+}
+
+/**
+ * Rebuild the numbering skeleton from Word numbering (NUMBERING_PLAN.md §5).
+ * `cardNumInfo` gives each numbered card's numId/ilvl. We walk the top-level
+ * sequence and reconstruct:
+ *   - numRole: ilvl 0 → 'number', ilvl ≥ 1 → 'sub' (clamped; we're two-level).
+ *   - a card numRestart when its numId differs from the previous numbered card's
+ *     AND no heading sat between them (a heading already explains the restart).
+ *   - a block numRestart=false ("continue") when the numbered cards on both sides
+ *     share one numId — the running count flowed across it.
+ * Returns fresh nodes only where something changed; a doc with no numbering is
+ * returned untouched.
+ */
+function reconstructNumbering(
+  nodes: PMNode[],
+  cardNumInfo: Map<PMNode, { numId: number; ilvl: number }>,
+): PMNode[] {
+  if (cardNumInfo.size === 0) return nodes;
+
+  const role = new Map<number, 'number' | 'sub'>();
+  const cardRestart = new Set<number>();
+  const blockContinue = new Set<number>();
+  let lastNumId: number | null = null;
+  let pendingBlocks: number[] = []; // block indices since the last numbered card
+
+  for (let k = 0; k < nodes.length; k++) {
+    const t = nodes[k]!.type.name;
+    if (t === 'pocket' || t === 'hat') {
+      // A higher heading is a hard scope reset; the next card's new numId is
+      // explained by it, so it never marks a card restart.
+      pendingBlocks = [];
+      lastNumId = null;
+      continue;
+    }
+    if (t === 'block') {
+      pendingBlocks.push(k);
+      continue;
+    }
+    if (t === 'card' || t === 'analytic_unit') {
+      const info = cardNumInfo.get(nodes[k]!);
+      if (!info) continue; // a skip: leaves run tracking untouched
+      role.set(k, info.ilvl === 0 ? 'number' : 'sub');
+      if (lastNumId !== null) {
+        if (info.numId === lastNumId) {
+          // Same run continued — any blocks it crossed are "continue" blocks.
+          for (const b of pendingBlocks) blockContinue.add(b);
+        } else if (pendingBlocks.length === 0) {
+          // New numId with no heading to explain it → a mid-list card restart.
+          cardRestart.add(k);
+        }
+      }
+      lastNumId = info.numId;
+      pendingBlocks = [];
+    }
+  }
+
+  if (role.size === 0 && cardRestart.size === 0 && blockContinue.size === 0) return nodes;
+  return nodes.map((n, k) => {
+    const t = n.type.name;
+    if (t === 'card' || t === 'analytic_unit') {
+      const r = role.get(k);
+      const restart = cardRestart.has(k);
+      if (r || restart) {
+        return n.type.create({ ...n.attrs, numRole: r ?? 'none', numRestart: restart }, n.content, n.marks);
+      }
+    } else if (t === 'block' && blockContinue.has(k)) {
+      return n.type.create({ ...n.attrs, numRestart: false }, n.content, n.marks);
+    }
+    return n;
+  });
 }
 
 /** True if any NON-WHITESPACE inline node carries the cite_mark mark.

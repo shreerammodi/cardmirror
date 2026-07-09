@@ -9,6 +9,13 @@
 import { type Command, type EditorState } from 'prosemirror-state';
 import { type Node as PMNode } from 'prosemirror-model';
 import type { NumRole } from './numbering.js';
+import { settings } from './settings.js';
+
+/** Authoring any part of the skeleton auto-enables the display (§6) — otherwise
+ *  the edit is invisible and the user can't tell it worked. */
+function ensureNumberingVisible(): void {
+  if (!settings.get('showCardNumbering')) settings.set('showCardNumbering', true);
+}
 
 interface CardUnit {
   pos: number;
@@ -56,6 +63,7 @@ function makeRoleToggle(role: 'number' | 'sub'): Command {
       // Attr-only edits don't shift positions, so no remapping is needed.
       for (const u of units) tr.setNodeAttribute(u.pos, 'numRole', next);
       dispatch(tr);
+      ensureNumberingVisible();
     }
     return true;
   };
@@ -85,6 +93,7 @@ export const toggleNumRestart: Command = (state, dispatch) => {
   if (!target) return false;
   if (dispatch) {
     dispatch(state.tr.setNodeAttribute(target.pos, 'numRestart', !target.node.attrs['numRestart']));
+    ensureNumberingVisible();
   }
   return true;
 };

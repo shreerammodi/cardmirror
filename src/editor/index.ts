@@ -2953,6 +2953,7 @@ let lastKeyboardMacros = settings.get('keyboardMacros');
 let lastReadMode = settings.get('readMode');
 let lastReadModeBorders = settings.get('hideEmphasisBordersInReadMode');
 let lastMarkUnread = settings.get('markUnreadAfterMarker');
+let lastShowCardNumbering = settings.get('showCardNumbering');
 
 /** Show/hide the chrome's optional clusters per their (default-off) settings:
  *  the dropzone pill and the Quick Cards button stack. Called from the settings
@@ -3006,6 +3007,12 @@ settings.subscribe((s) => {
   if (s.markUnreadAfterMarker !== lastMarkUnread) {
     lastMarkUnread = s.markUnreadAfterMarker;
     if (view) view.dispatch(view.state.tr.setMeta(MARK_UNREAD_TOGGLE, true));
+  }
+  // Card-numbering display toggle: the plugin gates its decorations on the live
+  // setting, so a no-op transaction is enough to force it to re-evaluate.
+  if (s.showCardNumbering !== lastShowCardNumbering) {
+    lastShowCardNumbering = s.showCardNumbering;
+    if (view) view.dispatch(view.state.tr.setMeta('addToHistory', false));
   }
   applyNavPaneVisible(s.navPaneVisible);
   applyFormatNavPaneByType(s.formatNavPaneByType);

@@ -22,13 +22,17 @@
  * `hat`, which always start a fresh scope). A card flagged `numRestart` restarts
  * the count at itself (before it is counted).
  *
- * NOT yet handled (follow-ups, see NUMBERING_PLAN §7): live views (`self_ref`)
- * don't yet flow their projected cards through the host count — they're treated
- * as transparent here. Linked copies (`transclusion_ref`) DO participate: their
- * real cards are counted in document order.
+ * Transclusion (§7): both variants flow through the host count. A linked copy
+ * (`transclusion_ref`) holds real cards, counted in document order. A live view
+ * (`self_ref`) is resolved to its projected cards, which advance the SAME
+ * counters (so host cards after a window continue correctly) — the window is
+ * transparent to the host counter, never an opaque sub-scope. Each window's own
+ * projected-card labels are returned separately (host-positional: the same source
+ * card shows different numbers in different windows) for the NodeView to render.
  */
 
-import { type Node as PMNode } from 'prosemirror-model';
+import { type Fragment, type Node as PMNode } from 'prosemirror-model';
+import { resolveSelfProjection } from './self-transclusion.js';
 
 export type NumRole = 'none' | 'number' | 'sub';
 
@@ -59,14 +63,26 @@ export function numRoleOf(node: PMNode): NumRole {
   return r === 'number' || r === 'sub' ? r : 'none';
 }
 
+export interface Numbering {
+  /** Numbered card/analytic_unit → its label, keyed by ABSOLUTE document
+   *  position (so a card inside a linked copy is keyed by its real position).
+   *  Cards with role 'none' are absent. */
+  cards: Map<number, NumberLabel>;
+  /** Live-view (`self_ref`) position → the label for each projected card in the
+   *  window, in document order (null for a projected card with role 'none'). The
+   *  NodeView renders these; the value is host-positional. */
+  windows: Map<number, (NumberLabel | null)[]>;
+}
+
 /**
- * Compute the rendered label for every numbered card in the doc, keyed by the
- * card/analytic_unit's document position. Cards with role 'none' (the default)
- * are absent from the map. Positions are absolute (as from `Node.descendants`),
- * so a card inside a linked copy is keyed by its real position too.
+ * Compute all numbering for a doc in one positional pass. Counters thread through
+ * linked copies (real nested cards) AND live-view projections (resolved), so a
+ * card after a window continues the count correctly and a window shows numbers
+ * derived from its position here.
  */
-export function computeNumbering(doc: PMNode): Map<number, NumberLabel> {
-  const out = new Map<number, NumberLabel>();
+export function computeNumbering(doc: PMNode): Numbering {
+  const cards = new Map<number, NumberLabel>();
+  const windows = new Map<number, (NumberLabel | null)[]>();
   let numCount = 0; // last NUMBER assigned in the current run
   let subCount = 0; // last SUB assigned under the current number
 
@@ -75,45 +91,65 @@ export function computeNumbering(doc: PMNode): Map<number, NumberLabel> {
     subCount = 0;
   };
 
-  doc.descendants((node, pos) => {
-    switch (node.type.name) {
-      case 'pocket':
-      case 'hat':
-        // A higher heading always starts a fresh numbering scope.
-        resetScope();
-        return false; // don't walk its inline text
-      case 'block':
-        // Blocks restart by default; a "continue" block (numRestart === false)
-        // carries the running count across the heading.
-        if (node.attrs['numRestart'] !== false) resetScope();
-        return false;
-      case 'card':
-      case 'analytic_unit': {
-        // A card flagged restart resets BOTH counters before it's counted.
-        if (node.attrs['numRestart'] === true) resetScope();
-        const role = numRoleOf(node);
-        if (role === 'number') {
-          numCount += 1;
-          subCount = 0; // a new number resets its subs
-          out.set(pos, { kind: 'number', value: numCount, text: String(numCount) });
-        } else if (role === 'sub') {
-          subCount += 1;
-          out.set(pos, { kind: 'sub', value: subCount, text: toLetters(subCount) });
-        }
-        // role 'none': a transparent skip — no counter touched.
-        return false; // a card's internals hold no numbered units
-      }
-      case 'transclusion_ref':
-        // Linked copy: real cards live inside it — count them in document order.
-        return true;
-      case 'self_ref':
-        // Live view: its projection isn't in the doc. Flowing it through the host
-        // count is a follow-up (§7); treat it as transparent for now.
-        return false;
-      default:
-        return true;
+  /** Advance the counters for one card and return its label (or null for a skip). */
+  const applyCard = (node: PMNode): NumberLabel | null => {
+    if (node.attrs['numRestart'] === true) resetScope(); // restart resets both
+    const role = numRoleOf(node);
+    if (role === 'number') {
+      numCount += 1;
+      subCount = 0; // a new number resets its subs
+      return { kind: 'number', value: numCount, text: String(numCount) };
     }
+    if (role === 'sub') {
+      subCount += 1;
+      return { kind: 'sub', value: subCount, text: toLetters(subCount) };
+    }
+    return null; // 'none': a transparent skip — no counter touched
+  };
+
+  /** Walk a fragment in document order. `onCard` records each card's label; real
+   *  fragments (the doc, a copy's content) pass absolute positions, projected
+   *  fragments pass -1 (position-less). */
+  const walk = (frag: Fragment, basePos: number, onCard: (label: NumberLabel | null, pos: number) => void): void => {
+    frag.forEach((node, offset) => {
+      const pos = basePos < 0 ? -1 : basePos + offset;
+      switch (node.type.name) {
+        case 'pocket':
+        case 'hat':
+          resetScope(); // a higher heading always starts a fresh scope
+          return;
+        case 'block':
+          // Restart by default; a "continue" block carries the running count.
+          if (node.attrs['numRestart'] !== false) resetScope();
+          return;
+        case 'card':
+        case 'analytic_unit':
+          onCard(applyCard(node), pos);
+          return;
+        case 'transclusion_ref':
+          // Linked copy: descend into its real cards (absolute positions).
+          walk(node.content, pos < 0 ? -1 : pos + 1, onCard);
+          return;
+        case 'self_ref': {
+          // Live view: resolve the projection and flow ITS cards through the same
+          // counters. Their labels are host-positional — collected per window, not
+          // into `cards` (they have no host positions).
+          const proj = resolveSelfProjection(doc, String(node.attrs['source_heading_id'] ?? ''));
+          if (proj.missing) return;
+          const labels: (NumberLabel | null)[] = [];
+          walk(proj.content, -1, (label) => labels.push(label));
+          if (pos >= 0) windows.set(pos, labels);
+          return;
+        }
+        default:
+          return;
+      }
+    });
+  };
+
+  walk(doc.content, 0, (label, pos) => {
+    if (label && pos >= 0) cards.set(pos, label);
   });
 
-  return out;
+  return { cards, windows };
 }

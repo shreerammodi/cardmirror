@@ -26,6 +26,7 @@ import {
 import { bookmarkNameForId } from '../schema/ids.js';
 import { base64ToBytes } from '../ooxml/base64.js';
 import type { Thread } from '../editor/comments-plugin.js';
+import { assignDocxNumbering, buildNumberingXml, numPrXml } from './docx-numbering.js';
 import type { FootnoteContent, FootnoteRun } from '../schema/footnotes.js';
 
 interface HyperlinkRel {
@@ -50,6 +51,9 @@ export interface ExportResult {
   documentXml: string;
   /** `word/_rels/document.xml.rels` content. */
   relsXml: string;
+  /** `word/numbering.xml` content, or `null` when the doc has no numbered cards
+   *  (so the zip writer can skip the part). */
+  numberingXml: string | null;
   /** Image / binary parts that the docx zip writer must include. */
   mediaParts: ExportedMediaPart[];
   /** `word/comments.xml` content, or `null` if no comments were
@@ -151,6 +155,11 @@ class DocxExporter {
   private footnotes: FootnoteContent[] = [];
   private endnotes: FootnoteContent[] = [];
 
+  /** Auto-numbering: tag/analytic heading node → its `<w:numPr>` (numId/ilvl),
+   *  plus the numIds to emit in `word/numbering.xml`. Computed once per export. */
+  private numberingByNode = new Map<PMNode, { numId: number; ilvl: number }>();
+  private numberingNumIds: number[] = [];
+
   exportDoc(doc: PMNode, opts: ExportOptions = {}): ExportResult {
     if (doc.type.name !== 'doc') {
       throw new Error(`Expected doc node, got ${doc.type.name}`);
@@ -158,6 +167,12 @@ class DocxExporter {
 
     this.threads = opts.threads ?? [];
     for (const t of this.threads) this.allowedThreadIds.add(t.id);
+
+    // Auto-numbering: resolve numId/ilvl for every numbered card up front, so
+    // `emitParagraph` can stamp the tag/analytic paragraph's `<w:numPr>`.
+    const numbering = assignDocxNumbering(doc);
+    this.numberingByNode = numbering.perHeading;
+    this.numberingNumIds = numbering.numIds;
 
     this.parts.push(DOCUMENT_OPEN);
     this.emitChildren(doc);
@@ -171,6 +186,7 @@ class DocxExporter {
     return {
       documentXml: this.parts.join(''),
       relsXml: this.buildRelsXml(),
+      numberingXml: this.numberingNumIds.length > 0 ? buildNumberingXml(this.numberingNumIds) : null,
       mediaParts: this.mediaParts,
       commentsXml: this.threads.length > 0 ? this.buildCommentsXml() : null,
       commentsExtendedXml: this.threads.length > 0 ? this.buildCommentsExtendedXml() : null,
@@ -409,6 +425,10 @@ class DocxExporter {
     if (Number.isFinite(indent) && indent > 0) {
       pPrInner += `<w:ind w:left="${indent}"/>`;
     }
+    // Auto-numbering: a numbered tag/analytic gets its `<w:numPr>` so Word draws
+    // the number. No number is written — Word computes it from numId + ilvl.
+    const num = this.numberingByNode.get(node);
+    if (num) pPrInner += numPrXml(num);
     const pPr = pPrInner ? `<w:pPr>${pPrInner}</w:pPr>` : '';
 
     this.parts.push('<w:p>');
@@ -743,6 +763,11 @@ class DocxExporter {
     for (const rel of this.imageRels) {
       inner.push(
         `<Relationship Id="${rel.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${escAttr(rel.target)}"/>`,
+      );
+    }
+    if (this.numberingNumIds.length > 0) {
+      inner.push(
+        `<Relationship Id="rId${this.nextRelId++}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>`,
       );
     }
     if (this.footnotes.length > 0) {

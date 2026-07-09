@@ -18,6 +18,7 @@ import {
   unlinkSelfRef,
   deleteSelfRef,
 } from './self-transclusion-commands.js';
+import { windowNumbering, createNumberGlyph } from './numbering-plugin.js';
 
 class SelfRefView implements NodeView {
   readonly dom: HTMLElement;
@@ -93,6 +94,19 @@ class SelfRefView implements NodeView {
     // this read-only copy instead of the real source. Strip them: the window is
     // never itself a scroll target.
     dom.querySelectorAll('[data-id]').forEach((el) => el.removeAttribute('data-id'));
+    // Auto-numbering (§7): the window flows through the host count, so its cards
+    // carry HOST-positional numbers (the same source card shows different numbers
+    // in different windows). The numbering plugin computes them; a `data-num-hash`
+    // node decoration on this self_ref triggers `update()` when they change.
+    const labels = windowNumbering(this.view.state, this.getPos() ?? -1);
+    if (labels) {
+      dom.querySelectorAll('.pmd-card, .pmd-analytic-unit').forEach((cardEl, i) => {
+        const label = labels[i];
+        if (!label) return;
+        const tagEl = cardEl.querySelector(':scope > .pmd-tag, :scope > .pmd-analytic');
+        if (tagEl) tagEl.insertBefore(createNumberGlyph(label), tagEl.firstChild);
+      });
+    }
     this.body.appendChild(dom);
     if (cycle) {
       const note = document.createElement('div');

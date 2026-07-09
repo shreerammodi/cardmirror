@@ -2272,6 +2272,34 @@ code {
   opacity: 0.85;
 }
 
+/* Restart / continue indicators (NUMBERING_PLAN.md §6). Node-decoration classes
+   the numbering plugin puts on the NON-default units only: a block the count
+   flows INTO (continue) and a card that starts the count over. Subtle, right-
+   edge, non-interactive — meaning also carried by the glyph, not color alone. */
+.pmd-num-flow-in,
+.pmd-num-restart {
+  position: relative;
+}
+.pmd-num-flow-in::after,
+.pmd-num-restart::after {
+  position: absolute;
+  right: 0.15em;
+  top: 0;
+  font-size: 0.8em;
+  color: var(--pmd-c-text-muted);
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}
+/* Down-arrow: numbering "flows down" into this continuing block. */
+.pmd-num-flow-in::after {
+  content: '↓';
+}
+/* Restart glyph: the count starts over at this card. */
+.pmd-num-restart::after {
+  content: '↺';
+}
+
 /* Analytic = same outline level as Tag, dark blue. The id-scoped
    selector is needed because `#editor p { margin: 0 }` has higher
    specificity than a bare `.pmd-analytic` rule and would otherwise

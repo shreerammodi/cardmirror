@@ -574,6 +574,10 @@ export interface Settings {
   includeSpeechDocPocket: boolean;
   /** Whether to show the cite preview on hover in the nav pane. */
   showCitePreview: boolean;
+  /** Whether computed card numbers (the auto-numbering skeleton) render. Numbers
+   *  are display-only; turning this off hides them without touching the doc.
+   *  Authoring a role auto-enables it. See NUMBERING_PLAN.md §6. */
+  showCardNumbering: boolean;
   /** Show a red dot on the ribbon's Manage Flashcards button when one or
    *  more flashcards are due for review today. On by default. */
   flashcardDueDot: boolean;
@@ -1336,6 +1340,7 @@ const DEFAULTS: Settings = {
   findCategoryOrder: ['heading', 'tag', 'analytic', 'undertag', 'cite', 'other'],
   includeSpeechDocPocket: true,
   showCitePreview: true,
+  showCardNumbering: true,
   flashcardDueDot: true,
   editorSpellcheck: false,
   smartQuotes: false,
@@ -2292,6 +2297,16 @@ export const SETTING_METADATA: SettingMeta[] = [
     category: 'appearance',
     section: 'Nav pane & indicators',
     aliases: ['hover preview'],
+  },
+  {
+    key: 'showCardNumbering',
+    label: 'Show card numbering',
+    description:
+      'Render the computed numbers/letters for cards you have marked as numbered or substructure. Display-only — turning this off hides the numbers but keeps the structure; authoring a role turns it back on.',
+    kind: 'toggle',
+    category: 'appearance',
+    section: 'Nav pane & indicators',
+    aliases: ['numbering', 'card numbers', 'auto number'],
   },
   {
     key: 'flashcardDueDot',
@@ -3398,6 +3413,7 @@ function sanitize(s: Settings): Settings {
     includeSpeechDocPocket:
       s.includeSpeechDocPocket === false ? false : true,
     showCitePreview: !!s.showCitePreview,
+    showCardNumbering: s.showCardNumbering === false ? false : true,
     flashcardDueDot: s.flashcardDueDot === false ? false : true,
     editorSpellcheck: !!s.editorSpellcheck,
     smartQuotes: !!s.smartQuotes,

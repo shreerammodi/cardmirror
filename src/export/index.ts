@@ -29,6 +29,16 @@ export async function toDocx(doc: PMNode, opts: ExportOptions = {}): Promise<Uin
   for (const part of result.mediaParts) {
     docx.writeBinary(part.path, part.bytes);
   }
+  if (result.numberingXml) {
+    docx.writeText('word/numbering.xml', result.numberingXml);
+    await docx.addContentTypeOverrides([
+      {
+        partName: '/word/numbering.xml',
+        contentType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml',
+      },
+    ]);
+  }
   if (result.footnotesXml) {
     docx.writeText('word/footnotes.xml', result.footnotesXml);
     if (result.footnotesRelsXml) {
