@@ -33,6 +33,8 @@ import {
 } from './transclusion.js';
 import { resolveTransclusion } from './transclusion-resolve.js';
 import { getViewDocPath } from './transclusion-doc-path.js';
+import { flattenSelfRefsInFragment } from './self-transclusion.js';
+import { newHeadingId } from '../schema/index.js';
 
 /** A cross-file live zone whose source we can meaningfully re-check: a real
  *  transclusion with a source ref to read. (Intra-doc windows are a separate
@@ -76,7 +78,11 @@ export function inDocDivergence(doc: PMNode): { all: Set<string>; diverged: Set<
     const id = zoneIdentity(node);
     all.add(id);
     const section = extractSection(doc, String(node.attrs['source_heading_id'] ?? ''));
-    if (section && section.content.size > 0 && zoneDiverged(node, section.content)) diverged.add(id);
+    // Materialize the section's live views the SAME way the copy's content +
+    // shape baseline were (against the live doc) — else a copy of a section that
+    // holds a live view would read as perpetually diverged.
+    const content = section ? flattenSelfRefsInFragment(section.content, doc, newHeadingId) : null;
+    if (content && content.size > 0 && zoneDiverged(node, content)) diverged.add(id);
     return false; // zones never nest
   });
   return { all, diverged };
@@ -120,7 +126,12 @@ export async function checkAllZoneDivergence(view: EditorView): Promise<Divergen
     let sourceContent: Fragment | null = null;
     if (isInDocCopy(node)) {
       const section = extractSection(view.state.doc, String(node.attrs['source_heading_id'] ?? ''));
-      sourceContent = section && section.content.size > 0 ? section.content : null;
+      // Same materialization as the pull/shape path (live views → cards), so the
+      // baseline and the fresh read are hashed identically.
+      const content = section
+        ? flattenSelfRefsInFragment(section.content, view.state.doc, newHeadingId)
+        : null;
+      sourceContent = content && content.size > 0 ? content : null;
     } else {
       const outcome = await resolveTransclusion(
         docPath,

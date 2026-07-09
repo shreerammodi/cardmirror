@@ -22,6 +22,7 @@ import {
   type SourceRefBase,
 } from './transclusion.js';
 import { getViewDocPath } from './transclusion-doc-path.js';
+import { flattenSelfRefsInFragment } from './self-transclusion.js';
 import { resolveTransclusion, type ResolveOutcome } from './transclusion-resolve.js';
 import { ZONE_REFRESHED_META } from './transclusion-divergence-plugin.js';
 import { showConfirm } from './confirm-dialog.js';
@@ -89,7 +90,13 @@ export function buildLiveZoneAttrs(
   if (!docPath) return { ok: false, reason: 'no-doc-path' };
   const chosen = chooseSourceRef(docPath, sourceAbsPath, roots);
   if (!chosen) return { ok: false, reason: 'no-portable-ref' };
-  const { content, hash, shapeHash } = prepareZoneContent(section.content, newHeadingId);
+  // A linked copy is a FLAT snapshot: materialize any live views in the source
+  // section to plain cards (resolved against the source doc). Keeping zone content
+  // self_ref-free is what stops a copy from carrying a live view whose rail would
+  // stack inside the copy's rail (a second transclusion updating from a different
+  // source). Nested linked copies are flattened next by prepareZoneContent.
+  const flat = flattenSelfRefsInFragment(section.content, sourceDoc, newHeadingId);
+  const { content, hash, shapeHash } = prepareZoneContent(flat, newHeadingId);
   const attrs: TransclusionAttrs = {
     source_ref: chosen.ref,
     source_ref_base: chosen.base,
@@ -109,16 +116,17 @@ export function buildLiveZoneAttrs(
  * Build an in-doc LINKED COPY (attrs + content) from a section of THIS document.
  * Like `buildLiveZoneAttrs` but the source is in-doc: no file path / portable
  * ref, `source_ref` is the `SELF_SOURCE_REF` marker, and refresh + divergence
- * resolve from the live doc. Nested cross-file copies flatten to a snapshot;
- * nested live views (`self_ref`) are KEPT — a static copy may contain a live
- * view (that's fine and intended).
+ * resolve from the live doc. A copy is a FLAT snapshot — nested cross-file copies
+ * AND nested live views both materialize to plain cards, so the copy never
+ * carries a second transclusion rail (no stacked rails).
  */
 export function buildInDocCopyAttrs(doc: PMNode, headingId: string): BuildZoneOutcome {
   if (!headingId) return { ok: false, reason: 'no-heading-id' };
   const section = extractSection(doc, headingId);
   if (!section) return { ok: false, reason: 'no-section' };
   if (section.content.size === 0) return { ok: false, reason: 'empty-section' };
-  const { content, hash, shapeHash } = prepareZoneContent(section.content, newHeadingId);
+  const flat = flattenSelfRefsInFragment(section.content, doc, newHeadingId);
+  const { content, hash, shapeHash } = prepareZoneContent(flat, newHeadingId);
   const attrs: TransclusionAttrs = {
     source_ref: SELF_SOURCE_REF,
     source_ref_base: 'doc',
@@ -182,11 +190,14 @@ export interface RefreshOptions {
   confirmEdits?: boolean;
 }
 
-/** Resolve an in-doc linked copy's source from the live doc (no file read). */
+/** Resolve an in-doc linked copy's source from the live doc (no file read). Live
+ *  views in the section materialize to plain cards (against the live doc), so a
+ *  refresh re-pulls a flat snapshot — the copy never re-acquires a nested rail. */
 function resolveInDocSource(doc: PMNode, headingId: string): ResolveOutcome {
   const section = extractSection(doc, headingId);
   if (!section) return { ok: false, reason: 'heading-missing' };
-  return { ok: true, result: section, sourceName: '' };
+  const content = flattenSelfRefsInFragment(section.content, doc, newHeadingId);
+  return { ok: true, result: { ...section, content }, sourceName: '' };
 }
 
 export async function refreshZoneAtPos(

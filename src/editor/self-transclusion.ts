@@ -158,6 +158,9 @@ export function flattenSelfRefsInFragment(
   sourceDoc: PMNode,
   freshId: () => string,
 ): Fragment {
+  // No self_ref → nothing to inline; return as-is (the common case, and it keeps
+  // this cheap on the divergence hot path where it runs on every source read).
+  if (!fragmentHasSelfRef(frag)) return frag;
   // One resolver for the whole fragment so N self_refs share the memo (linear,
   // not O(N × chain)).
   return flattenWithResolver(frag, makeProjectionResolver(sourceDoc), freshId);

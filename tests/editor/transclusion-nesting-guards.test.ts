@@ -20,8 +20,15 @@ import {
   isTransclusionNode,
 } from '../../src/editor/transclusion.js';
 import { freshHeadingIds, rewriteHeadingIds } from '../../src/editor/drag-controller.js';
-import { createSelfRefNode, isSelfRef, resolveSelfProjection } from '../../src/editor/self-transclusion.js';
+import {
+  createSelfRefNode,
+  isSelfRef,
+  resolveSelfProjection,
+  fragmentHasSelfRef,
+} from '../../src/editor/self-transclusion.js';
 import { insertSelfRef } from '../../src/editor/self-transclusion-commands.js';
+import { buildInDocCopyAttrs } from '../../src/editor/transclusion-actions.js';
+import { inDocDivergence } from '../../src/editor/transclusion-divergence.js';
 import { buildPastePlugin } from '../../src/editor/paste-plugin.js';
 import { rememberLinkedCopy, clearLinkedCopy } from '../../src/editor/clipboard-link-cache.js';
 
@@ -157,6 +164,49 @@ describe('issue 3a — creating a live view inside a linked copy shunts it out',
     expect(selfDepth).toBe(0); // top level
     expect(selfInsideZone).toBe(false);
     view.destroy();
+  });
+});
+
+describe('case 5 — a linked copy of a section holding a live view materializes it flat', () => {
+  // Other (source of the live view) · Src (the section being copied, holds a live
+  // view of Other) · Dest (where the copy lands).
+  function docWithViewInSection(): PMNode {
+    return schema.nodes['doc']!.create(null, [
+      block('Other', 'O'),
+      card('OtherCard', 'o-ev'),
+      block('Src', 'S'),
+      card('SrcCard', 's-ev'),
+      createSelfRefNode(schema, 'O', '↳ Other'),
+      block('Dest', 'D'),
+      card('DestCard', 'd-ev'),
+    ]);
+  }
+
+  it('buildInDocCopyAttrs flattens the embedded live view to plain cards', () => {
+    const doc = docWithViewInSection();
+    const outcome = buildInDocCopyAttrs(doc, 'S');
+    expect(outcome.ok).toBe(true);
+    const content = outcome.content!;
+    // No live view survives in the copy — no rail-in-rail.
+    expect(fragmentHasSelfRef(content)).toBe(false);
+    const text = content.textBetween(0, content.size, ' ');
+    expect(text).toContain('s-ev'); // the section's own card
+    expect(text).toContain('o-ev'); // the live view's projected card, now inlined flat
+  });
+
+  it('the freshly-created copy does NOT read as edited or diverged', () => {
+    const doc = docWithViewInSection();
+    const outcome = buildInDocCopyAttrs(doc, 'S');
+    const copy = createTransclusionNode(schema, outcome.attrs!, outcome.content!);
+    // Put the copy in Dest's section (not Src's) so extracting Src is unchanged.
+    const full = schema.nodes['doc']!.create(null, [...docWithViewInSection().content.content, copy]);
+
+    expect(isZoneEdited(copy)).toBe(false);
+    // Divergence recomputes Src's shape the SAME way (live view → cards); the
+    // baseline and the fresh read hash identically, so it's not flagged.
+    const { all, diverged } = inDocDivergence(full);
+    expect(all.size).toBe(1);
+    expect(diverged.size).toBe(0);
   });
 });
 

@@ -9,7 +9,7 @@
  */
 import type { Node as PMNode } from 'prosemirror-model';
 import { getElectronHost } from './host/index.js';
-import { parseNative } from '../index.js';
+import { parseNative, newHeadingId } from '../index.js';
 import { fromDocx } from '../import/index.js';
 import { fileFormat } from './file-search.js';
 import { settings } from './settings.js';
@@ -18,6 +18,7 @@ import {
   type ExtractResult,
   type SourceRefBase,
 } from './transclusion.js';
+import { flattenSelfRefsInFragment } from './self-transclusion.js';
 
 export type ResolveReason =
   | 'not-desktop'
@@ -132,5 +133,10 @@ async function resolveOnce(
 
   const result = extractSection(doc, headingId);
   if (!result) return { ok: false, reason: 'heading-missing', sourceName: file.name };
-  return { ok: true, result, sourceName: file.name };
+  // Materialize any live views in the source section to plain cards (resolved
+  // against the SOURCE file's doc — a self_ref is intra-doc, so it must resolve
+  // where it lives, not in the transcluding doc). Keeps a linked copy a flat
+  // snapshot with no nested transclusion rail, for both refresh and divergence.
+  const content = flattenSelfRefsInFragment(result.content, doc, newHeadingId);
+  return { ok: true, result: { ...result, content }, sourceName: file.name };
 }

@@ -75,8 +75,10 @@ describe('buildInDocCopyAttrs', () => {
     expect(node.content.size).toBeGreaterThan(0);
   });
 
-  it('keeps a nested live view inside the copy (static copy, live window inside)', () => {
+  it('flattens a nested live view inside the copy (a copy is a flat snapshot — no stacked rails)', () => {
     const d = schema.nodes['doc']!.create(null, [
+      block('Other', 'other'),
+      card('O', 'other-ev'),
       block('Src', 'src'),
       card('A', 'alpha'),
       createSelfRefNode(schema, 'other', '↳ Other'),
@@ -89,7 +91,10 @@ describe('buildInDocCopyAttrs', () => {
       if (isSelfRef(n)) selfRefs++;
       return true;
     });
-    expect(selfRefs).toBe(1); // the live view is kept, not flattened
+    // The live view is materialized to plain cards (resolved against the doc), not
+    // kept — so the copy never carries a second transclusion rail.
+    expect(selfRefs).toBe(0);
+    expect(o.content!.textBetween(0, o.content!.size, ' ')).toContain('other-ev');
   });
 
   it('refuses an empty or missing section', () => {
