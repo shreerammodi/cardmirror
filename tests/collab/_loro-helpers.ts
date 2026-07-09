@@ -5,7 +5,7 @@
  */
 
 import { EditorState, type Plugin } from 'prosemirror-state';
-import { EditorView } from 'prosemirror-view';
+import { EditorView, type NodeViewConstructor } from 'prosemirror-view';
 import type { Node as PMNode, Mark, MarkType } from 'prosemirror-model';
 import { LoroDoc } from 'loro-crdt';
 import { LoroSyncPlugin, updateLoroToPmState } from 'loro-prosemirror';
@@ -24,11 +24,14 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-export function mkView(plugins: Plugin[]): EditorView {
+export function mkView(
+  plugins: Plugin[],
+  nodeViews?: Record<string, NodeViewConstructor>,
+): EditorView {
   const el = document.createElement('div');
   document.body.appendChild(el);
   const state = EditorState.create({ schema, plugins });
-  return new EditorView(el, { state });
+  return new EditorView(el, { state, nodeViews });
 }
 
 function textStyleConfig() {
@@ -57,6 +60,7 @@ export async function createLoroPeers(
   seed: PMNode,
   n: number,
   extraPlugins?: (ldoc: LoroDoc) => Plugin[],
+  nodeViews?: Record<string, NodeViewConstructor>,
 ): Promise<LoroPeer[]> {
   const seedDoc = new LoroDoc();
   seedDoc.configTextStyle(textStyleConfig());
@@ -67,10 +71,10 @@ export async function createLoroPeers(
   for (let i = 0; i < n; i++) {
     const ldoc = new LoroDoc();
     ldoc.import(snapshot);
-    const view = mkView([
-      LoroSyncPlugin({ doc: ldoc as SyncDoc }),
-      ...(extraPlugins ? extraPlugins(ldoc) : []),
-    ]);
+    const view = mkView(
+      [LoroSyncPlugin({ doc: ldoc as SyncDoc }), ...(extraPlugins ? extraPlugins(ldoc) : [])],
+      nodeViews,
+    );
     peers.push({
       view,
       ldoc,
