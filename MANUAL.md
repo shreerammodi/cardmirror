@@ -998,7 +998,7 @@ it does nothing and tells you so.
 *Desktop only.* Card sharing sends cards to other people's machines over the
 network. Two pills sit to the right of the dropzone — **Send** and **Receive**.
 
-**Turn it on.** In **Settings → Card Sharing**, switch it on. Your machine gets
+**Turn it on.** In **Settings → Collaboration**, switch it on. Your machine gets
 a **code**, shown there — share it with anyone you want to be able to send you
 cards. To send to someone, add them under **Recipients**: paste the code they
 gave you and give them a name. You can also bundle several recipients into a
@@ -1012,7 +1012,7 @@ top.
 send. Dropping on a group fans the card out to every member.
 
 **Send to a starred target with one keystroke.** Click the **star** on any
-recipient or group in **Settings → Card Sharing** to make it your starred target
+recipient or group in **Settings → Collaboration** to make it your starred target
 (only one can be starred — starring another moves it). The **Send to Starred**
 command then sends the card under your cursor (or the current selection) straight
 to that target, without opening the Send pill — just like Send to Dropzone, but
@@ -1046,7 +1046,7 @@ after three hours. Sharing is off until you turn it on.
 `docker compose up`; see its README). To use your own server, set
 **Custom relay URL** (e.g. `https://relay.example.com/relay`) and
 **Custom relay token** (the `RELAY_TOKEN` you configured on it) in
-Settings → Card Sharing. Everyone sharing cards with each other must
+Settings → Collaboration. Everyone sharing cards with each other must
 point at the same relay. Leave both empty to use the official relay.
 
 ---
@@ -1057,6 +1057,18 @@ point at the same relay. Leave both empty to use the official relay.
 document together in real time — your typing, comments, and cursors appear on
 everyone's screen as you work. It travels over the same end-to-end-encrypted
 relay as card sharing (§8), so the relay only ever sees scrambled data.
+
+**Think of it as a call, not a shared document.** If you've used Google Docs,
+set that model aside. Co-editing is *not* a document that lives on a server for
+people to open, join, and leave over days. It's closer to a **conference call**:
+a live session that exists only while it's happening, hosted by whoever
+**starts** it. The document being worked on is *theirs* — everyone else edits a
+synced copy of the host's document. People can drop in and out while the call is
+going (rejoin from the **Sessions** list), but when the host **ends** it — or it
+goes idle long enough — the call is over: everyone keeps whatever copy they have,
+and there's no standing room to come back to. A session is an *event*, not a
+place. So the person who cares most about the result should usually be the one
+who starts it, and everyone should keep their own saved copies.
 
 **It's experimental — keep your own copies.** Co-editing is new and still rough
 in places; it can occasionally hiccup or need a reconnect. Treat a live session
