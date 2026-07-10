@@ -7,10 +7,9 @@
  * from the skeleton whenever the doc changes. Display is gated on the
  * `showCardNumbering` setting — the skeleton stays in the doc either way.
  *
- * The plugin also owns the per-window numbering (§7): the resolved numbering is
- * kept in plugin state so a live view's NodeView can render numbers on its
- * projected cards, and each `self_ref` is stamped with a `data-num-hash` node
- * decoration so the NodeView re-renders when its host-positional numbers change.
+ * Transclusion (§7): a live view's mirrored cards are real child content, so
+ * they're decorated with host-positional glyphs exactly like a linked copy's —
+ * the pass descends into both `self_ref` and `transclusion_ref`.
  *
  * Prototype scope: format is fixed (`1.` / `a)`). Full recompute on every
  * docChanged is fine at this size (numbering is inherently non-local).
@@ -24,8 +23,6 @@ import { settings } from './settings.js';
 
 interface NumberingState {
   decorations: DecorationSet;
-  /** self_ref position → per-projected-card labels (for the NodeView). */
-  windows: Map<number, (NumberLabel | null)[]>;
 }
 
 export const numberingPluginKey = new PluginKey<NumberingState>('cardNumbering');
@@ -54,14 +51,8 @@ export function createNumberGlyph(label: NumberLabel): HTMLElement {
   return span;
 }
 
-/** Order-stable digest of a window's labels, so the NodeView re-renders exactly
- *  when its projected numbers change (not on every unrelated edit). */
-function windowHash(labels: (NumberLabel | null)[]): string {
-  return labels.map((l) => (l ? l.text : '·')).join(',');
-}
-
 function build(doc: PMNode): NumberingState {
-  const { cards, windows } = computeNumbering(doc);
+  const { cards } = computeNumbering(doc);
   const decos: Decoration[] = [];
 
   // Computed number / letter glyphs on host cards, plus optional per-level indent.
@@ -111,27 +102,18 @@ function build(doc: PMNode): NumberingState {
       }
       return false;
     }
-    if (t === 'pocket' || t === 'hat' || t === 'self_ref') return false;
-    return true; // doc root + transclusion_ref: descend to reach inner cards
+    if (t === 'pocket' || t === 'hat') return false;
+    return true; // doc root + transclusion_ref + self_ref: descend to reach inner cards
   });
-
-  // Stamp each live view with its numbers' hash so its NodeView re-renders when
-  // the host-positional numbers change (its projection content may be unchanged).
-  for (const [pos, labels] of windows) {
-    decos.push(Decoration.node(pos, pos + 1, { 'data-num-hash': windowHash(labels) }));
-  }
 
   return {
     decorations: decos.length ? DecorationSet.create(doc, decos) : DecorationSet.empty,
-    windows,
   };
 }
 
 export const cardNumberingPlugin: Plugin<NumberingState> = new Plugin<NumberingState>({
   key: numberingPluginKey,
   state: {
-    // Always compute (even when display is off) so a live view's NodeView can
-    // read window labels and a toggle-on reveals them without a doc edit.
     init: (_config, { doc }) => build(doc),
     apply: (tr, prev) => (tr.docChanged || tr.getMeta(NUMBERING_REFRESH) ? build(tr.doc) : prev),
   },
@@ -145,13 +127,3 @@ export const cardNumberingPlugin: Plugin<NumberingState> = new Plugin<NumberingS
     },
   },
 });
-
-/** The projected-card labels for the live view at `selfRefPos`, for the NodeView
- *  to render (host-positional). Empty when display is off or none resolved. */
-export function windowNumbering(
-  state: import('prosemirror-state').EditorState,
-  selfRefPos: number,
-): (NumberLabel | null)[] | null {
-  if (!settings.get('showCardNumbering')) return null;
-  return numberingPluginKey.getState(state)?.windows.get(selfRefPos) ?? null;
-}

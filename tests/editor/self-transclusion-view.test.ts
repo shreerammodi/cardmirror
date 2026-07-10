@@ -4,8 +4,8 @@
  * section read-only, RE-RENDERS live when the source is edited (via the plugin's
  * decoration → NodeView.update), and Unlink/Delete behave.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { EditorState, TextSelection, NodeSelection } from 'prosemirror-state';
+import { describe, it, expect } from 'vitest';
+import { EditorState, TextSelection } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { type Node as PMNode } from 'prosemirror-model';
 import { schema, newHeadingId } from '../../src/schema/index.js';
@@ -64,11 +64,11 @@ function endOfSourceCard(view: EditorView): number {
 }
 
 describe('self_ref window — live projection', () => {
-  it('projects the source section read-only', () => {
+  it('projects the source section as real (read-only) content', () => {
     const view = makeView();
     expect(windowText(view)).toContain('alpha');
-    const body = view.dom.querySelector('.pmd-self-ref-body') as HTMLElement;
-    expect(body.getAttribute('contenteditable')).toBe('false'); // not editable through the window
+    // The view holds a real mirrored card as child content, not a leaf atom.
+    expect(view.state.doc.nodeAt(selfRefPos(view))!.childCount).toBeGreaterThan(0);
     view.destroy();
   });
 
@@ -99,18 +99,21 @@ describe('self_ref window — live projection', () => {
     const view = makeView();
     // Delete the Source block heading (and only it).
     view.dispatch(view.state.tr.delete(0, block('Source', SRC).nodeSize));
-    expect(windowText(view).toLowerCase()).toContain('not found');
+    const note = view.dom.querySelector('.pmd-self-ref-note') as HTMLElement;
+    expect(note.style.display).not.toBe('none'); // shown
+    expect(note.textContent!.toLowerCase()).toContain('not found');
     view.destroy();
   });
 
-  it('the projection carries NO data-id (no duplicate ids vs the source)', () => {
+  it('the projection carries only BLANK ids (no collision with the real source)', () => {
     const view = makeView();
     const body = view.dom.querySelector('.pmd-self-ref-body') as HTMLElement;
-    // The window renders real card DOM, but its data-id attrs are stripped so
-    // [data-id="X"] scroll lookups target the real source, not this copy.
-    expect(body.querySelectorAll('[data-id]').length).toBe(0);
-    // The real source card still has its data-id.
-    expect(view.dom.querySelectorAll('[data-id]').length).toBeGreaterThan(0);
+    const ids = [...body.querySelectorAll('[data-id]')].map((el) => el.getAttribute('data-id'));
+    // Every mirrored heading id is blank — never a real source id — so
+    // [data-id="<real id>"] scroll lookups target the true source, not this copy.
+    expect(ids.every((id) => id === '')).toBe(true);
+    // The real source card keeps its non-empty id.
+    expect([...view.dom.querySelectorAll('[data-id]')].some((el) => el.getAttribute('data-id'))).toBe(true);
     view.destroy();
   });
 
@@ -177,185 +180,6 @@ describe('self_ref window — actions', () => {
     expect(insertSelfRef(view, SRC)).toBe(true);
     expect(selfRefPos(view)).toBeGreaterThanOrEqual(0);
     expect(windowText(view)).toContain('alpha');
-    view.destroy();
-  });
-});
-
-describe('self_ref window — a spanning selection highlights the view (send-to-speech)', () => {
-  // A doc where the view sits BETWEEN two cards, so a TextSelection can span it.
-  function mid(): EditorView {
-    const doc = schema.nodes['doc']!.create(null, [
-      block('Source', SRC),
-      card('S', 'src-body'),
-      block('Mid', 'mid'),
-      card('Above', 'above'),
-      createSelfRefNode(schema, SRC, '↳ Source'),
-      card('Below', 'below'),
-    ]);
-    const el = document.createElement('div');
-    document.body.appendChild(el);
-    return new EditorView(el, {
-      state: EditorState.create({ doc, plugins: [makeSelfRefPlugin()] }),
-      nodeViews: selfRefNodeViews,
-    });
-  }
-  const viewDom = (v: EditorView) => v.dom.querySelector('.pmd-self-ref') as HTMLElement;
-
-  it('adds the in-selection class when a TextSelection spans the view', () => {
-    const view = mid();
-    const sp = selfRefPos(view);
-    const node = view.state.doc.nodeAt(sp)!;
-    // Empty selection → not marked.
-    expect(viewDom(view).classList.contains('pmd-self-ref-in-selection')).toBe(false);
-    // Span from a card above to a card below (crossing the view).
-    view.dispatch(
-      view.state.tr.setSelection(TextSelection.between(view.state.doc.resolve(sp - 4), view.state.doc.resolve(sp + node.nodeSize + 4))),
-    );
-    // The PM selection actually covers the view…
-    expect(view.state.selection.from).toBeLessThanOrEqual(sp);
-    expect(view.state.selection.to).toBeGreaterThanOrEqual(sp + node.nodeSize);
-    // …and the view is marked selected for CSS.
-    expect(viewDom(view).classList.contains('pmd-self-ref-in-selection')).toBe(true);
-    view.destroy();
-  });
-
-  it('does NOT rebuild the projection DOM on a selection-only change (no drag disruption)', () => {
-    const view = mid();
-    const firstCard = view.dom.querySelector('.pmd-self-ref-body .pmd-card') as HTMLElement;
-    expect(firstCard).toBeTruthy();
-    const sp = selfRefPos(view);
-    const node = view.state.doc.nodeAt(sp)!;
-    view.dispatch(
-      view.state.tr.setSelection(TextSelection.between(view.state.doc.resolve(sp - 4), view.state.doc.resolve(sp + node.nodeSize + 4))),
-    );
-    // Same DOM element — the render guard skipped the rebuild (the projection is
-    // unchanged), so a live drag-selection over the view isn't collapsed.
-    expect(view.dom.querySelector('.pmd-self-ref-body .pmd-card')).toBe(firstCard);
-    view.destroy();
-  });
-});
-
-describe('self_ref window — native drag / shift-click across the view is fixed up to span it', () => {
-  function mid(): EditorView {
-    const doc = schema.nodes['doc']!.create(null, [
-      block('Source', SRC),
-      card('S', 'src-body'),
-      block('Mid', 'mid'),
-      card('Above', 'above'),
-      createSelfRefNode(schema, SRC, '↳ Source'),
-      card('Below', 'below'),
-    ]);
-    const el = document.createElement('div');
-    document.body.appendChild(el);
-    return new EditorView(el, {
-      state: EditorState.create({ doc, plugins: [makeSelfRefPlugin()] }),
-      nodeViews: selfRefNodeViews,
-    });
-  }
-  function domHandlers(view: EditorView) {
-    const plugin = view.state.plugins.find((p) => p.props?.handleDOMEvents)!;
-    return plugin.props.handleDOMEvents as unknown as {
-      mousedown: (v: EditorView, e: MouseEvent) => boolean;
-      mouseup: (v: EditorView, e: MouseEvent) => boolean;
-    };
-  }
-  const ev = (mods: Partial<MouseEvent> = {}): MouseEvent =>
-    ({ button: 0, clientX: 0, clientY: 0, shiftKey: false, metaKey: false, ctrlKey: false, altKey: false, ...mods } as MouseEvent);
-  // Feed posAtCoords a scripted sequence of positions (real coords need layout).
-  function scriptCoords(view: EditorView, positions: number[]): void {
-    let i = 0;
-    (view as unknown as { posAtCoords: unknown }).posAtCoords = () => ({ pos: positions[Math.min(i++, positions.length - 1)], inside: -1 });
-  }
-
-  it('a drag from a card above to a card below spans the view', () => {
-    vi.useFakeTimers();
-    const view = mid();
-    const sp = selfRefPos(view);
-    const node = view.state.doc.nodeAt(sp)!;
-    const anchor = sp - 4;
-    const head = sp + node.nodeSize + 4;
-    scriptCoords(view, [anchor, head]); // mousedown → anchor, mouseup → head
-    const h = domHandlers(view);
-    h.mousedown(view, ev());
-    h.mouseup(view, ev({ clientY: 100 }));
-    vi.runAllTimers();
-    expect(view.state.selection.from).toBeLessThanOrEqual(sp);
-    expect(view.state.selection.to).toBeGreaterThanOrEqual(sp + node.nodeSize);
-    vi.useRealTimers();
-    view.destroy();
-  });
-
-  it('a shift-click below the view extends the selection across it', () => {
-    vi.useFakeTimers();
-    const view = mid();
-    const sp = selfRefPos(view);
-    const node = view.state.doc.nodeAt(sp)!;
-    // Existing selection anchored ABOVE the view.
-    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, sp - 4, sp - 4)));
-    const head = sp + node.nodeSize + 4;
-    scriptCoords(view, [head]); // shift-mousedown uses selection.anchor; mouseup → head
-    const h = domHandlers(view);
-    h.mousedown(view, ev({ shiftKey: true }));
-    h.mouseup(view, ev({ clientY: 100 }));
-    vi.runAllTimers();
-    expect(view.state.selection.from).toBeLessThanOrEqual(sp);
-    expect(view.state.selection.to).toBeGreaterThanOrEqual(sp + node.nodeSize);
-    vi.useRealTimers();
-    view.destroy();
-  });
-
-  it('a drag that does NOT cross the view is left to native selection (no override)', () => {
-    vi.useFakeTimers();
-    const view = mid();
-    const start = view.state.selection;
-    // Both endpoints inside the "Above" card (before the view).
-    const sp = selfRefPos(view);
-    scriptCoords(view, [sp - 6, sp - 3]);
-    const h = domHandlers(view);
-    h.mousedown(view, ev());
-    h.mouseup(view, ev());
-    vi.runAllTimers();
-    // No forced span — the plugin didn't dispatch (selection unchanged from start).
-    expect(view.state.selection.eq(start)).toBe(true);
-    vi.useRealTimers();
-    view.destroy();
-  });
-});
-
-describe('self_ref window — click selects the whole node (but stays span-selectable)', () => {
-  function clickOn(view: EditorView, mods: Partial<MouseEvent> = {}): unknown {
-    const pos = selfRefPos(view);
-    const node = view.state.doc.nodeAt(pos)!;
-    const event = { shiftKey: false, metaKey: false, ctrlKey: false, altKey: false, button: 0, ...mods } as MouseEvent;
-    return view.someProp('handleClickOn', (fn) => fn(view, pos + 1, node, pos, event, true));
-  }
-
-  it('a plain click node-selects the whole live view', () => {
-    const view = makeView();
-    expect(clickOn(view)).toBe(true);
-    const sel = view.state.selection;
-    expect(sel instanceof NodeSelection && isSelfRef(sel.node)).toBe(true);
-    expect(sel.from).toBe(selfRefPos(view));
-    view.destroy();
-  });
-
-  it('a SHIFT-click is left to native handling (so a selection can extend to span the view)', () => {
-    const view = makeView();
-    // Park a text selection first, then shift-click the view.
-    view.dispatch(view.state.tr.setSelection(TextSelection.atStart(view.state.doc)));
-    expect(clickOn(view, { shiftKey: true })).not.toBe(true);
-    // The plugin didn't force a node-selection.
-    expect(view.state.selection instanceof NodeSelection).toBe(false);
-    view.destroy();
-  });
-
-  it('ignores clicks that are not on a live view', () => {
-    const view = makeView();
-    const cardNode = view.state.doc.child(1); // the "A" card, not a self_ref
-    const handled = view.someProp('handleClickOn', (fn) =>
-      fn(view, 3, cardNode, view.state.doc.child(0).nodeSize, { button: 0 } as MouseEvent, true),
-    );
-    expect(handled).not.toBe(true);
     view.destroy();
   });
 });

@@ -475,15 +475,18 @@ export const nodes: { [name: string]: NodeSpec } = {
    * `.cmir` (the source is in the same file, so the file stays self-contained).
    */
   self_ref: {
-    atom: true,
+    // A live view holds its mirrored section as REAL, read-only child content
+    // (not a leaf atom). That's what makes native selection just work — there's
+    // no atom boundary to get stuck on; a selection flows through it exactly like
+    // a linked copy (`transclusion_ref`). The children are DERIVED: a plugin keeps
+    // them equal to the projected source (id-less), edits inside are blocked by a
+    // filterTransaction, and the children are kept OUT of collab sync (a
+    // loro-prosemirror patch) so each peer re-derives them locally from the shared
+    // source — never a CRDT value, so no concurrent-re-projection conflict.
+    content: BLOCK_CONTENT,
     isolating: true,
     defining: true,
     selectable: true,
-    // NOT `draggable`: a native-draggable block can't be drag-SELECTED through
-    // (the browser won't extend a selection across it), so a selection couldn't
-    // span a live view. Instead it moves like everything else — via the editor's
-    // pickup-chord drag and nav-pane row drag (both build explicit transactions,
-    // no native HTML5 drag) — see `findContainerAt` / the nav windowed-row drag.
     attrs: {
       /** Stable heading id of the mirrored section, in THIS document. */
       source_heading_id: {
@@ -505,8 +508,6 @@ export const nodes: { [name: string]: NodeSpec } = {
         }),
       },
     ],
-    // Placeholder DOM — the NodeView renders the live projection. No content
-    // hole: it's an atom.
     toDOM: (node) => [
       'div',
       {
@@ -514,6 +515,7 @@ export const nodes: { [name: string]: NodeSpec } = {
         'data-source-heading-id': String(node.attrs['source_heading_id'] ?? ''),
         'data-source-label': String(node.attrs['source_label'] ?? ''),
       },
+      0,
     ],
   },
 

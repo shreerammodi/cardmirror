@@ -4,10 +4,9 @@
  * transparent, restart resets both — against the worked examples in the plan.
  */
 import { describe, it, expect } from 'vitest';
-import { type Node as PMNode } from 'prosemirror-model';
+import { Fragment, type Node as PMNode } from 'prosemirror-model';
 import { schema, newHeadingId } from '../../src/schema/index.js';
 import { computeNumbering, toLetters, type NumRole } from '../../src/editor/numbering.js';
-import { createSelfRefNode, isSelfRef } from '../../src/editor/self-transclusion.js';
 
 function card(tag: string, role: NumRole = 'none', restart = false): PMNode {
   return schema.nodes['card']!.createChecked({ numRole: role, numRestart: restart }, [
@@ -23,9 +22,6 @@ function analytic(tag: string, role: NumRole = 'none', restart = false): PMNode 
 }
 function block(text: string, restart = true): PMNode {
   return schema.nodes['block']!.create({ id: newHeadingId(), numRestart: restart }, schema.text(text));
-}
-function blockId(text: string, id: string): PMNode {
-  return schema.nodes['block']!.create({ id, numRestart: true }, schema.text(text));
 }
 function pocket(text: string): PMNode {
   return schema.nodes['pocket']!.create({ id: newHeadingId() }, schema.text(text));
@@ -44,8 +40,8 @@ function labels(d: PMNode): string[] {
       out.push(map.get(pos)?.text ?? '·');
       return false;
     }
-    if (t === 'transclusion_ref') return true; // count real cards inside a copy
-    if (t === 'pocket' || t === 'hat' || t === 'block' || t === 'self_ref') return false;
+    if (t === 'transclusion_ref' || t === 'self_ref') return true; // count real inner cards
+    if (t === 'pocket' || t === 'hat' || t === 'block') return false;
     return true;
   });
   return out;
@@ -201,47 +197,28 @@ describe('computeNumbering — linked copies participate', () => {
 });
 
 describe('computeNumbering — live views flow through the host count (§7)', () => {
-  // A source section under `src`, projected by a live view placed earlier.
-  const doc0 = doc(
-    card('A', 'number'), //                → 1
-    createSelfRefNode(schema, 'src', '↳ Source'), // window projects [X, Y]
-    card('B', 'number'), //                → continues AFTER the window
-    blockId('Source', 'src'), //                    resets the count for the real source
-    card('X', 'number'), //                real source card → 1 here
-    card('Y', 'sub'), //                   real source card → a here
-  );
-  function selfPos(d: PMNode): number {
-    let p = -1;
-    d.descendants((n, pos) => {
-      if (p < 0 && isSelfRef(n)) p = pos;
-    });
-    return p;
-  }
-
-  it('the window shows HOST-positional numbers for its projected cards', () => {
-    const { windows } = computeNumbering(doc0);
-    const labels = windows.get(selfPos(doc0))!;
-    expect(labels).toBeTruthy();
-    // X is a number and Y a sub; here they follow card A (=1), so 2 then a —
-    // different from their 1 / a at their real positions after the block reset.
-    expect(labels.map((l) => (l ? l.text : '·'))).toEqual(['2', 'a']);
-  });
-
-  it('a card after the window continues the count through it', () => {
-    // A=1, window contributes 2 (X), then B continues at 3.
-    expect(labels(doc0)).toEqual(['1', '3', '1', 'a']); // A, B, X, Y (real positions)
-  });
-
-  it('a projected skip pushes null (keeps index alignment with the DOM)', () => {
-    const d = doc(
-      createSelfRefNode(schema, 'src', '↳ Source'),
-      blockId('Source', 'src'),
-      card('X', 'number'),
-      card('mid'), // role none — a skip
-      card('Y', 'sub'),
+  // A live view holds its mirrored cards as REAL children; they're counted in
+  // document order at their real positions, exactly like a linked copy's.
+  function view(children: PMNode[]): PMNode {
+    return schema.nodes['self_ref']!.create(
+      { source_heading_id: 'src', source_label: '↳ Source' },
+      Fragment.fromArray(children),
     );
-    const labels2 = computeNumbering(d).windows.get(0)!;
-    expect(labels2.map((l) => (l ? l.text : '·'))).toEqual(['1', '·', 'a']);
+  }
+  const doc0 = doc(
+    card('A', 'number'), //                              → 1
+    view([card('X', 'number'), card('Y', 'sub')]), //    mirrored cards → X=2, Y=a
+    card('B', 'number'), //                              → 3, continues past the window
+  );
+
+  it('the window cards get HOST-positional numbers and the count continues past it', () => {
+    // A=1, X (in the window) continues at 2, its sub Y=a, then B continues at 3.
+    expect(labels(doc0)).toEqual(['1', '2', 'a', '3']); // A, X, Y, B
+  });
+
+  it('a skip card inside the window keeps the count (no number, no reset)', () => {
+    const d = doc(view([card('X', 'number'), card('mid'), card('Y', 'sub')]), card('after', 'number'));
+    expect(labels(d)).toEqual(['1', '·', 'a', '2']); // X=1, mid=skip, Y=a, after=2
   });
 });
 

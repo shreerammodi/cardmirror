@@ -36,7 +36,7 @@ describe('isSelfRef / createSelfRefNode', () => {
     expect(isSelfRef(n)).toBe(true);
     expect(n.attrs['source_heading_id']).toBe('h1');
     expect(n.attrs['source_label']).toBe('↳ Impacts');
-    expect(n.isAtom).toBe(true); // no editable content
+    expect(n.isAtom).toBe(false); // holds its mirrored section as (read-only) content
   });
   it('a card is not a self_ref', () => {
     expect(isSelfRef(card('A', 'a'))).toBe(false);

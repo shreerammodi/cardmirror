@@ -1,159 +1,107 @@
 /**
- * Live re-render for `self_ref` windows.
+ * Live view CONTENT plugin — keeps each `self_ref`'s children equal to its
+ * projected source, and enforces read-only.
  *
- * A window's NodeView projects the source section resolved from the CURRENT doc,
- * but `NodeView.update` only fires when the node itself or its decorations
- * change — not when some *other* part of the doc (the source section) is edited.
- * This plugin bridges that: on every doc change it hashes each window's resolved
- * projection and stamps it as a node decoration (`data-src-hash`). When a source
- * edit changes that hash, the decoration's attrs change, so ProseMirror calls
- * the NodeView's `update`, which re-resolves and re-renders. When nothing the
- * window mirrors changed, the hash is identical and no update fires — so
- * unrelated edits cost one hash, not a re-render.
- *
- * No document mutation, no history, no dirty flag — decorations only.
+ * A live view now holds its mirrored section as REAL, id-less child content (so
+ * native selection just works — no atom boundary). Those children are DERIVED,
+ * not authored:
+ *  - RE-DERIVE (appendTransaction + an initial pass on mount): whenever the
+ *    source changes, replace a view's children with the projected source
+ *    (`makeProjectionResolver`, ids blanked). Idempotent — a view whose children
+ *    already match is skipped — `addToHistory:false`, and tagged so the read-only
+ *    filter lets it through. The children are held OUT of collab sync (a
+ *    loro-prosemirror patch makes `self_ref` sync childless), so every peer runs
+ *    this LOCALLY against the shared source: the projection is never a CRDT value,
+ *    so there is no concurrent-re-projection conflict to reconcile.
+ *  - READ-ONLY (filterTransaction): reject any edit landing INSIDE a view (except
+ *    the re-derive). The view is still selectable-across, deletable, and movable
+ *    as a whole unit.
  */
 
-import { Plugin, PluginKey, NodeSelection, TextSelection } from 'prosemirror-state';
-import { Decoration, DecorationSet, type EditorView } from 'prosemirror-view';
-import type { Node as PMNode } from 'prosemirror-model';
-import { contentHash } from './transclusion.js';
+import { Plugin, PluginKey } from 'prosemirror-state';
+import type { Transaction, EditorState } from 'prosemirror-state';
+import type { Node as PMNode, Fragment } from 'prosemirror-model';
 import { isSelfRef, makeProjectionResolver } from './self-transclusion.js';
+import { rewriteHeadingIdsInFragment } from './transclusion.js';
 
-// ---- Mouse selection ACROSS a live view -----------------------------------
-// A live view's projection is a non-editable island, so a NATIVE drag / shift-
-// click selection stops at its boundary — the browser can't extend a selection
-// across it. We can't override the selection MID-drag (the browser re-resets it
-// every mousemove → flicker), so we let native selection run and, once the
-// gesture ENDS, fix the range up to span any view it crossed. `anchor` is the
-// gesture's start (drag origin, or the existing anchor for a shift-click);
-// `head` is where it ended.
+export const selfRefPluginKey = new PluginKey('selfRefContent');
 
-/** Whether a live view lies within [a, b] — the trigger to fix the range up. */
-function rangeCrossesSelfRef(doc: PMNode, a: number, b: number): boolean {
-  const from = Math.min(a, b);
-  const to = Math.max(a, b);
-  if (from >= to) return false;
-  let found = false;
-  doc.nodesBetween(from, to, (node) => {
-    if (isSelfRef(node)) found = true;
-    return !found;
-  });
-  return found;
-}
+/** Meta stamped on the plugin's own re-derive transaction: the read-only filter
+ *  lets it through, and appendTransaction won't re-fire on its own output. */
+export const SELF_REF_REDERIVE = 'selfRefRederive';
 
-/** Set an exact anchor→head TextSelection (spans a view `between` would clamp
- *  off). Deferred past the gesture so ProseMirror's own selection sync (which
- *  reads the native selection that stopped at the view) doesn't overwrite it. */
-function spanSelectionAcrossView(view: EditorView, anchor: number, head: number): void {
-  if ((view as unknown as { docView: unknown }).docView == null) return; // torn down
-  const size = view.state.doc.content.size;
-  if (anchor > size || head > size) return;
-  try {
-    const sel = TextSelection.create(view.state.doc, anchor, head);
-    if (!view.state.selection.eq(sel)) view.dispatch(view.state.tr.setSelection(sel));
-  } catch {
-    /* endpoints not selectable — leave the native selection as-is */
+/** The content range `[from,to]` of the self_ref whose CONTENT contains `pos`, or
+ *  null when `pos` isn't inside a live view. */
+function enclosingSelfRefContent(doc: PMNode, pos: number): { from: number; to: number } | null {
+  const $pos = doc.resolve(Math.max(0, Math.min(pos, doc.content.size)));
+  for (let d = $pos.depth; d > 0; d--) {
+    if (isSelfRef($pos.node(d))) {
+      const before = $pos.before(d);
+      return { from: before + 1, to: before + $pos.node(d).nodeSize - 1 };
+    }
   }
+  return null;
 }
 
-/** The in-flight mouse gesture's origin (module-level: only one at a time). */
-let mouseGesture: { view: EditorView; anchor: number } | null = null;
+/** Does any step edit the INTERIOR of a live view? Both endpoints inside the same
+ *  view's content = an interior edit (the view node itself is untouched). A step
+ *  that reaches out of the view (delete/move the whole unit) has an endpoint past
+ *  the content, so it's allowed. */
+function editsInsideView(doc: PMNode, tr: Transaction): boolean {
+  for (const step of tr.steps) {
+    const s = step as unknown as { from?: number; to?: number };
+    if (typeof s.from !== 'number' || typeof s.to !== 'number') continue;
+    const range = enclosingSelfRefContent(doc, s.from);
+    if (range && s.from >= range.from && s.to <= range.to) return true;
+  }
+  return false;
+}
 
-export const selfRefPluginKey = new PluginKey<DecorationSet>('selfRefLiveRender');
-
-function buildDecorations(doc: PMNode): DecorationSet {
-  const decos: Decoration[] = [];
-  // One resolver shared across every window (memoized — chained views resolve
-  // once total, not once per window).
-  const resolveProjection = makeProjectionResolver(doc);
+/** A transaction re-deriving every stale view's children, or null when all views
+ *  already match their projected source. */
+function rederiveTransaction(state: EditorState): Transaction | null {
+  const doc = state.doc;
+  const resolve = makeProjectionResolver(doc);
+  const edits: { from: number; to: number; content: Fragment }[] = [];
   doc.descendants((node, pos) => {
     if (!isSelfRef(node)) return true;
-    const p = resolveProjection(String(node.attrs['source_heading_id'] ?? ''));
-    // The hash folds in the resolved content plus the missing/cycle state, so any
-    // change the window should reflect flips it.
-    const hash = `${p.missing ? 'M' : ''}${p.cycle ? 'C' : ''}:${contentHash(p.content)}`;
-    decos.push(Decoration.node(pos, pos + node.nodeSize, { 'data-src-hash': hash }));
-    return false; // atom — nothing to descend into
+    const target = rewriteHeadingIdsInFragment(
+      resolve(String(node.attrs['source_heading_id'] ?? '')).content,
+      () => '',
+    );
+    if (!node.content.eq(target)) edits.push({ from: pos + 1, to: pos + node.nodeSize - 1, content: target });
+    return false; // a view's children hold no nested view (they're inlined) — don't descend
   });
-  return DecorationSet.create(doc, decos);
+  if (!edits.length) return null;
+  const tr = state.tr;
+  // High position first, so an earlier replacement never shifts a later one.
+  for (const e of edits.sort((a, b) => b.from - a.from)) {
+    tr.replaceWith(e.from, e.to, e.content);
+  }
+  tr.setMeta(SELF_REF_REDERIVE, true);
+  tr.setMeta('addToHistory', false);
+  return tr;
 }
 
-export function makeSelfRefPlugin(): Plugin<DecorationSet> {
-  return new Plugin<DecorationSet>({
+export function makeSelfRefPlugin(): Plugin {
+  return new Plugin({
     key: selfRefPluginKey,
-    state: {
-      init: (_config, state) => buildDecorations(state.doc),
-      apply: (tr, value, _old, newState) =>
-        tr.docChanged ? buildDecorations(newState.doc) : value,
+    filterTransaction(tr, state) {
+      if (tr.getMeta(SELF_REF_REDERIVE)) return true;
+      if (!tr.docChanged) return true;
+      return !editsInsideView(state.doc, tr);
     },
-    props: {
-      decorations(state) {
-        const base = selfRefPluginKey.getState(state) ?? DecorationSet.empty;
-        // A live view is an atom whose read-only projection is `user-select:none`,
-        // so a text selection SPANNING it wouldn't paint any ::selection over it —
-        // it'd look skipped. Mark every self_ref the current selection fully covers
-        // so CSS can show it selected (so click-drag / shift-click across it, and
-        // select→send-to-speech, visibly include the view). `nodesBetween` bounds
-        // the scan to the selection, not the whole doc.
-        const sel = state.selection;
-        if (sel.empty) return base;
-        const extra: Decoration[] = [];
-        state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
-          if (!isSelfRef(node)) return true;
-          if (sel.from <= pos && sel.to >= pos + node.nodeSize) {
-            extra.push(Decoration.node(pos, pos + node.nodeSize, { class: 'pmd-self-ref-in-selection' }));
-          }
-          return false; // atom — nothing to descend into
-        });
-        return extra.length ? base.add(state.doc, extra) : base;
-      },
-      // A plain click on a live view selects the WHOLE node (the green box) —
-      // reliably, and consistently across instances. Without this, a click on some
-      // views (e.g. two adjacent identical ones) starts a native word-selection in
-      // the read-only projection instead of node-selecting. MODIFIED clicks are
-      // left to native behavior: a shift-click must still EXTEND a text selection
-      // to include the view (the click-above → shift-click-below gesture that
-      // select→send-to-speech relies on), and the view stays span-selectable.
-      handleClickOn(view, _pos, node, nodePos, event) {
-        if (!isSelfRef(node)) return false;
-        const e = event as MouseEvent;
-        if (e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || e.button !== 0) return false;
-        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, nodePos)));
-        return true;
-      },
-      handleDOMEvents: {
-        // Record the gesture's origin. A shift-click extends from the CURRENT
-        // anchor; a fresh press starts at the pressed position. Never preventing
-        // default — native selection runs; we only fix it up on release.
-        mousedown(view, event) {
-          const e = event as MouseEvent;
-          if (e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey) {
-            mouseGesture = null;
-            return false;
-          }
-          const anchor = e.shiftKey
-            ? view.state.selection.anchor
-            : (view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos ?? null);
-          mouseGesture = anchor == null ? null : { view, anchor };
-          return false;
-        },
-        mouseup(view, event) {
-          const g = mouseGesture;
-          mouseGesture = null;
-          if (!g || g.view !== view) return false;
-          const e = event as MouseEvent;
-          const head = view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos;
-          if (head == null || head === g.anchor) return false;
-          if (!rangeCrossesSelfRef(view.state.doc, g.anchor, head)) return false;
-          // The drag / shift-click crossed a live view (native selection stopped at
-          // it). Defer so this lands AFTER ProseMirror finalizes the native
-          // selection, then span the view.
-          const { anchor } = g;
-          setTimeout(() => spanSelectionAcrossView(view, anchor, head), 0);
-          return false;
-        },
-      },
+    appendTransaction(trs, _old, newState) {
+      if (!trs.some((t) => t.docChanged)) return null;
+      if (trs.some((t) => t.getMeta(SELF_REF_REDERIVE))) return null; // our own output
+      return rederiveTransaction(newState);
+    },
+    view(editorView) {
+      // No transaction fires on state init / load / a fresh collab peer receiving
+      // a (childless) view — fill them once on mount.
+      const tr = rederiveTransaction(editorView.state);
+      if (tr) editorView.dispatch(tr);
+      return {};
     },
   });
 }

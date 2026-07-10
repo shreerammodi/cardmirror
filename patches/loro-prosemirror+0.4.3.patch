@@ -1,5 +1,5 @@
 diff --git a/node_modules/loro-prosemirror/dist/index.cjs b/node_modules/loro-prosemirror/dist/index.cjs
-index 74c4b30..1085d9b 100644
+index 74c4b30..0f5a727 100644
 --- a/node_modules/loro-prosemirror/dist/index.cjs
 +++ b/node_modules/loro-prosemirror/dist/index.cjs
 @@ -83,19 +83,70 @@ function createLoroText(parentList, pos, nodes, mapping) {
@@ -81,7 +81,19 @@ index 74c4b30..1085d9b 100644
  }
  function nodeMarksToAttributes(marks) {
  	const pattrs = {};
-@@ -226,10 +277,12 @@ function updateLoroMapAttributes(obj, node, _mapping) {
+@@ -156,6 +207,11 @@ function eqMappedNode(mapped, node) {
+ 	return false;
+ }
+ function normalizeNodeContent(node) {
++	// PATCHED (cardmirror): a live view (self_ref) holds its mirrored children
++	// as LOCAL, derived content — never a CRDT value. Syncing it childless lets
++	// each peer re-derive it from the shared source instead of merging two
++	// concurrent re-projections (which would duplicate/garble).
++	if (node.type && node.type.name === "self_ref") return [];
+ 	const res = [];
+ 	let textNodes = null;
+ 	node.content.forEach((node, _offset, _i) => {
+@@ -226,10 +282,12 @@ function updateLoroMapAttributes(obj, node, _mapping) {
  	for (const [key, value] of Object.entries(pAttrs)) {
  		if (value !== null) {
  			if (!(0, lib0_function.equalityDeep)(attrs.get(key), value)) attrs.set(key, value);
@@ -96,7 +108,7 @@ index 74c4b30..1085d9b 100644
  }
  function getLoroMapChildren(obj) {
  	return obj.getOrCreateContainer(CHILDREN_KEY, new loro_crdt.LoroList());
-@@ -425,24 +478,13 @@ function createDecorations(state, store, _plugin, createSelection, createCursor)
+@@ -425,24 +483,13 @@ function createDecorations(state, store, _plugin, createSelection, createCursor)
  		const [focus, focusCursorUpdate] = cursorToAbsolutePosition(cursor.focus, doc, loroState.mapping);
  		d.push(prosemirror_view.Decoration.widget(focus, createCursor(peer)));
  		if (!cursorEq(cursor.anchor, cursor.focus)) {
@@ -126,7 +138,7 @@ index 74c4b30..1085d9b 100644
  	}
  	return prosemirror_view.DecorationSet.create(state.doc, d);
  }
-@@ -587,6 +629,23 @@ const LoroSyncPlugin = (props) => {
+@@ -587,6 +634,23 @@ const LoroSyncPlugin = (props) => {
  						break;
  					default: break;
  				}
@@ -150,7 +162,7 @@ index 74c4b30..1085d9b 100644
  				return state;
  			}
  		},
-@@ -650,14 +709,63 @@ function updateNodeOnLoroEvent(view, event) {
+@@ -650,14 +714,63 @@ function updateNodeOnLoroEvent(view, event) {
  	const mapping = state.mapping;
  	clearChangedNodes(state.doc, event, mapping);
  	const node = createNodeFromLoroObj(view.state.schema, state.containerId ? state.doc.getContainerById(state.containerId) : state.doc.getMap(ROOT_DOC_KEY), mapping);
@@ -221,7 +233,7 @@ index 74c4b30..1085d9b 100644
  /**
  * Update ProseMirror selection based on the given Loro cursors.
 diff --git a/node_modules/loro-prosemirror/dist/index.js b/node_modules/loro-prosemirror/dist/index.js
-index e41095d..047f2cb 100644
+index e41095d..bf0e9fc 100644
 --- a/node_modules/loro-prosemirror/dist/index.js
 +++ b/node_modules/loro-prosemirror/dist/index.js
 @@ -82,19 +82,70 @@ function createLoroText(parentList, pos, nodes, mapping) {
@@ -302,7 +314,19 @@ index e41095d..047f2cb 100644
  }
  function nodeMarksToAttributes(marks) {
  	const pattrs = {};
-@@ -225,10 +276,12 @@ function updateLoroMapAttributes(obj, node, _mapping) {
+@@ -155,6 +206,11 @@ function eqMappedNode(mapped, node) {
+ 	return false;
+ }
+ function normalizeNodeContent(node) {
++	// PATCHED (cardmirror): a live view (self_ref) holds its mirrored children
++	// as LOCAL, derived content — never a CRDT value. Syncing it childless lets
++	// each peer re-derive it from the shared source instead of merging two
++	// concurrent re-projections (which would duplicate/garble).
++	if (node.type && node.type.name === "self_ref") return [];
+ 	const res = [];
+ 	let textNodes = null;
+ 	node.content.forEach((node, _offset, _i) => {
+@@ -225,10 +281,12 @@ function updateLoroMapAttributes(obj, node, _mapping) {
  	for (const [key, value] of Object.entries(pAttrs)) {
  		if (value !== null) {
  			if (!equalityDeep(attrs.get(key), value)) attrs.set(key, value);
@@ -317,7 +341,7 @@ index e41095d..047f2cb 100644
  }
  function getLoroMapChildren(obj) {
  	return obj.getOrCreateContainer(CHILDREN_KEY, new LoroList());
-@@ -424,24 +477,13 @@ function createDecorations(state, store, _plugin, createSelection, createCursor)
+@@ -424,24 +482,13 @@ function createDecorations(state, store, _plugin, createSelection, createCursor)
  		const [focus, focusCursorUpdate] = cursorToAbsolutePosition(cursor.focus, doc, loroState.mapping);
  		d.push(Decoration.widget(focus, createCursor(peer)));
  		if (!cursorEq(cursor.anchor, cursor.focus)) {
@@ -347,7 +371,7 @@ index e41095d..047f2cb 100644
  	}
  	return DecorationSet.create(state.doc, d);
  }
-@@ -586,6 +628,23 @@ const LoroSyncPlugin = (props) => {
+@@ -586,6 +633,23 @@ const LoroSyncPlugin = (props) => {
  						break;
  					default: break;
  				}
@@ -371,7 +395,7 @@ index e41095d..047f2cb 100644
  				return state;
  			}
  		},
-@@ -649,14 +708,72 @@ function updateNodeOnLoroEvent(view, event) {
+@@ -649,14 +713,72 @@ function updateNodeOnLoroEvent(view, event) {
  	const mapping = state.mapping;
  	clearChangedNodes(state.doc, event, mapping);
  	const node = createNodeFromLoroObj(view.state.schema, state.containerId ? state.doc.getContainerById(state.containerId) : state.doc.getMap(ROOT_DOC_KEY), mapping);

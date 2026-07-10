@@ -23,16 +23,14 @@
  * the count at itself (before it is counted).
  *
  * Transclusion (§7): both variants flow through the host count. A linked copy
- * (`transclusion_ref`) holds real cards, counted in document order. A live view
- * (`self_ref`) is resolved to its projected cards, which advance the SAME
- * counters (so host cards after a window continue correctly) — the window is
- * transparent to the host counter, never an opaque sub-scope. Each window's own
- * projected-card labels are returned separately (host-positional: the same source
- * card shows different numbers in different windows) for the NodeView to render.
+ * (`transclusion_ref`) AND a live view (`self_ref`) both hold real child cards
+ * (the view's are the mirrored source, kept in sync by the content plugin),
+ * counted in document order by their real positions — the window is transparent
+ * to the host counter, never an opaque sub-scope, and its cards are decorated
+ * like any other content.
  */
 
 import { type Fragment, type Node as PMNode } from 'prosemirror-model';
-import { makeProjectionResolver } from './self-transclusion.js';
 
 export type NumRole = 'none' | 'number' | 'sub';
 
@@ -68,10 +66,6 @@ export interface Numbering {
    *  position (so a card inside a linked copy is keyed by its real position).
    *  Cards with role 'none' are absent. */
   cards: Map<number, NumberLabel>;
-  /** Live-view (`self_ref`) position → the label for each projected card in the
-   *  window, in document order (null for a projected card with role 'none'). The
-   *  NodeView renders these; the value is host-positional. */
-  windows: Map<number, (NumberLabel | null)[]>;
 }
 
 /**
@@ -82,10 +76,6 @@ export interface Numbering {
  */
 export function computeNumbering(doc: PMNode): Numbering {
   const cards = new Map<number, NumberLabel>();
-  const windows = new Map<number, (NumberLabel | null)[]>();
-  // One resolver shared across every window in this pass (memoized — chained
-  // views resolve once total, not once per window).
-  const resolveProjection = makeProjectionResolver(doc);
   let numCount = 0; // last NUMBER assigned in the current run
   let subCount = 0; // last SUB assigned under the current number
 
@@ -130,20 +120,13 @@ export function computeNumbering(doc: PMNode): Numbering {
           onCard(applyCard(node), pos);
           return;
         case 'transclusion_ref':
-          // Linked copy: descend into its real cards (absolute positions).
+        case 'self_ref':
+          // Linked copy / live view: descend into its REAL child cards and number
+          // them host-positionally (absolute positions), exactly like ordinary
+          // content. (A live view's children are the mirrored source, kept in sync
+          // by the content plugin.)
           walk(node.content, pos < 0 ? -1 : pos + 1, onCard);
           return;
-        case 'self_ref': {
-          // Live view: resolve the projection and flow ITS cards through the same
-          // counters. Their labels are host-positional — collected per window, not
-          // into `cards` (they have no host positions).
-          const proj = resolveProjection(String(node.attrs['source_heading_id'] ?? ''));
-          if (proj.missing) return;
-          const labels: (NumberLabel | null)[] = [];
-          walk(proj.content, -1, (label) => labels.push(label));
-          if (pos >= 0) windows.set(pos, labels);
-          return;
-        }
         default:
           return;
       }
@@ -154,5 +137,5 @@ export function computeNumbering(doc: PMNode): Numbering {
     if (label && pos >= 0) cards.set(pos, label);
   });
 
-  return { cards, windows };
+  return { cards };
 }
