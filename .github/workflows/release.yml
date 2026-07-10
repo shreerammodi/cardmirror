@@ -161,6 +161,25 @@ jobs:
         # install here.
         run: npm --prefix apps/desktop ci
 
+      - name: Bundle both macOS koffi arch binaries
+        # macos-latest runners are Apple Silicon, so the `ci` above only
+        # installs koffi's arm64 native package — the @koromix/koffi-darwin-*
+        # binaries are optional deps gated on `cpu`, so the x64 one is
+        # skipped. electron-builder then builds BOTH the x64 and arm64 dmgs
+        # from that single install, so the x64 dmg would ship with no koffi
+        # binary and Intel Macs (or Apple Silicon under Rosetta) hit
+        # "Cannot find the native Koffi module". Force-install both arch
+        # packages at koffi's own version so each dmg carries the binary it
+        # needs. --force bypasses the cpu guard; --no-save keeps the lockfile
+        # untouched (the package still lands in the hidden lockfile, so
+        # electron-builder's dependency collector bundles it).
+        if: matrix.os == 'macos-latest'
+        run: |
+          KOFFI_VER=$(node -p "require('./apps/desktop/node_modules/koffi/package.json').version")
+          npm --prefix apps/desktop install --no-save --force \
+            "@koromix/koffi-darwin-x64@$KOFFI_VER" \
+            "@koromix/koffi-darwin-arm64@$KOFFI_VER"
+
       - name: Install Linux build tools
         # fpm (the Ruby tool electron-builder shells out to for
         # .pacman / .deb) needs `bsdtar` to assemble the package's

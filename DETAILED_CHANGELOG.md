@@ -156,6 +156,21 @@ in each release, see `CHANGELOG.md`.
   (Cancel, or a failed Save / Save As) — clears the flag, so a later ordinary
   window close still keeps the app in the dock per macOS convention rather than
   terminating it. (PR #9, thanks to [Cora](https://github.com/coralynnkc).)
+- **Intel Mac build no longer ships without its koffi native binary**
+  (`.github/workflows/release.yml`, `.github/workflows/mac-test-build.yml`).
+  koffi 3.x delivers its `.node` as per-arch `@koromix/koffi-darwin-<arch>`
+  optional dependencies, gated on `cpu`, so a plain `npm ci` installs only the
+  runner's arch. The `macos-latest` runners are Apple Silicon, yet
+  electron-builder builds BOTH the x64 and arm64 dmgs from that one install —
+  so the x64 dmg went out with no koffi binary and threw "Cannot find the
+  native Koffi module" on launch. This deterministically broke every Intel Mac
+  (and any Apple Silicon Mac running the Intel dmg under Rosetta); the arm64
+  dmg was unaffected, which is why most machines were fine. Both mac workflows
+  now force-install both `@koromix/koffi-darwin-x64` and `-arm64` at koffi's
+  resolved version after the desktop `npm ci` (`--force` bypasses the `cpu`
+  guard, `--no-save` keeps the lockfile clean but still records the package in
+  the hidden lockfile so electron-builder's dependency collector bundles it),
+  so each dmg carries the binary its arch needs.
 
 ## 0.1.0-beta.10 — 2026-07-07
 

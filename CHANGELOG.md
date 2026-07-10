@@ -83,6 +83,12 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Intel Macs launch again.** The Intel build was shipping without its
+  native accessibility helper, so some Macs — every Intel machine, plus Apple
+  Silicon Macs that had grabbed the Intel download — failed to start with a
+  "Cannot find the native Koffi module" error. Both builds now carry the right
+  helper.
+
 - **⌘Q now actually quits on macOS.** Pressing ⌘Q — or choosing Quit from the
   app menu — closed CardMirror's windows but left the app running in the dock
   instead of quitting. It now exits fully once any unsaved-changes prompts are

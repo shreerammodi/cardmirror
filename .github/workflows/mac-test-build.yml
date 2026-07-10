@@ -40,6 +40,21 @@ jobs:
         # separately.
         run: npm --prefix apps/desktop ci
 
+      - name: Bundle both macOS koffi arch binaries
+        # macos-latest runners are Apple Silicon, so the `ci` above only
+        # installs koffi's arm64 native package (@koromix/koffi-darwin-*
+        # are optional deps gated on `cpu`). electron-builder builds BOTH
+        # the x64 and arm64 dmgs from that install, so without this the x64
+        # dmg ships with no koffi binary and Intel Macs hit "Cannot find the
+        # native Koffi module". Force-install both arch packages at koffi's
+        # own version; --force bypasses the cpu guard, --no-save keeps the
+        # lockfile clean. Mirrors release.yml.
+        run: |
+          KOFFI_VER=$(node -p "require('./apps/desktop/node_modules/koffi/package.json').version")
+          npm --prefix apps/desktop install --no-save --force \
+            "@koromix/koffi-darwin-x64@$KOFFI_VER" \
+            "@koromix/koffi-darwin-arm64@$KOFFI_VER"
+
       - name: Build desktop installer
         # `dist` runs `electron-builder` with no explicit publish
         # flag. electron-builder's default in CI is to try to
