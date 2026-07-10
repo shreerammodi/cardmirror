@@ -283,6 +283,20 @@ async function openExternalFile(filePath: string): Promise<void> {
  *  back to the renderer. Cleared whenever a window is gone. */
 const skipCloseConfirm = new Set<number>();
 
+/** True once a genuine app-quit has been initiated (Cmd+Q, the
+ *  app-menu Quit, or the OS asking us to shut down). The window
+ *  `close` interception aborts every quit by design — it always
+ *  `preventDefault()`s so the renderer can confirm unsaved work —
+ *  so on macOS the resulting `window-all-closed` would otherwise
+ *  leave the app alive in the dock with no windows, and Cmd+Q
+ *  would appear to do nothing. We set this in `before-quit` and
+ *  honour it in `window-all-closed` to finish the quit once every
+ *  window has confirmed. Reset when the confirmation flow ends
+ *  WITHOUT closing (Cancel, or a failed Save) via
+ *  `host:close-cancelled`, so a later ordinary window close keeps
+ *  the app running the way macOS expects. */
+let quitInitiated = false;
+
 function createWindow(initialDoc?: InitialDocPayload): BrowserWindow {
   const win = new BrowserWindow({
     width: 1400,
@@ -1487,6 +1501,16 @@ ipcMain.handle('host:close-self', async (event) => {
   }
 });
 
+// The renderer resolved a close-request WITHOUT closing (the user
+// hit Cancel, or a Save/Save As failed). If that close-request was
+// part of a quit, the window is staying open, so the quit is off —
+// clear the intent flag. Otherwise a later ordinary window close
+// would wrongly terminate the app on macOS instead of leaving it
+// alive in the dock.
+ipcMain.handle('host:close-cancelled', () => {
+  quitInitiated = false;
+});
+
 ipcMain.handle(
   'host:mode-switch-journaled',
   (_event, docs: Array<{ uid: string; dirty: boolean }>) => {
@@ -2563,7 +2587,12 @@ void app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // Non-darwin: closing the last window quits, as usual. macOS
+  // keeps the app alive when the user merely closes windows —
+  // EXCEPT when a real quit is underway, where the close
+  // interception aborted `app.quit()` and it now falls to us to
+  // finish the job once every window has confirmed and gone.
+  if (process.platform !== 'darwin' || quitInitiated) app.quit();
 });
 
 // Tear down the Fast Debate Paste bridge before the app exits so
@@ -2571,5 +2600,11 @@ app.on('window-all-closed', () => {
 // designed in, but cleaning up our own state means the next launch
 // starts from a known-empty state).
 app.on('before-quit', () => {
+  // Remember that a genuine quit was asked for. The per-window
+  // `close` handlers will `preventDefault()` this quit to confirm
+  // unsaved work; `window-all-closed` reads this flag to actually
+  // exit once the confirmations resolve. Cleared by
+  // `host:close-cancelled` if the user backs out.
+  quitInitiated = true;
   void stopFastPasteBridge();
 });
