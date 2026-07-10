@@ -790,6 +790,9 @@ let multiDocGetAllFilenames: (() => (string | null)[]) | null = null;
 /** Resolve one doc uid → its filename (across all panes + stacks). Used by
  *  collab to name a session after its OWNER doc, not the whole-window title. */
 let multiDocGetFilenameForUid: ((uid: string) => string | null) | null = null;
+/** App-quit path: the shell prompts to save every unsaved pane, returning false
+ *  if the user cancels (abort the quit). null in single-doc mode. */
+let multiDocPromptSaveAllForQuit: (() => Promise<boolean>) | null = null;
 
 /** Full focused-file plumbing for the Save / Save-As flow — reads
  *  the filename plus the on-disk handle and on-disk format. */
@@ -888,6 +891,9 @@ export function enableMultiDocMode(opts: {
    *  Lets collab publish/label a session with its OWNER doc's name rather than
    *  the whole-window title. */
   getFilenameForUid?: (uid: string) => string | null;
+  /** App-quit path: prompt to save every unsaved doc across all panes (without
+   *  closing them). Returns false if the user cancels — the quit aborts. */
+  promptSaveAllForQuit?: () => Promise<boolean>;
   clearFocusedJournal?: () => Promise<void>;
   /** Called from single-doc save flows after a successful save so
    *  the multi-pane shell can clear the focused DocRecord's dirty
@@ -930,6 +936,7 @@ export function enableMultiDocMode(opts: {
   multiDocSetFocusedDocId = opts.setFocusedDocId ?? null;
   multiDocGetAllFilenames = opts.getAllFilenames ?? null;
   multiDocGetFilenameForUid = opts.getFilenameForUid ?? null;
+  multiDocPromptSaveAllForQuit = opts.promptSaveAllForQuit ?? null;
   multiDocClearFocusedJournal = opts.clearFocusedJournal ?? null;
   multiDocNotifyFocusedSaved = opts.notifyFocusedSaved ?? null;
   multiDocOnRecoveredDoc = opts.onRecoveredDoc ?? null;
@@ -6935,10 +6942,21 @@ function pushNativeMenuBindings(): void {
 async function handleUserCloseRequest(): Promise<void> {
   const electronHost = getElectronHost();
   if (!electronHost) return;
+  // Multi-pane: `currentDocDirty` only tracks the single-doc view, so the quit
+  // must ask the SHELL to prompt for every unsaved pane before closing —
+  // otherwise closing the window silently discards their work. (Sessions persist
+  // automatically on quit, so no per-doc session dialog.) A cancel / failed save
+  // aborts the quit via `cancelClose` so a later ordinary close still leaves the
+  // app in the dock on macOS.
+  if (multiDocActive) {
+    const ok = multiDocPromptSaveAllForQuit ? await multiDocPromptSaveAllForQuit() : true;
+    if (ok) await electronHost.closeSelf();
+    else await electronHost.cancelClose?.();
+    return;
+  }
   // Single-doc: a co-edited doc gets the session-aware close (keep resumable vs
-  // end/leave), naming the doc. Multi-pane sessions persist automatically on
-  // window close (pagehide) and stay resumable, so we don't confirm each one.
-  if (!multiDocActive) {
+  // end/leave), naming the doc.
+  {
     const co = await resolveCoEditedClose(currentDocUid, currentDocFilename ?? '');
     if (co === 'cancel') {
       // Backed out of the session-aware close — clear any pending app-quit

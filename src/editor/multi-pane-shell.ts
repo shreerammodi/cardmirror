@@ -933,6 +933,29 @@ class Slot {
     return true;
   }
 
+  /** App-quit path: prompt to save each DIRTY doc in this slot's stack, WITHOUT
+   *  closing anything (the window is about to close, and sessions persist on
+   *  quit, so no session dialog). Returns false if the user cancels a prompt or
+   *  a save fails — the quit aborts and the workspace is left intact. Discard
+   *  drops that doc's recovery journal so it doesn't resurface next launch. */
+  async promptSaveDirtyForQuit(): Promise<boolean> {
+    for (const rec of [...this.stack]) {
+      if (!rec.dirty) continue;
+      this.showRecord(rec); // surface it so the prompt has context
+      this.shell.focusSlot(this); // save commands route via the focused doc
+      const choice = await confirmCloseUnsaved();
+      if (choice === 'cancel') return false;
+      if (choice === 'save') {
+        if (!(await runSaveFlow())) return false;
+      } else if (choice === 'saveAs') {
+        if (!(await runSaveAsFlow())) return false;
+      } else if (choice === 'discard') {
+        void clearJournalForRecord(rec);
+      }
+    }
+    return true;
+  }
+
   /** Detach the currently-mounted record's DOM (without destroying
    *  its view — the view stays live for fast swap-back). */
   private detachVisible(): void {
@@ -1794,6 +1817,16 @@ class MultiPaneShell {
     }
     for (const id of SLOT_IDS) {
       if (!(await this.slots[id].closeAllExcept(keep, { modeSwitch: true }))) return false;
+    }
+    return true;
+  }
+
+  /** App-quit path (Cmd+Q / OS close in three-pane): prompt to save every
+   *  unsaved doc across all panes, without closing them. Returns false if the
+   *  user cancels — the caller aborts the quit and the workspace is untouched. */
+  async promptSaveAllForQuit(): Promise<boolean> {
+    for (const id of SLOT_IDS) {
+      if (!(await this.slots[id].promptSaveDirtyForQuit())) return false;
     }
     return true;
   }
@@ -2980,6 +3013,7 @@ export function mountMultiPaneShell(): void {
     setFocusedDocId: (id) => shell!.setFocusedDocId(id),
     getAllFilenames: () => shell!.getAllFilenames(),
     getFilenameForUid: (uid) => shell!.filenameForUid(uid),
+    promptSaveAllForQuit: () => shell!.promptSaveAllForQuit(),
     clearFocusedJournal: () => shell!.clearFocusedJournal(),
     onRecoveredDoc: (entry) => shell!.onRecoveredDoc(entry),
     journalAll: () => shell!.journalAll(),
