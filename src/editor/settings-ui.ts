@@ -265,7 +265,7 @@ class SettingsModal {
     // Deep-link: jump to a tab and (optionally) scroll to one setting,
     // e.g. when reached from the search palette's `s` shortcuts. Ignore a
     // category that isn't visible on this host (e.g. a stale link to the
-    // desktop-only Card Sharing tab on web) so we don't strand a blank panel.
+    // desktop-only Collaboration tab on web) so we don't strand a blank panel.
     if (
       target?.category &&
       visibleCategoryTabs().some((t) => t.id === target.category)

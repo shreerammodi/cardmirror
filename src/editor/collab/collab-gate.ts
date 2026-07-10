@@ -31,7 +31,7 @@ export function collabEnabled(): boolean {
 
 /** Dev-only relay config injected at vite build time, so the web dev
  *  build can reach a rooms-capable relay without the Electron-only
- *  Card Sharing settings fields. Falls through (null) in packaged
+ *  Collaboration settings fields. Falls through (null) in packaged
  *  builds, where the vars are never set. */
 export function collabDevRelay(): { url: string; token: string } | null {
   try {

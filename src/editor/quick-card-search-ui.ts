@@ -567,7 +567,7 @@ function searchSettingsSource(query: string): PaletteResult[] {
   const match = (label: string): boolean =>
     tokens.length === 0 || tokens.every((t) => label.toLowerCase().includes(t));
 
-  // Top-level tabs first (host-visible only, so the desktop-only Card Sharing
+  // Top-level tabs first (host-visible only, so the desktop-only Collaboration
   // tab isn't offered on web).
   const results: PaletteResult[] = visibleCategoryTabs().filter(({ label }) => match(label)).map(
     ({ id, label }) => ({

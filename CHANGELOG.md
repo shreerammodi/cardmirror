@@ -76,6 +76,11 @@ see `DETAILED_CHANGELOG.md`.
   chrome scale were both raised from 200% to 300% (Settings → Appearance, the
   zoom controls, or ⌘=/⌘−).
 
+- **The "Card Sharing" settings tab is now "Collaboration."** It houses both card
+  sharing and co-editing, so the tab — and the switch that turns them on, now
+  **Enable collaboration** — carry the broader name. Card sharing itself is
+  unchanged; it's just grouped under Collaboration.
+
 ### Fixed
 
 - **⌘Q now actually quits on macOS.** Pressing ⌘Q — or choosing Quit from the
@@ -91,6 +96,11 @@ see `DETAILED_CHANGELOG.md`.
   on. It now tracks the right spot in each pane.
 
 - **A partly-highlighted underline no longer darkens its unhighlighted part.**
+
+- **Highlighted text inside a table now shows in read mode.** Highlighted
+  evidence sitting inside a table used to vanish along with the table when you
+  entered read mode; it now reads inline with the rest of the card, in document
+  order.
 
 ## 0.1.0-beta.10 — 2026-07-07
 

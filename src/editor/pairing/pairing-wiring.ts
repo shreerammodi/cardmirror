@@ -116,7 +116,7 @@ export function initPairingWiring(): void {
     electron.onPairingUnauthorized(() => {
       showToast(
         'Card sharing: the relay rejected your credentials. In Settings → ' +
-          'Card Sharing, connect your Debate Decoded account or set up your own relay.',
+          'Collaboration, connect your Debate Decoded account or set up your own relay.',
       );
     });
   }

@@ -93,6 +93,30 @@ in each release, see `CHANGELOG.md`.
   (`style.css`). A card underlined across a partly-highlighted span no longer
   tints the un-highlighted portion.
 
+- **Read mode: highlighted text inside a table shows inline** (`style.css`). A
+  table is a non-listed card child, so `.pmd-card > *` hid it wholesale in read
+  mode, taking any highlighted cell content with it. The read-mode plugin already
+  decorates cell paragraphs (`nodesBetween` recurses; `readKeptKind('paragraph')`
+  = `highlight`), so the fix is CSS: `display: contents` down the whole table
+  structure (`.tableWrapper` → table → tbody → tr → cell → cell `<p>`) removes
+  every table box from layout, so the kept runs flow inline like the card body.
+
+- **"Card Sharing" settings → "Collaboration"** (`settings-categories.ts`,
+  `settings.ts`, `settings-ui.ts`, and the collab/pairing toasts). The tab and
+  the `pairingEnabled` toggle (now **Enable collaboration**) house both card
+  sharing and co-editing; the `id: 'pairing'` key is unchanged so stored settings
+  don't churn, and "card sharing" stays a search alias. `collabShowCursors` gained
+  `dependsOn: 'pairingEnabled'` (+ `electronOnly`) so it greys out when
+  collaboration is off, and moved below Blocked senders.
+
+- **Multi-pane ⌘Q prompts to save unsaved panes** (`index.ts`,
+  `multi-pane-shell.ts`). `handleUserCloseRequest` only checked the single-doc
+  `currentDocDirty`, so a three-pane quit closed the window without prompting for
+  unsaved panes (exposed by this release's ⌘Q fix). It now routes through a shell
+  `promptSaveAllForQuit` (per-slot `promptSaveDirtyForQuit`) that prompts per
+  unsaved doc without closing the panes; a cancel/failed save aborts the quit via
+  `cancelClose` and leaves the workspace intact.
+
 - **Live-zone divergence indicator** (`schema/nodes.ts`, `transclusion.ts`,
   `transclusion-actions.ts`, `transclusion-divergence.ts` NEW,
   `transclusion-divergence-plugin.ts` NEW, `transclusion-nodeview.ts`,
