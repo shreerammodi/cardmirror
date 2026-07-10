@@ -6940,8 +6940,15 @@ async function handleUserCloseRequest(): Promise<void> {
   // window close (pagehide) and stay resumable, so we don't confirm each one.
   if (!multiDocActive) {
     const co = await resolveCoEditedClose(currentDocUid, currentDocFilename ?? '');
-    if (co === 'cancel') return;
+    if (co === 'cancel') {
+      // Backed out of the session-aware close — clear any pending app-quit
+      // intent so a later ordinary window close doesn't terminate the app on
+      // macOS (matches the Cancel path in the dirty-save switch below).
+      await electronHost.cancelClose?.();
+      return;
+    }
     if (co === 'keep') {
+      // Closing the doc (session kept resumable) completes a pending quit.
       await electronHost.closeSelf();
       return;
     }
@@ -6956,11 +6963,15 @@ async function handleUserCloseRequest(): Promise<void> {
     case 'save': {
       const ok = await runSaveFlow();
       if (ok) await electronHost.closeSelf();
+      // Save failed — the window stays open, so a quit that was
+      // waiting on this confirmation is off. Let main know.
+      else await electronHost.cancelClose?.();
       return;
     }
     case 'saveAs': {
       const ok = await runSaveAsFlow();
       if (ok) await electronHost.closeSelf();
+      else await electronHost.cancelClose?.();
       return;
     }
     case 'discard': {
@@ -6974,7 +6985,9 @@ async function handleUserCloseRequest(): Promise<void> {
       return;
     }
     case 'cancel':
-      // Window stays open.
+      // Window stays open — cancel any pending app quit so a later
+      // ordinary close doesn't terminate the app on macOS.
+      await electronHost.cancelClose?.();
       return;
   }
 }

@@ -353,6 +353,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
    *  please-close handler after journaling. */
   closeSelf: () => ipcRenderer.invoke('host:close-self'),
 
+  /** Tell main that a close-request was resolved WITHOUT closing
+   *  (Cancel, or a failed Save). Lets main drop any pending quit
+   *  intent so a subsequent ordinary window close doesn't quit the
+   *  app on macOS. No-op close-wise; safe to call redundantly. */
+  cancelClose: () => ipcRenderer.invoke('host:close-cancelled'),
+
   /** Mode-switch helper: report the docs this window journaled in
    *  response to a please-close. Main accumulates them so the
    *  surviving window can scope its post-reload auto-recovery to

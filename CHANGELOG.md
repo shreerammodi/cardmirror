@@ -35,6 +35,13 @@ see `DETAILED_CHANGELOG.md`.
   editable, refreshable copy is a "linked copy." Commands and menus are renamed
   accordingly ("embed" works as a search alias). Existing documents are
   unaffected — only the wording changed.
+### Fixed
+
+- **⌘Q now actually quits on macOS.** Pressing ⌘Q — or choosing Quit from the
+  app menu — closed CardMirror's windows but left the app running in the dock
+  instead of quitting. It now exits fully once any unsaved-changes prompts are
+  handled. Backing out of a quit (Cancel, or a save that fails) still leaves
+  the app running, the way macOS expects.
 
 ## 0.1.0-beta.10 — 2026-07-07
 
