@@ -4955,6 +4955,26 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
   display: contents;
 }
 
+/* Tables inside a card/analytic. A table is a non-listed child, so `.pmd-card >
+   *` would hide it wholesale — taking any HIGHLIGHTED evidence inside its cells
+   with it. Instead flatten it exactly like the card body: `display: contents`
+   down the whole table structure (`.tableWrapper` → table → tbody → tr → cell →
+   cell paragraph) removes every table box from layout, so the cells' read-mode
+   `pmd-rm-keep` runs flow inline with the rest of the card's read-aloud text (in
+   document order). Non-highlighted cell text stays hidden by its `pmd-rm-hide`
+   wrapper, and the run separators handle spacing between cells. */
+.pmd-read-mode :is(.pmd-card, .pmd-analytic-unit) > .tableWrapper,
+.pmd-read-mode :is(.pmd-card, .pmd-analytic-unit) .tableWrapper,
+.pmd-read-mode :is(.pmd-card, .pmd-analytic-unit) .tableWrapper table,
+.pmd-read-mode :is(.pmd-card, .pmd-analytic-unit) .tableWrapper tbody,
+.pmd-read-mode :is(.pmd-card, .pmd-analytic-unit) .tableWrapper tr,
+.pmd-read-mode :is(.pmd-card, .pmd-analytic-unit) .tableWrapper td,
+.pmd-read-mode :is(.pmd-card, .pmd-analytic-unit) .tableWrapper th,
+.pmd-read-mode :is(.pmd-card, .pmd-analytic-unit) .tableWrapper td > p,
+.pmd-read-mode :is(.pmd-card, .pmd-analytic-unit) .tableWrapper th > p {
+  display: contents;
+}
+
 /* Inline-level visibility: each text node is wrapped (via the
    read-mode plugin) in a span with `pmd-rm-keep` or `pmd-rm-hide`.
    Pure display: none / inline rule — no specificity tricks because
