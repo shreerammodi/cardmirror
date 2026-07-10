@@ -2982,13 +2982,13 @@ export const SETTING_METADATA: SettingMeta[] = [
   },
   {
     key: 'pairingEnabled',
-    label: 'Enable card sharing',
+    label: 'Enable collaboration',
     description:
-      'Turn on cross-machine card sharing. Adds a Send and a Receive pill next to the dropzone: drag a card onto Send to push it to a recipient, and cards others send you land in Receive. Your machine polls for incoming cards while this is on. Desktop only.',
+      'Turn on cross-machine collaboration — both card sharing and real-time co-editing. Card sharing adds a Send and a Receive pill next to the dropzone (drag a card onto Send to push it to a recipient; cards others send you land in Receive). Co-editing lets you share a document and edit it together live. Desktop only.',
     kind: 'toggle',
     category: 'pairing',
     electronOnly: true,
-    aliases: ['share', 'send card', 'recipient', 'to', 'pairing'],
+    aliases: ['share', 'send card', 'recipient', 'to', 'pairing', 'card sharing', 'collaboration', 'co-edit', 'coedit', 'co-editing'],
   },
   {
     key: 'pairingOwnCode',
@@ -3021,14 +3021,6 @@ export const SETTING_METADATA: SettingMeta[] = [
     dependsOn: 'pairingEnabled',
   },
   {
-    key: 'collabShowCursors',
-    label: 'Show partner cursors in sessions',
-    description:
-      "Render your partner's live cursor and selection during a collaboration session. Turning this off keeps the document syncing — it only hides the cursor overlay (and stops broadcasting yours).",
-    kind: 'toggle',
-    category: 'pairing',
-  },
-  {
     key: 'pairingPartners',
     label: 'Recipients',
     description:
@@ -3058,6 +3050,16 @@ export const SETTING_METADATA: SettingMeta[] = [
     electronOnly: true,
     dependsOn: 'pairingEnabled',
     aliases: ['block', 'blocklist', 'ignore sender', 'mute sender'],
+  },
+  {
+    key: 'collabShowCursors',
+    label: 'Show partner cursors in sessions',
+    description:
+      "Render your partner's live cursor and selection during a collaboration session. Turning this off keeps the document syncing — it only hides the cursor overlay (and stops broadcasting yours).",
+    kind: 'toggle',
+    category: 'pairing',
+    electronOnly: true,
+    dependsOn: 'pairingEnabled',
   },
   {
     key: 'pairingReceiveFlash',
@@ -3276,7 +3278,7 @@ export function settingSearchName(m: SettingMeta): string {
 /** A setting label with a redundant leading verb stripped, so a "Toggle
  *  <this>" command name doesn't read as "Toggle Enable …"; the first letter
  *  is re-capitalized. The command bar still matches the ORIGINAL label, so
- *  "enable card sharing" continues to find "Toggle Card sharing". */
+ *  "enable collaboration" continues to find "Toggle Collaboration". */
 export function cleanToggleLabel(label: string): string {
   const stripped = label.replace(/^(?:enable|show|include|use)\s+(?:the\s+)?/i, '');
   if (!stripped || stripped === label) return label;

@@ -2230,7 +2230,7 @@ function buildPairingOwnCodeEditor(): HTMLElement {
       copyBtn.disabled = false;
       regenBtn.textContent = 'Regenerate';
     } else {
-      codeEl.textContent = '(created when you enable card sharing)';
+      codeEl.textContent = '(created when you enable collaboration)';
       codeEl.classList.add('pmd-pairing-owncode-empty');
       copyBtn.disabled = true;
       regenBtn.textContent = 'Generate now';
