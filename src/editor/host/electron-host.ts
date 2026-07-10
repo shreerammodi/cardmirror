@@ -236,6 +236,10 @@ interface ElectronAPI {
   onExternalOpen(handler: (payload: { path: string }) => void): () => void;
   journalAndCloseOtherWindows(): Promise<void>;
   closeSelf(): Promise<void>;
+  /** Report that a close-request ended without closing (Cancel or a
+   *  failed Save) so main can drop any pending quit intent. Optional
+   *  so an older preload without the channel is tolerated. */
+  cancelClose?(): Promise<void>;
   /** Optional so an older preload tolerates the mode-switch
    *  doc-list channel being absent. */
   reportModeSwitchJournaled?(docs: Array<{ uid: string; dirty: boolean }>): Promise<void>;
@@ -711,6 +715,12 @@ export class ElectronHost implements Host {
    *  handler after the renderer finishes journaling. */
   async closeSelf(): Promise<void> {
     await api().closeSelf();
+  }
+
+  /** Tell main a close-request was resolved without closing (Cancel
+   *  or a failed Save) so it can drop any pending quit intent. */
+  async cancelClose(): Promise<void> {
+    await api().cancelClose?.();
   }
 
   /** Mode-switch helper: report the docs this window journaled in

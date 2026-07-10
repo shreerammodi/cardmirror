@@ -5,6 +5,22 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
+## Unreleased
+
+- **⌘Q now quits on macOS** (`apps/desktop/src/main.ts`,
+  `apps/desktop/src/preload.ts`, `src/editor/host/electron-host.ts`,
+  `src/editor/index.ts`). The per-window `close` interception always
+  `preventDefault()`s so the renderer can confirm unsaved work — which aborts
+  the `app.quit()` that ⌘Q (and the app-menu Quit) triggers. The windows then
+  close via `host:close-self`, but `window-all-closed` deliberately no-ops on
+  darwin, leaving the app alive with no windows so ⌘Q appeared to do nothing. A
+  `quitInitiated` flag, set in `before-quit`, now lets `window-all-closed`
+  finish the quit once every window has confirmed. A new `host:close-cancelled`
+  IPC — called from the renderer when a close-request resolves WITHOUT closing
+  (Cancel, or a failed Save / Save As) — clears the flag, so a later ordinary
+  window close still keeps the app in the dock per macOS convention rather than
+  terminating it.
+
 ## 0.1.0-beta.10 — 2026-07-07
 
 - **Live zones (transclusion)** (`schema/nodes.ts`, `transclusion.ts` NEW,

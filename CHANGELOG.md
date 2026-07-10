@@ -5,6 +5,16 @@ changes in each release, written for users of the editor. For
 in-depth rationale and implementation context behind each entry,
 see `DETAILED_CHANGELOG.md`.
 
+## Unreleased
+
+### Fixed
+
+- **⌘Q now actually quits on macOS.** Pressing ⌘Q — or choosing Quit from the
+  app menu — closed CardMirror's windows but left the app running in the dock
+  instead of quitting. It now exits fully once any unsaved-changes prompts are
+  handled. Backing out of a quit (Cancel, or a save that fails) still leaves
+  the app running, the way macOS expects.
+
 ## 0.1.0-beta.10 — 2026-07-07
 
 ### Added
