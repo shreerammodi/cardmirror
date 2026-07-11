@@ -4600,6 +4600,7 @@ export type RibbonCommandId =
   | 'addNoteToSelection'
   | 'aiAskAboutSelection'
   | 'aiCreateCite'
+  | 'aiResearchCite'
   | 'translate'
   | 'repairText'
   | 'repairFormatting'
@@ -4814,6 +4815,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'addNoteToSelection',
   'aiAskAboutSelection',
   'aiCreateCite',
+  'aiResearchCite',
   'translate',
   'repairText',
   'repairFormatting',
@@ -4987,6 +4989,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   addNoteToSelection: 'Add Note to Selection',
   aiAskAboutSelection: 'Ask AI About Selection',
   aiCreateCite: 'Format Cite From Selection',
+  aiResearchCite: 'Research Cite From Selection',
   translate: 'Translate Selection (to Clipboard)',
   repairText: 'Repair OCR/PDF Text',
   repairFormatting: 'Repair Formatting (AI)',
@@ -5305,6 +5308,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   addNoteToSelection: 'Mod-Shift-n',
   aiAskAboutSelection: 'Mod-Shift-q',
   aiCreateCite: 'Mod-Shift-x',
+  aiResearchCite: 'Mod-Alt-x',
   translate: 'Mod-Shift-t',
   repairText: 'Mod-Shift-r',
   repairFormatting: 'Mod-Alt-r',
@@ -5532,6 +5536,9 @@ export interface RibbonContext {
   addNoteToSelection: () => void;
   aiAskAboutSelection: () => void;
   aiCreateCite: () => void;
+  /** Research a cite from the selected fragment (web search) and
+   *  replace the selection with it. */
+  aiResearchCite: () => void;
   /** Translate the selection and copy the result to the clipboard. */
   translate: () => void;
   /** Repair OCR / PDF text errors in the selection in place. */
@@ -5703,6 +5710,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   addNoteToSelection: () => {},
   aiAskAboutSelection: () => {},
   aiCreateCite: () => {},
+  aiResearchCite: () => {},
   translate: () => {},
   repairText: () => {},
   repairFormatting: () => {},
@@ -5966,6 +5974,13 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
         if (state.selection.empty) return false;
         if (!dispatch) return true;
         ctx.aiCreateCite();
+        return true;
+      };
+    case 'aiResearchCite':
+      return (state, dispatch) => {
+        if (state.selection.empty) return false;
+        if (!dispatch) return true;
+        ctx.aiResearchCite();
         return true;
       };
     case 'translate':

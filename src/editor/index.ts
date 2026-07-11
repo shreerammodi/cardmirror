@@ -129,7 +129,7 @@ import { viewportSpellcheckPlugin } from './viewport-spellcheck.js';
 import { commentsPlugin, commentsKey, loadThreads, getCommentsState, gcOrphanThreads, newCommentId, setCommentIdSessionResolver } from './comments-plugin.js';
 import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
 import { CommentsColumn, addCommentToSelection, FC_PREFIX, AI_PREFIX, NOTE_PREFIX } from './comments-ui.js';
-import { runAiCreateCite } from './ai/cite-creator.js';
+import { runAiCreateCite, runAiResearchCite } from './ai/cite-creator.js';
 import { runTranslate } from './translate.js';
 import { runRepairText } from './ai/repair-text.js';
 import { runRepairFormatting } from './ai/repair-formatting.js';
@@ -1414,6 +1414,10 @@ const ribbonContext: RibbonContext = {
   aiCreateCite: () => {
     if (!view) return;
     runAiCreateCite(view);
+  },
+  aiResearchCite: () => {
+    if (!view) return;
+    runAiResearchCite(view);
   },
   translate: () => {
     if (!view) return;

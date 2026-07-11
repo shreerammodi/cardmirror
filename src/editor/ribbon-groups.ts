@@ -227,7 +227,7 @@ export const RIBBON_GROUPS: RibbonGroup[] = [
   },
   {
     title: 'AI',
-    commands: ['aiAskAboutSelection', 'aiCreateCite', 'translate', 'repairText', 'repairFormatting'],
+    commands: ['aiAskAboutSelection', 'aiCreateCite', 'aiResearchCite', 'translate', 'repairText', 'repairFormatting'],
   },
   {
     title: 'Flow',
