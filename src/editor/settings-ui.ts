@@ -1097,7 +1097,9 @@ class SettingsModal {
       btn.className = 'pmd-settings-btn';
       btn.textContent = 'Edit prompt';
       btn.addEventListener('click', () => {
-        void import('./ai/edit-prompt-modal.js').then((m) => m.openCitePromptEditor());
+        void import('./ai/edit-prompt-modal.js').then((m) =>
+          m.openCitePromptEditor(meta.key as 'aiCitePrompt' | 'aiResearchCitePrompt'),
+        );
       });
       label.appendChild(btn);
     } else if (meta.kind === 'pairingOwnCode') {

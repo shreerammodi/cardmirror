@@ -3001,12 +3001,27 @@ export const SETTING_METADATA: SettingMeta[] = [
   },
   {
     key: 'aiCitePrompt',
-    label: 'AI cite-creator prompt',
+    label: 'AI cite-formatter prompt',
     description:
-      'System prompt the cite-creator hands to the model. Click "Edit prompt" to open a full-size editor. Leave blank to use the built-in default.',
+      'System prompt for "Format Cite From Selection" - reformats citation info ' +
+      'you already have. Click "Edit prompt" to open a full-size editor. Leave ' +
+      'blank to use the built-in default.',
     kind: 'aiCitePrompt',
     category: 'comments-ai',
     dependsOn: 'aiFeaturesEnabled',
+    aliases: ['cite prompt', 'format cite'],
+  },
+  {
+    key: 'aiResearchCitePrompt',
+    label: 'AI cite-researcher prompt',
+    description:
+      'System prompt for "Research Cite From Selection" - researches the source ' +
+      'with web search and writes the citation. Click "Edit prompt" to open a ' +
+      'full-size editor. Leave blank to use the built-in default.',
+    kind: 'aiCitePrompt',
+    category: 'comments-ai',
+    dependsOn: 'aiFeaturesEnabled',
+    aliases: ['research cite', 'cite researcher'],
   },
   // ─── Card Cutter (experimental; console-gated, hidden until on) ──
   {

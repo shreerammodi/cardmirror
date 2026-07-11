@@ -1,5 +1,5 @@
 /**
- * Modal editor for the AI cite-creator prompt.
+ * Modal editor for the AI cite-formatter / cite-researcher prompts.
  *
  * The prompt is long enough that the inline settings text input
  * doesn't fit. This dialog opens on demand with a full-size
@@ -9,12 +9,16 @@
  */
 
 import { settings } from '../settings.js';
-import { DEFAULT_AI_CITE_PROMPT } from './cite-creator.js';
+import { DEFAULT_AI_CITE_PROMPT, DEFAULT_AI_RESEARCH_CITE_PROMPT } from './cite-creator.js';
 import { setIcon } from '../icons';
 import { pushOverlay, popOverlay, isTopOverlay } from '../overlay-stack.js';
 
-export function openCitePromptEditor(): void {
+type CitePromptKey = 'aiCitePrompt' | 'aiResearchCitePrompt';
+
+export function openCitePromptEditor(key: CitePromptKey = 'aiCitePrompt'): void {
   if (document.querySelector('.pmd-prompt-overlay')) return;
+  const isResearch = key === 'aiResearchCitePrompt';
+  const defaultPrompt = isResearch ? DEFAULT_AI_RESEARCH_CITE_PROMPT : DEFAULT_AI_CITE_PROMPT;
   const overlayToken = pushOverlay();
 
   const overlay = document.createElement('div');
@@ -30,7 +34,7 @@ export function openCitePromptEditor(): void {
   const header = document.createElement('header');
   header.className = 'pmd-prompt-header';
   const title = document.createElement('h2');
-  title.textContent = 'AI cite-creator prompt';
+  title.textContent = isResearch ? 'AI cite-researcher prompt' : 'AI cite-formatter prompt';
   header.appendChild(title);
   const close = (): void => {
     overlay.remove();
@@ -49,16 +53,16 @@ export function openCitePromptEditor(): void {
   const note = document.createElement('p');
   note.className = 'pmd-prompt-note';
   note.textContent =
-    'This system prompt is sent to the AI before your selected citation text. ' +
+    'This system prompt is sent to the AI before your selected text. ' +
     'Use `{DATE}` anywhere you want today\'s date substituted in (M-D-YYYY). ' +
     'The reply must use the delimited [[CITE]] … [[TOKENS]] … [[END]] block format at the bottom of the prompt — the editor splits on those exact markers to insert the cite and apply the F8 cite mark to each token, so leave that part intact unless you know what you\'re doing.';
   dialog.appendChild(note);
 
-  const stored = settings.get('aiCitePrompt');
+  const stored = settings.get(key);
   const textarea = document.createElement('textarea');
   textarea.className = 'pmd-prompt-textarea';
   textarea.spellcheck = false;
-  textarea.value = stored || DEFAULT_AI_CITE_PROMPT;
+  textarea.value = stored || defaultPrompt;
   textarea.rows = 24;
   dialog.appendChild(textarea);
 
@@ -70,7 +74,7 @@ export function openCitePromptEditor(): void {
   resetBtn.className = 'pmd-prompt-btn';
   resetBtn.textContent = 'Restore default';
   resetBtn.addEventListener('click', () => {
-    textarea.value = DEFAULT_AI_CITE_PROMPT;
+    textarea.value = defaultPrompt;
   });
   footer.appendChild(resetBtn);
 
@@ -93,7 +97,7 @@ export function openCitePromptEditor(): void {
     const v = textarea.value;
     // Treat verbatim-equal-to-default as "no override" so the
     // setting stays empty and inherits future prompt updates.
-    settings.set('aiCitePrompt', v.trim() === DEFAULT_AI_CITE_PROMPT.trim() ? '' : v);
+    settings.set(key, v.trim() === defaultPrompt.trim() ? '' : v);
     close();
   });
   footer.appendChild(saveBtn);
