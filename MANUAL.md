@@ -415,6 +415,10 @@ warnings, your custom rules), and regular **Shrink (Mod-8)** and **Regrow
 - **Format Cite from selection (Mod-Shift-X)** uses AI to turn a pasted
   citation or URL into a properly styled cite (see
   [AI features](#12-ai-features)).
+- **Research Cite from selection (Mod-Alt-X)** goes further: give it
+  whatever you have - a URL, a bare title, an author name - and the AI
+  searches the web for the source, digs up author qualifications, and
+  writes the full cite (see [AI features](#12-ai-features)).
 - **Create Reference** copies the selected card text to your clipboard as
   a "for reference" excerpt: a `<<CITE FOR REFERENCE>>` heading line,
   body text reduced by 3pt, and highlights converted to a quiet grey
@@ -1330,6 +1334,7 @@ you're offline.
 | Feature | How to run it | What it does |
 |---------|---------------|--------------|
 | **Format Cite** | Mod-Shift-X on a selection | Turns a pasted citation or URL into a properly styled cite, with the cite mark on the author and date. |
+| **Research Cite** | Mod-Alt-X on a selection | Researches the selection (a URL, title, or author) with web search, finds the source and author qualifications, and writes the full styled cite. Uses Anthropic's web search tool, or the web plugin on OpenRouter. |
 | **Repair Text** | Mod-Shift-R on a selection | Fixes OCR / PDF extraction errors (dropped ligatures, `rn`/`m`, mid-word hyphenation, run-together words) without changing the wording. Corrections apply in place, one at a time with a highlight; the whole repair is a single undo. |
 | **Repair Formatting** | Mod-Alt-R on a selection | Normalizes an imported card's formatting to Verbatim's four-layer scheme (underline / emphasis / highlighting / background color) — fixing bold or italics standing in for emphasis, direct underlining, bold-underline, and underlining lost to an unsupported style. It never changes your text. |
 | **Translate** | Mod-Shift-T on a selection | Translates the selection and copies it to the clipboard, leaving your document unchanged. Uses Anthropic when AI is on; otherwise falls back to a free, keyless backend, so it works even with AI off. |
@@ -2011,7 +2016,9 @@ remove one, **↺** to restore its default. A few window-level shortcuts
   one is retired. A malformed entry is ignored.
 - **Enable Clod mode** — the playful in-flight placeholder ("Clod is
   making toast…") while the AI composes a reply.
-- **AI cite-creator prompt** — the system prompt the cite creator uses;
+- **AI cite-formatter prompt** - the system prompt Format Cite uses;
+  leave blank for the built-in default.
+- **AI cite-researcher prompt** - the system prompt Research Cite uses;
   leave blank for the built-in default.
 
 ### Accessibility
@@ -2159,6 +2166,7 @@ these to extend the selection.
 | Mod-Shift-N | Add note to selection |
 | Mod-Shift-Q | Ask AI about selection |
 | Mod-Shift-X | Format cite from selection |
+| Mod-Alt-X | Research cite from selection |
 | Mod-Shift-R | Repair OCR/PDF text in selection |
 | Mod-Alt-R | Repair Formatting in selection |
 | Mod-Shift-T | Translate selection (to clipboard) |

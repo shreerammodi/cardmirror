@@ -17,6 +17,13 @@ remains **experimental** — keep your own saved copies.)
   provider**. OpenRouter needs its own API key and a model id (for example
   `anthropic/claude-sonnet-4.6`); there is no built-in default, so set the model
   before using AI features.
+- **Research Cite From Selection (Mod-Alt-X)** - a new AI command that
+  researches a citation instead of just reformatting one. Select whatever
+  you have (a URL, a title, an author) and the AI searches the web for the
+  source, finds succinct author qualifications, and writes the full styled
+  cite. The existing Mod-Shift-X command is now labeled "Format Cite From
+  Selection", and its prompt setting "AI cite-formatter prompt"; the new
+  command's prompt is editable as "AI cite-researcher prompt".
 
 ### Changed
 
