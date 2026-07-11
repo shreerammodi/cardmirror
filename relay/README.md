@@ -1,12 +1,15 @@
 # CardMirror relay (self-hosting)
 
-The store-and-forward server behind CardMirror's card sharing. Cards
-are **end-to-end encrypted by the app** — this server only ever sees
-opaque ciphertext, a hashed routing code, and timestamps, and it
-forgets every message after 3 hours whether or not it was delivered.
-New cards are live-pushed to connected recipients over SSE; the app
-also catches up by polling on every reconnect, so nothing is lost
-while a machine is offline (within the 3-hour window).
+The server behind CardMirror's collaboration features — both **card
+sharing** (store-and-forward mailbox) and **co-editing** (real-time
+session rooms). Everything is **end-to-end encrypted by the app** —
+this server only ever sees opaque ciphertext, a hashed routing code,
+and timestamps. Mailbox messages are forgotten after 3 hours whether
+or not they were delivered; co-editing rooms hold their (encrypted)
+session log until the host ends the session or the room has been idle
+for 7 days. New cards and session updates are live-pushed to connected
+apps over SSE; the app also catches up by polling on every reconnect,
+so nothing is lost while a machine is offline.
 
 Run your own if you'd rather not use the official relay. Everyone
 sharing cards with each other must point at the same relay.
@@ -18,7 +21,7 @@ cd relay
 RELAY_TOKEN=$(openssl rand -hex 24) docker compose up -d
 ```
 
-Then in CardMirror on every machine: **Settings → Card Sharing** →
+Then in CardMirror on every machine: **Settings → Collaboration** →
 **Custom relay URL** = `http://<your-host>:8410/relay`, **Custom relay
 token** = the same token. Use HTTPS (a reverse proxy such as Caddy or
 your platform's TLS) for anything beyond a LAN.
@@ -46,6 +49,11 @@ Health check: `GET /relay/health` → `{"ok": true}` (no auth).
 
 ## Notes
 
+- One `RELAY_TOKEN` covers both features — card sharing and co-editing
+  sessions authenticate with the same shared bearer.
+- Co-editing rooms: at most **10 people** per session (enforced at
+  stream connect), 5 MB per update (the app chunks bigger ones),
+  200 MB stored per room.
 - Payload cap 25 MB decompressed / 30 MB gzipped per send.
 - Poll returns at most 100 messages, oldest first; the app deletes
   each message after it lands.
