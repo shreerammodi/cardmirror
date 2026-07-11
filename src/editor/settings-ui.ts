@@ -7,6 +7,7 @@
  * settings store immediately.
  */
 
+import { confirmDialog } from './text-prompt.js';
 import {
   CUSTOMIZABLE_COLOR_TOKENS,
   DISPLAY_COLOR_TOKEN_TO_KEY,
@@ -581,9 +582,10 @@ class SettingsModal {
       return;
     }
     if (
-      !confirm(
+      !(await confirmDialog(
         'Import settings? This replaces all your current settings (your API key is kept).',
-      )
+        { okLabel: 'Import' },
+      ))
     ) {
       return;
     }
@@ -2127,9 +2129,10 @@ function buildPairingAccountEditor(row: HTMLElement): HTMLElement {
         const when = res.wouldEvict?.boundAt
           ? new Date(res.wouldEvict.boundAt).toLocaleDateString()
           : 'earlier';
-        const go = window.confirm(
+        const go = await confirmDialog(
           `Your membership covers ${res.limit ?? 2} machines and both seats are taken. ` +
             `Link this machine anyway and unlink the machine added ${when}?`,
+          { okLabel: 'Link This Machine' },
         );
         if (go) {
           await connect(res.retryCode, true);
@@ -2207,17 +2210,20 @@ function buildPairingOwnCodeEditor(): HTMLElement {
   regenBtn.title =
     'Make a new code. Anyone using your old code can no longer reach you until you re-share.';
   regenBtn.addEventListener('click', () => {
-    const had = !!settings.get('pairingOwnCode');
-    if (
-      had &&
-      !window.confirm(
-        'Regenerate your pairing code? Anyone you already shared the old code with will need the new one.',
-      )
-    ) {
-      return;
-    }
-    // The keypair lives in the main process; ask it to mint a fresh one.
-    void regenerateOwnCode().then(() => showToast('New pairing code generated'));
+    void (async () => {
+      const had = !!settings.get('pairingOwnCode');
+      if (
+        had &&
+        !(await confirmDialog(
+          'Regenerate your pairing code? Anyone you already shared the old code with will need the new one.',
+          { okLabel: 'Regenerate' },
+        ))
+      ) {
+        return;
+      }
+      // The keypair lives in the main process; ask it to mint a fresh one.
+      void regenerateOwnCode().then(() => showToast('New pairing code generated'));
+    })();
   });
 
   wrap.append(codeEl, copyBtn, regenBtn);
@@ -3293,17 +3299,17 @@ function buildVoiceDictationModelEditor(): HTMLElement {
     };
     void refreshBase();
     baseDeleteBtn.addEventListener('click', () => {
-      if (
-        !window.confirm(
-          "Delete the standard voice model? Voice control won't work until you download it again.",
-        )
-      )
-        return;
-      baseDeleteBtn.style.display = 'none';
-      baseStatus.textContent = 'Deleting…';
-      void api.voiceDeleteBaseModel().then((res) => {
-        if (!res.ok) baseStatus.textContent = `Delete failed: ${res.error ?? 'unknown'}`;
-        void refreshBase();
+      void confirmDialog(
+        "Delete the standard voice model? Voice control won't work until you download it again.",
+        { okLabel: 'Delete' },
+      ).then((go) => {
+        if (!go) return;
+        baseDeleteBtn.style.display = 'none';
+        baseStatus.textContent = 'Deleting…';
+        void api.voiceDeleteBaseModel().then((res) => {
+          if (!res.ok) baseStatus.textContent = `Delete failed: ${res.error ?? 'unknown'}`;
+          void refreshBase();
+        });
       });
     });
     baseButton.addEventListener('click', () => {
@@ -3355,17 +3361,17 @@ function buildVoiceDictationModelEditor(): HTMLElement {
 
   deleteButton.addEventListener('click', () => {
     if (!api) return;
-    if (
-      !window.confirm(
-        'Delete the large dictation model (1.8 GB)? Voice will fall back to the standard model.',
-      )
-    )
-      return;
-    deleteButton.style.display = 'none';
-    status.textContent = 'Deleting…';
-    void api.voiceDeleteDictationModel().then((res) => {
-      if (!res.ok) status.textContent = `Delete failed: ${res.error ?? 'unknown'}`;
-      void refresh();
+    void confirmDialog(
+      'Delete the large dictation model (1.8 GB)? Voice will fall back to the standard model.',
+      { okLabel: 'Delete' },
+    ).then((go) => {
+      if (!go) return;
+      deleteButton.style.display = 'none';
+      status.textContent = 'Deleting…';
+      void api.voiceDeleteDictationModel().then((res) => {
+        if (!res.ok) status.textContent = `Delete failed: ${res.error ?? 'unknown'}`;
+        void refresh();
+      });
     });
   });
 
@@ -3970,11 +3976,12 @@ function buildAccessibilityRendererEditor(): HTMLElement {
     if (enabled === !!settings.get('accessibilityTreeEnabled')) return; // no change
     settings.set('accessibilityTreeEnabled', enabled as never);
     if (!electron) return;
-    void electron.setAccessibilityTreeEnabled(enabled).then(() => {
+    void electron.setAccessibilityTreeEnabled(enabled).then(async () => {
       // The Chromium switch only applies at process start, so this needs a full
       // app restart. Offer to do it now; otherwise it applies next launch.
-      const restartNow = window.confirm(
-        `Screen reader support will turn ${enabled ? 'on' : 'off'} after CardMirror restarts.\n\nRestart now?`,
+      const restartNow = await confirmDialog(
+        `Screen reader support will turn ${enabled ? 'on' : 'off'} after CardMirror restarts. Restart now?`,
+        { okLabel: 'Restart' },
       );
       if (restartNow) {
         void electron.relaunchApp();
@@ -4845,9 +4852,11 @@ function buildMobileLayoutEditor(): HTMLElement {
       settings.set('mobileLayout', o.value);
       // The shell is chosen once per load; offer the reload here so
       // the choice takes effect now rather than on the next visit.
-      if (window.confirm('Reload now to apply the layout change?')) {
-        window.location.reload();
-      }
+      void confirmDialog('Reload now to apply the layout change?', { okLabel: 'Reload' }).then(
+        (go) => {
+          if (go) window.location.reload();
+        },
+      );
     });
     row.appendChild(input);
     const labelText = document.createElement('span');

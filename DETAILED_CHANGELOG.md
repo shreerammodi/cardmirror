@@ -93,6 +93,26 @@ single-pane module state that is stale garbage in the workspace.
   multi-pane boot also handles a stray `resumeRoomId` payload via the
   slot-picker deps instead of the empty-file dead end.
 
+- **Native-dialog extermination: the untypeable-editor class closed**
+  (`text-prompt.ts` + 11 call-site files). Field bug (2026-07-11, tilde with
+  no speech doc): Electron's native `window.alert`/`confirm` on Windows/Linux
+  never hand keyboard focus back to the webContents on dismiss — mouse events
+  work (selection) but keystrokes are dead until a reload. Prior fixes were
+  per-site `.focus()` bandaids, which only help on macOS (why the owner could
+  never reproduce reports). This pass removes the CLASS: (1) new
+  `alertDialog()` / `confirmDialog()` in text-prompt.ts, composed from the
+  existing route-dialog vocabulary (overlay + header + choice-detail body +
+  accent OK / quiet Cancel; Enter/Esc/overlay-click); (2) every native
+  dialog in renderer code replaced — speech-doc-send ×4 (the reported bug),
+  index.ts ×23, quick-cards-manage-ui ×9 (close/select now async),
+  settings-ui ×7, web-file-tools ×4, voice/controller ×2, flow-port,
+  multi-pane-shell, mobile-shell, mobile-settings-ui ×1 each — and the old
+  `.focus()` bandaids deleted; (3) centralized focus restore: a new
+  `captureFocusForDialog()` records `document.activeElement` at open and
+  every dialog helper (including the pre-existing promptForText/Choice/
+  RouteChoice and the select-speech-doc modal) restores it on close, so
+  in-DOM overlays no longer drop the caret to `<body>` either. Zero native
+  alert/confirm/prompt calls remain under src/.
 - **Round 3 audit follow-through: transport taxonomy + polish**
   (`collab-session.ts`, `room-client.ts`, `collab-ui.ts`,
   `collab-persist.ts`, `comments-plugin.ts`, `home-screen.ts`, `index.ts`).

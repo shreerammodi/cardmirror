@@ -15,6 +15,7 @@
  */
 
 import { getHost } from './host/index.js';
+import { alertDialog } from './text-prompt.js';
 import { showToast } from './toast.js';
 import type { FileFilter } from './host/types.js';
 
@@ -45,12 +46,12 @@ export interface WebFileTool {
 export async function runWebFileTool(tool: WebFileTool): Promise<void> {
   const host = getHost();
   const input = await host.openFile().catch((err: unknown) => {
-    alert(`Couldn't open the file: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`Couldn't open the file: ${err instanceof Error ? err.message : err}`);
     return null;
   });
   if (!input) return;
   if (!tool.accept.test(input.name)) {
-    alert(tool.acceptMsg);
+    void alertDialog(tool.acceptMsg);
     return;
   }
   const modal = createToolModal(`${tool.verb} “${input.name}”…`);
@@ -61,7 +62,7 @@ export async function runWebFileTool(tool: WebFileTool): Promise<void> {
     result = await tool.run(input.bytes, input.name);
   } catch (err) {
     modal.close();
-    alert(`${tool.label} failed: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`${tool.label} failed: ${err instanceof Error ? err.message : err}`);
     return;
   }
   modal.toReady({
@@ -76,7 +77,7 @@ export async function runWebFileTool(tool: WebFileTool): Promise<void> {
         });
       } catch (err) {
         console.warn('saveAs failed:', err);
-        alert(`Save failed: ${err instanceof Error ? err.message : err}`);
+        void alertDialog(`Save failed: ${err instanceof Error ? err.message : err}`);
         return; // keep the modal open so they can retry
       }
       if (!saved) return; // user cancelled the OS picker — leave the modal up

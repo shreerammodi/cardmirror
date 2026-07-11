@@ -6,6 +6,7 @@
  * edition has no recognition host.
  */
 import type { EditorView } from 'prosemirror-view';
+import { alertDialog, confirmDialog } from '../text-prompt.js';
 import type { RibbonContext } from '../ribbon-commands.js';
 import { settings } from '../settings.js';
 import { showToast } from '../toast.js';
@@ -280,12 +281,13 @@ export class VoiceController {
       return;
     }
     const proceed =
-      typeof window !== 'undefined' &&
-      window.confirm(
+      typeof document !== 'undefined' &&
+      (await confirmDialog(
         'Voice control needs a one-time download of its recognition model (about 130 MB). ' +
           'This can take a few minutes; you can keep working and you’ll be notified when it’s ready. ' +
           'Download now?',
-      );
+        { okLabel: 'Download' },
+      ));
     if (!proceed) return;
     showToast('Downloading voice model in the background…', { durationMs: 3200 });
     const res = await host.voiceDownloadBaseModel();
@@ -293,8 +295,8 @@ export class VoiceController {
       // Modal, not a toast: after minutes away the user has moved on,
       // and the whole point is to catch their attention so the "ready"
       // state isn't a surprise the next time they hit the voice key.
-      if (typeof window !== 'undefined') {
-        window.alert('Voice model downloaded. Press the voice key (or the ribbon button) to start voice control.');
+      if (typeof document !== 'undefined') {
+        await alertDialog('Voice model downloaded. Press the voice key (or the ribbon button) to start voice control.');
       }
     } else {
       const reason = res.error === 'download-in-progress' ? 'already in progress' : (res.error ?? 'unknown error');

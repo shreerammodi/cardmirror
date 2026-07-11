@@ -15,6 +15,7 @@
  * toggles), readers (rows). Flag a new kind → add its renderer here.
  */
 
+import { confirmDialog } from './text-prompt.js';
 import {
   settings,
   SETTING_METADATA,
@@ -260,9 +261,11 @@ function buildMobileLayoutSegment(): HTMLElement {
   const group = buildSegment('mobileLayout', ['auto', 'mobile', 'desktop']);
   group.addEventListener('click', (e) => {
     if (!(e.target instanceof HTMLButtonElement)) return;
-    if (window.confirm('Reload now to apply the layout change?')) {
-      window.location.reload();
-    }
+    void confirmDialog('Reload now to apply the layout change?', { okLabel: 'Reload' }).then(
+      (go) => {
+        if (go) window.location.reload();
+      },
+    );
   });
   return group;
 }

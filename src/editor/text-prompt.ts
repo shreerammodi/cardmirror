@@ -12,6 +12,26 @@
  * the same modal vocabulary.
  */
 
+/** Capture the focused element at dialog open; returns a restorer to call on
+ *  close. In-DOM overlays don't steal OS-level focus, but removing them
+ *  leaves the caret on <body> — the editor keeps its visible selection yet
+ *  takes no keystrokes until clicked. Restoring the captured element (when
+ *  it's still in the DOM) puts the caret back with zero caller involvement.
+ *  Exported for one-off overlays (e.g. the select-speech-doc modal) that
+ *  don't ride these helpers. */
+export function captureFocusForDialog(): () => void {
+  const prev = document.activeElement;
+  return () => {
+    if (prev instanceof HTMLElement && prev.isConnected) {
+      try {
+        prev.focus();
+      } catch {
+        /* element refuses focus — nothing to restore */
+      }
+    }
+  };
+}
+
 export interface TextPromptOptions {
   /** Title / question shown above the input. */
   message: string;
@@ -30,6 +50,7 @@ export interface TextPromptOptions {
 
 export function promptForText(opts: TextPromptOptions): Promise<string | null> {
   return new Promise((resolve) => {
+    const restoreFocus = captureFocusForDialog();
     const overlay = document.createElement('div');
     overlay.className = 'pmd-route-overlay';
     const dialog = document.createElement('div');
@@ -57,6 +78,7 @@ export function promptForText(opts: TextPromptOptions): Promise<string | null> {
     const cleanup = (): void => {
       overlay.remove();
       document.removeEventListener('keydown', onKey);
+      restoreFocus();
     };
 
     const cancelBtn = document.createElement('button');
@@ -140,6 +162,7 @@ export function promptForChoice<T extends string>(
   opts: ChoicePromptOptions<T>,
 ): Promise<T | null> {
   return new Promise((resolve) => {
+    const restoreFocus = captureFocusForDialog();
     const overlay = document.createElement('div');
     overlay.className = 'pmd-route-overlay';
     const dialog = document.createElement('div');
@@ -163,6 +186,7 @@ export function promptForChoice<T extends string>(
     const cleanup = (): void => {
       overlay.remove();
       document.removeEventListener('keydown', onKey);
+      restoreFocus();
     };
 
     const cancelBtn = document.createElement('button');
@@ -245,6 +269,7 @@ export function promptForRouteChoice<T extends string>(
   opts: RouteChoiceOptions<T>,
 ): Promise<T | null> {
   return new Promise((resolve) => {
+    const restoreFocus = captureFocusForDialog();
     const overlay = document.createElement('div');
     overlay.className = 'pmd-route-overlay';
     const dialog = document.createElement('div');
@@ -261,6 +286,7 @@ export function promptForRouteChoice<T extends string>(
     const cleanup = (): void => {
       overlay.remove();
       document.removeEventListener('keydown', onKey);
+      restoreFocus();
     };
 
     const pick = (value: T): void => {
@@ -322,6 +348,133 @@ export function promptForRouteChoice<T extends string>(
     };
     document.addEventListener('keydown', onKey);
 
+    document.body.appendChild(overlay);
+  });
+}
+
+/** In-DOM replacement for `window.alert` — same dialog vocabulary as the
+ *  prompts above (route overlay + accent OK button). Resolves when dismissed
+ *  (OK, Enter, Esc, or overlay click) and restores focus to whatever had it.
+ *
+ *  NEVER call the native `window.alert`/`confirm` from renderer code:
+ *  Electron's native dialogs on Windows/Linux don't hand keyboard focus back
+ *  to the webContents on dismiss — the editor keeps its selection and takes
+ *  mouse events but no keystrokes until a reload (field bugs 2026-07-03 and
+ *  2026-07-11; renderer-side `.focus()` after the alert does NOT fix it). */
+export function alertDialog(message: string, opts?: { title?: string }): Promise<void> {
+  return new Promise((resolve) => {
+    const restoreFocus = captureFocusForDialog();
+    const overlay = document.createElement('div');
+    overlay.className = 'pmd-route-overlay';
+    const dialog = document.createElement('div');
+    dialog.className = 'pmd-route-dialog pmd-text-prompt-dialog';
+
+    if (opts?.title) {
+      const header = document.createElement('div');
+      header.className = 'pmd-route-header';
+      header.textContent = opts.title;
+      dialog.appendChild(header);
+    }
+    // The body reuses the choice-detail block (bordered surface panel) so
+    // multi-sentence messages read comfortably; with no title, style the
+    // message as the header line instead.
+    const body = document.createElement('div');
+    body.className = opts?.title ? 'pmd-choice-prompt-detail' : 'pmd-route-header';
+    body.textContent = message;
+    dialog.appendChild(body);
+
+    const buttons = document.createElement('div');
+    buttons.className = 'pmd-text-prompt-buttons';
+    const okBtn = document.createElement('button');
+    okBtn.type = 'button';
+    okBtn.className = 'pmd-text-prompt-ok';
+    okBtn.textContent = 'OK';
+    const done = (): void => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+      restoreFocus();
+      resolve();
+    };
+    okBtn.addEventListener('click', done);
+    buttons.appendChild(okBtn);
+    dialog.appendChild(buttons);
+
+    overlay.appendChild(dialog);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) done();
+    });
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        e.preventDefault();
+        done();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
+  });
+}
+
+/** In-DOM replacement for `window.confirm` (see alertDialog's warning about
+ *  the native dialogs). Resolves true on OK / Enter, false on Cancel / Esc /
+ *  overlay click. */
+export function confirmDialog(
+  message: string,
+  opts?: { title?: string; okLabel?: string; cancelLabel?: string },
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const restoreFocus = captureFocusForDialog();
+    const overlay = document.createElement('div');
+    overlay.className = 'pmd-route-overlay';
+    const dialog = document.createElement('div');
+    dialog.className = 'pmd-route-dialog pmd-text-prompt-dialog';
+
+    if (opts?.title) {
+      const header = document.createElement('div');
+      header.className = 'pmd-route-header';
+      header.textContent = opts.title;
+      dialog.appendChild(header);
+    }
+    const body = document.createElement('div');
+    body.className = opts?.title ? 'pmd-choice-prompt-detail' : 'pmd-route-header';
+    body.textContent = message;
+    dialog.appendChild(body);
+
+    const buttons = document.createElement('div');
+    buttons.className = 'pmd-text-prompt-buttons';
+    const finish = (value: boolean): void => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+      restoreFocus();
+      resolve(value);
+    };
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'pmd-route-cancel';
+    cancelBtn.textContent = opts?.cancelLabel ?? 'Cancel';
+    cancelBtn.addEventListener('click', () => finish(false));
+    buttons.appendChild(cancelBtn);
+    const okBtn = document.createElement('button');
+    okBtn.type = 'button';
+    okBtn.className = 'pmd-text-prompt-ok';
+    okBtn.textContent = opts?.okLabel ?? 'OK';
+    okBtn.addEventListener('click', () => finish(true));
+    buttons.appendChild(okBtn);
+    dialog.appendChild(buttons);
+
+    overlay.appendChild(dialog);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) finish(false);
+    });
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        finish(false);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        finish(true);
+      }
+    };
+    document.addEventListener('keydown', onKey);
     document.body.appendChild(overlay);
   });
 }

@@ -19,6 +19,7 @@
  */
 
 import { TextSelection } from 'prosemirror-state';
+import { confirmDialog } from './text-prompt.js';
 import { settings, ZOOM_MIN_PCT, ZOOM_MAX_PCT } from './settings.js';
 import { getActiveView, getNavPanel, runRibbon, getLiveZoomPct, setLiveZoomPct } from './index.js';
 import { readModeAwareUndo, readModeAwareRedo } from './read-mode-plugin.js';
@@ -338,7 +339,7 @@ function buildMoveSheet(): HTMLElement {
   action('▼ Down', 'Move one step down', () => moveStep(1));
   action('⇪ Send to…', 'Pick a destination in the outline', startSendTo);
   action('⧉ Copy', 'Copy to the clipboard', copyUnit);
-  action('⌫ Delete', 'Delete', deleteUnit, 'pmd-movesheet-danger');
+  action('⌫ Delete', 'Delete', () => void deleteUnit(), 'pmd-movesheet-danger');
   action('✕', 'Put down (stay in Move mode)', () => {
     const view = getActiveView();
     if (view) setMobileUnitSelection(view, null);
@@ -688,12 +689,13 @@ function copyUnit(): void {
   showToast('Copied');
 }
 
-function deleteUnit(): void {
+async function deleteUnit(): Promise<void> {
   const view = getActiveView();
   if (!view || !currentUnit) return;
   const label = currentUnit.label.trim() || 'this';
-  if (!window.confirm(`Delete "${label}"?`)) {
-    view.focus(); // reclaim focus the confirm stole (Windows/Linux)
+  // In-DOM confirm; the helper restores focus itself (the native confirm
+  // never returned keyboard focus on Windows/Linux).
+  if (!(await confirmDialog(`Delete "${label}"?`, { okLabel: 'Delete' }))) {
     return;
   }
   view.dispatch(view.state.tr.delete(currentUnit.from, currentUnit.to));

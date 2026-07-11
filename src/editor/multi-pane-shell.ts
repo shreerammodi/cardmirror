@@ -65,7 +65,7 @@ import { getSpeechDocResolver } from './speech-doc-registry.js';
 import { sendToSpeech as runSendToSpeech } from './speech-doc-send.js';
 import { selfRefSelectionPos } from './self-transclusion-commands.js';
 import { transclusionDivergenceKey } from './transclusion-divergence-plugin.js';
-import { promptForText } from './text-prompt.js';
+import { promptForText, alertDialog } from './text-prompt.js';
 import { showToast } from './toast.js';
 import {
   buildEditorPlugins,
@@ -2236,7 +2236,7 @@ class MultiPaneShell {
       opened = await getHost().openFile();
     } catch (err) {
       console.error('Open failed:', err);
-      alert(`Failed to open: ${err instanceof Error ? err.message : err}`);
+      void alertDialog(`Failed to open: ${err instanceof Error ? err.message : err}`);
       return;
     }
     if (!opened) return;

@@ -32,6 +32,7 @@ import {
 } from './quick-cards-store.js';
 import { setIcon } from './icons';
 import { pushOverlay, popOverlay, isTopOverlay } from './overlay-stack.js';
+import { alertDialog, confirmDialog } from './text-prompt.js';
 
 type SortMode = 'updated' | 'name' | 'source';
 
@@ -91,7 +92,7 @@ class QuickCardsManageUI {
     this.listEl = this.root.querySelector('.pmd-qc-manage-list')!;
     this.detailEl = this.root.querySelector('.pmd-qc-manage-detail')!;
     this.root.querySelector('.pmd-qc-manage-close')!
-      .addEventListener('click', () => this.close());
+      .addEventListener('click', () => void this.close());
     // On `document` (capture) — not `this.root` — so Esc closes from
     // anywhere, including before the user has focused any control in
     // the overlay (focus is still on the doc underneath on open).
@@ -121,9 +122,11 @@ class QuickCardsManageUI {
     });
   }
 
-  close(): void {
+  async close(): Promise<void> {
     if (!this.root) return;
-    if (this.isDirty() && !confirm('Discard unsaved changes to this quick card?')) {
+    // In-DOM confirm — native window.confirm on Windows/Linux never returns
+    // keyboard focus to the editor (untypeable-editor field-bug class).
+    if (this.isDirty() && !(await confirmDialog('Discard unsaved changes to this quick card?'))) {
       return;
     }
     this.teardownEditor();
@@ -148,7 +151,7 @@ class QuickCardsManageUI {
       if (this.overlayToken && !isTopOverlay(this.overlayToken)) return;
       e.preventDefault();
       e.stopPropagation();
-      this.close();
+      void this.close();
     }
   };
 
@@ -305,13 +308,13 @@ class QuickCardsManageUI {
     main.appendChild(meta);
     row.appendChild(main);
 
-    row.addEventListener('click', () => this.select(card.id));
+    row.addEventListener('click', () => void this.select(card.id));
     return row;
   }
 
-  private select(id: string): void {
+  private async select(id: string): Promise<void> {
     if (id === this.selectedId) return;
-    if (this.isDirty() && !confirm('Discard unsaved changes to this quick card?')) {
+    if (this.isDirty() && !(await confirmDialog('Discard unsaved changes to this quick card?'))) {
       return;
     }
     this.selectedId = id;
@@ -485,12 +488,12 @@ class QuickCardsManageUI {
   private async saveCard(card: QuickCard): Promise<void> {
     const name = this.draftName.trim();
     if (!name) {
-      alert('Give the quick card a name.');
+      void alertDialog('Give the quick card a name.');
       return;
     }
     const dup = findDuplicate(this.cards, name, this.draftTags, card.id);
     if (dup) {
-      alert(
+      void alertDialog(
         this.draftTags.length
           ? `Another quick card named “${name}” with those tags already exists.`
           : `Another quick card named “${name}” (no tags) already exists.`,
@@ -539,7 +542,7 @@ class QuickCardsManageUI {
 
   private async doExport(cards: QuickCard[]): Promise<void> {
     if (cards.length === 0) {
-      alert('No quick cards to export.');
+      void alertDialog('No quick cards to export.');
       return;
     }
     const payload = JSON.stringify({ version: 1, cards }, null, 2);
@@ -558,7 +561,7 @@ class QuickCardsManageUI {
     try {
       parsed = JSON.parse(new TextDecoder().decode(opened.bytes));
     } catch {
-      alert(`Couldn't read “${opened.name}” as JSON.`);
+      void alertDialog(`Couldn't read “${opened.name}” as JSON.`);
       return;
     }
     const incoming = Array.isArray(parsed)
@@ -567,7 +570,7 @@ class QuickCardsManageUI {
         ? (parsed as { cards: unknown[] }).cards
         : null;
     if (!incoming) {
-      alert(`“${opened.name}” doesn't look like a quick-cards export.`);
+      void alertDialog(`“${opened.name}” doesn't look like a quick-cards export.`);
       return;
     }
     // Import as NEW (fresh ids) so an import never overwrites an
@@ -587,11 +590,11 @@ class QuickCardsManageUI {
       );
     }
     if (cards.length === 0) {
-      alert('No importable quick cards found in that file.');
+      void alertDialog('No importable quick cards found in that file.');
       return;
     }
     await quickCardsStore.importMany(cards);
-    alert(`Imported ${cards.length} quick card${cards.length === 1 ? '' : 's'}.`);
+    void alertDialog(`Imported ${cards.length} quick card${cards.length === 1 ? '' : 's'}.`);
   }
 }
 

@@ -14,6 +14,7 @@
  */
 
 import { getElectronHost } from './host/index.js';
+import { captureFocusForDialog } from './text-prompt.js';
 import { showToast } from './toast.js';
 import { setIcon } from './icons';
 
@@ -29,11 +30,18 @@ interface DocRow {
   isFocusedWindow: boolean;
 }
 
+/** Focus restorer captured when the modal opened — closing an in-DOM overlay
+ *  otherwise leaves the caret on <body> (selection visible, keystrokes dead
+ *  until a click). */
+let restoreFocusOnClose: (() => void) | null = null;
+
 function closeModal(): void {
   if (!openOverlay) return;
   openOverlay.remove();
   openOverlay = null;
   document.removeEventListener('keydown', onEscape);
+  restoreFocusOnClose?.();
+  restoreFocusOnClose = null;
 }
 
 function onEscape(e: KeyboardEvent): void {
@@ -106,6 +114,7 @@ export async function openSelectSpeechDocModal(): Promise<void> {
 
   const rows = await host.listDocs();
 
+  restoreFocusOnClose = captureFocusForDialog();
   const overlay = document.createElement('div');
   overlay.className = 'pmd-select-speech-overlay';
   overlay.addEventListener('click', (e) => {

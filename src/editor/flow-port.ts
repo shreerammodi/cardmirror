@@ -9,6 +9,7 @@
  */
 
 import type { EditorView } from 'prosemirror-view';
+import { confirmDialog } from './text-prompt.js';
 import type { Node as PMNode } from 'prosemirror-model';
 import { getElectronHost } from './host/index.js';
 import type { FlowResult } from './host/electron-host.js';
@@ -107,11 +108,10 @@ export async function runSendToFlow(view: EditorView, opts: SendOptions): Promis
   let res = await host.flowSend({ cells });
   if (res.needsConfirm) {
     const where = res.cell ? ` (${res.cell})` : '';
-    if (!window.confirm(`There's already text where you're sending${where}. Overwrite?`)) {
-      // `window.confirm` steals focus from the editor's contenteditable;
-      // on cancel nothing else grabs it back, leaving the editor unable to
-      // take keyboard input until clicked. Re-focus explicitly.
-      view.focus();
+    // In-DOM confirm — the native one never returns keyboard focus on
+    // Windows/Linux (untypeable-editor field-bug class); the dialog helper
+    // restores focus itself.
+    if (!(await confirmDialog(`There's already text where you're sending${where}. Overwrite?`))) {
       return;
     }
     res = await host.flowSend({ cells }, true);

@@ -24,6 +24,7 @@ import { flattenSelfRefsInSlice, isSelfRef } from './self-transclusion.js';
 import { normalizeSelectionForSend } from './send-normalize.js';
 import { getSpeechDocResolver } from './speech-doc-registry.js';
 import { getElectronHost } from './host/index.js';
+import { alertDialog } from './text-prompt.js';
 
 // ── Web multi-tab slice transport ──────────────────────────────────────────
 // With no main process to route through, the speech doc may live in another
@@ -331,13 +332,13 @@ export function sendToSpeech(
   const resolver = getSpeechDocResolver();
   const speechUid = resolver.getSpeechUid();
   if (!speechUid) {
-    window.alert(
+    // In-DOM dialog, NEVER window.alert: on Windows/Linux the native alert
+    // doesn't hand keyboard focus back to the renderer — selection worked
+    // but typing was dead until a reload, and the old `sourceView.focus()`
+    // bandaid only helped on macOS (field bug, 2026-07-11).
+    void alertDialog(
       'No speech document yet. Use "New speech document" to create one or "Mark active doc as speech" to designate an existing pane.',
     );
-    // `window.alert` steals OS-level focus from the editor's contenteditable.
-    // macOS Chromium hands it back on dismiss; Windows/Linux don't, leaving the
-    // editor unable to take edits. Reclaim it explicitly.
-    sourceView.focus();
     return;
   }
   const slice = takeSendSlice(sourceView);
@@ -368,8 +369,7 @@ export function sendToSpeech(
       // resolver will pick up the change via the `speech:changed`
       // broadcast. Surface a brief notice so the user understands
       // why nothing landed.
-      window.alert("The speech document's window has closed.");
-      sourceView.focus(); // reclaim focus the alert stole (see note above)
+      void alertDialog("The speech document's window has closed.");
     } else if (result.reason === 'same-window') {
       // Shouldn't trigger in practice — we check locally above —
       // but main has the same guard. Silent.
@@ -392,8 +392,7 @@ function sendSpeechSliceCrossTab(
   sourceView: EditorView,
 ): void {
   if (!speechChannel) {
-    window.alert("This browser can't reach the speech document in another tab.");
-    sourceView.focus();
+    void alertDialog("This browser can't reach the speech document in another tab.");
     return;
   }
   const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -415,8 +414,7 @@ function sendSpeechSliceCrossTab(
   timer = setTimeout(() => {
     speechChannel?.removeEventListener('message', onAck);
     // No tab acked — the designated speech doc isn't open anywhere.
-    window.alert("The speech document isn't open in any tab.");
-    sourceView.focus(); // reclaim focus the alert stole (see notes above)
+    void alertDialog("The speech document isn't open in any tab.");
   }, 600);
 }
 

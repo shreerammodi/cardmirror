@@ -39,7 +39,7 @@ import {
   buildDeleteStructureTr,
   installIncomingSpeechSliceHandler,
 } from './speech-doc-send.js';
-import { promptForText, promptForRouteChoice } from './text-prompt.js';
+import { promptForText, promptForRouteChoice, alertDialog } from './text-prompt.js';
 import { openDocMenu } from './doc-menu-ui.js';
 import { createReference } from './create-reference.js';
 import { showToast } from './toast.js';
@@ -546,7 +546,7 @@ async function copyCurrentHeadingIn(sourceView: EditorView): Promise<void> {
 async function runNewSpeechDocumentSingleDoc(): Promise<void> {
   const host = getHost();
   if (!host.canSpawnWindow) {
-    window.alert(
+    void alertDialog(
       'New Speech Document opens a separate window, which the web version can’t ' +
         'create. To use a speech document here, turn on the Three-pane workspace ' +
         '(Settings → General) — it shows several docs side by side in one window, ' +
@@ -582,7 +582,7 @@ async function runNewSpeechDocumentSingleDoc(): Promise<void> {
       format === 'cmir' ? serializeNative(docNode) : await toDocx(docNode);
   } catch (err) {
     console.error('Speech-doc serialization failed:', err);
-    alert(
+    void alertDialog(
       `Couldn't create speech document: ${err instanceof Error ? err.message : err}`,
     );
     return;
@@ -616,7 +616,7 @@ async function runNewSpeechDocumentSingleDoc(): Promise<void> {
     });
   } catch (err) {
     console.error('Failed to spawn new speech window:', err);
-    alert(
+    void alertDialog(
       `Failed to open new speech window: ${err instanceof Error ? err.message : err}`,
     );
   }
@@ -1754,7 +1754,7 @@ async function onNewDocClicked(): Promise<void> {
       await host.spawnWindow(null);
     } catch (err) {
       console.error('Spawn window failed:', err);
-      alert(`Failed to open new window: ${err instanceof Error ? err.message : err}`);
+      void alertDialog(`Failed to open new window: ${err instanceof Error ? err.message : err}`);
     }
     return;
   }
@@ -1920,16 +1920,14 @@ function openImagePicker(targetView: EditorView): void {
     void (async () => {
       const node = await buildImageNodeFromBlob(file);
       if (!node) {
-        window.alert(`Couldn't read "${file.name}" as an image.`);
-        targetView.focus(); // reclaim focus the alert stole (Windows/Linux)
+        void alertDialog(`Couldn't read "${file.name}" as an image.`);
         return;
       }
       const inserted = insertImageNode(targetView, node);
       if (!inserted) {
-        window.alert(
+        void alertDialog(
           'The cursor isn\'t in a position that accepts inline content. Click into a card body, paragraph, or heading first.',
         );
-        targetView.focus(); // reclaim focus the alert stole (Windows/Linux)
       }
     })();
   });
@@ -5414,7 +5412,7 @@ async function runOpenFlow(): Promise<void> {
     opened = await getHost().openFile({ filters: OPEN_FILE_FILTERS });
   } catch (err) {
     console.error('Open failed:', err);
-    alert(`Failed to open: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`Failed to open: ${err instanceof Error ? err.message : err}`);
     return;
   }
   if (!opened) return;
@@ -5431,7 +5429,7 @@ async function routeOpenedFile(opened: OpenedFile): Promise<void> {
   // .cmir/.docx passes through unchanged.
   const src = resolveOpenedFile(opened);
   if (src === 'corrupt') {
-    alert('That .cmir-journal file is corrupt or could not be read.');
+    void alertDialog('That .cmir-journal file is corrupt or could not be read.');
     return;
   }
   // Cross-window duplicate-open guard: if any other window already has this
@@ -5453,7 +5451,7 @@ async function routeOpenedFile(opened: OpenedFile): Promise<void> {
       await multiDocOnFileOpen({ name: src.name, bytes: src.bytes, handle: src.handle });
     } catch (err) {
       console.error('Multi-doc open failed:', err);
-      alert(`Failed to open: ${err instanceof Error ? err.message : err}`);
+      void alertDialog(`Failed to open: ${err instanceof Error ? err.message : err}`);
     }
     return;
   }
@@ -5481,7 +5479,7 @@ async function routeOpenedFile(opened: OpenedFile): Promise<void> {
       });
     } catch (err) {
       console.error('Spawn window failed:', err);
-      alert(`Failed to open in new window: ${err instanceof Error ? err.message : err}`);
+      void alertDialog(`Failed to open in new window: ${err instanceof Error ? err.message : err}`);
     }
     return;
   }
@@ -5527,7 +5525,7 @@ async function routeOpenedFile(opened: OpenedFile): Promise<void> {
     console.log(`Loaded ${src.name}: ${countSummary(docNode)}`);
   } catch (err) {
     console.error('Failed to load doc:', err);
-    alert(`Failed to load: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`Failed to load: ${err instanceof Error ? err.message : err}`);
   }
 }
 
@@ -5774,13 +5772,13 @@ async function pickAndLoadInPlace(): Promise<boolean> {
   try {
     opened = await getHost().openFile({ filters: OPEN_FILE_FILTERS });
   } catch (err) {
-    alert(`Failed to open: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`Failed to open: ${err instanceof Error ? err.message : err}`);
     return false;
   }
   if (!opened) return false;
   const src = resolveOpenedFile(opened);
   if (src === 'corrupt') {
-    alert('That .cmir-journal file is corrupt or could not be read.');
+    void alertDialog('That .cmir-journal file is corrupt or could not be read.');
     return false;
   }
   if (src.handle != null && (await isFileOpenInAnotherWindow(src.handle))) {
@@ -5797,7 +5795,7 @@ async function pickAndLoadInPlace(): Promise<boolean> {
     });
     return true;
   } catch (err) {
-    alert(`Failed to load: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`Failed to load: ${err instanceof Error ? err.message : err}`);
     return false;
   }
 }
@@ -6070,7 +6068,7 @@ async function openRecentInPlace(recent: RecentFile): Promise<void> {
         handle: file.handle,
       });
     } catch (err) {
-      alert(`Failed to open: ${err instanceof Error ? err.message : err}`);
+      void alertDialog(`Failed to open: ${err instanceof Error ? err.message : err}`);
     }
     return;
   }
@@ -6097,7 +6095,7 @@ async function openRecentInPlace(recent: RecentFile): Promise<void> {
         uid: null,
       });
     } catch (err) {
-      alert(`Failed to open new window: ${err instanceof Error ? err.message : err}`);
+      void alertDialog(`Failed to open new window: ${err instanceof Error ? err.message : err}`);
     }
     return;
   }
@@ -6109,7 +6107,7 @@ async function openRecentInPlace(recent: RecentFile): Promise<void> {
       format: file.format,
     });
   } catch (err) {
-    alert(`Failed to load: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`Failed to load: ${err instanceof Error ? err.message : err}`);
   }
 }
 
@@ -6513,7 +6511,7 @@ export async function runSaveAsFlow(): Promise<boolean> {
     return true;
   } catch (err) {
     console.error('Save failed:', err);
-    alert(`Save failed: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`Save failed: ${err instanceof Error ? err.message : err}`);
     return false;
   }
 }
@@ -6601,7 +6599,7 @@ export async function runSaveSendDocFlow(): Promise<boolean> {
     return true;
   } catch (err) {
     console.error('Send doc save failed:', err);
-    alert(`Send doc save failed: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`Send doc save failed: ${err instanceof Error ? err.message : err}`);
     return false;
   }
 }
@@ -6678,7 +6676,7 @@ export async function runSaveMarkedCardsFlow(): Promise<boolean> {
     return true;
   } catch (err) {
     console.error('Marked cards save failed:', err);
-    alert(`Marked cards save failed: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`Marked cards save failed: ${err instanceof Error ? err.message : err}`);
     return false;
   }
 }
@@ -6736,7 +6734,7 @@ export async function runSaveFlow(): Promise<boolean> {
     return true;
   } catch (err) {
     console.error('Save failed:', err);
-    alert(`Save failed: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`Save failed: ${err instanceof Error ? err.message : err}`);
     return false;
   }
 }
@@ -7882,7 +7880,7 @@ async function mountFromSpawnPayload(
     console.log(`Spawned with ${payload.filename}: ${countSummary(docNode)}`);
   } catch (err) {
     console.error('Failed to mount spawned doc:', err);
-    alert(`Failed to load: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`Failed to load: ${err instanceof Error ? err.message : err}`);
     // Fall back to the starter so the window isn't broken.
     mountView(currentDoc);
   }
@@ -8007,7 +8005,7 @@ async function handleModeSwitch(newValue: boolean): Promise<void> {
     );
   } catch (err) {
     console.error('Mode-switch journaling failed:', err);
-    alert(
+    void alertDialog(
       `Couldn't save open documents before switching modes: ${err instanceof Error ? err.message : err}\n\nReverting.`,
     );
     settings.set('multiDocWorkspace', BOOT_MULTI_DOC_WORKSPACE);
@@ -8195,7 +8193,7 @@ async function saveRecoveryEntry(entry: JournalEntry): Promise<boolean> {
       return true;
     } catch (err) {
       console.error('Recovery save failed:', err);
-      alert(`Save failed: ${err instanceof Error ? err.message : err}`);
+      void alertDialog(`Save failed: ${err instanceof Error ? err.message : err}`);
       return false;
     }
   }
@@ -8221,7 +8219,7 @@ async function saveRecoveryEntry(entry: JournalEntry): Promise<boolean> {
     return true;
   } catch (err) {
     console.error('Recovery Save As failed:', err);
-    alert(`Save As failed: ${err instanceof Error ? err.message : err}`);
+    void alertDialog(`Save As failed: ${err instanceof Error ? err.message : err}`);
     return false;
   }
 }

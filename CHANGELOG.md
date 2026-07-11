@@ -160,6 +160,16 @@ remains **experimental** — keep your own saved copies.)
 - The Sessions list now says "saved …" instead of "last synced …" — the
   timestamp was always the local save time, which advances even offline.
 
+- **Fixed the "can select but can't type" bug — for good.** Several flows
+  (send-to-speech with no speech doc set, Verbatim Flow overwrite prompts,
+  voice-model dialogs, various error notices) used the system's native
+  alert/confirm popups, which on Windows and Linux never hand keyboard focus
+  back to the editor when dismissed — you could still click and select, but
+  typing was dead until a reload. We'd patched these one at a time; this
+  release replaces **every** native popup in the app with CardMirror's own
+  dialogs, which also now return your cursor to exactly where it was when
+  any dialog closes. (Thanks for the tilde-key report that pinned it down.)
+
 - A couple of messages still pointed at the old "Card Sharing" settings name;
   they now say **Collaboration**.
 
