@@ -196,11 +196,13 @@ export function collabEndOrLeaveSession(uid: string): Promise<void> {
   return closeActions?.endOrLeave(uid) ?? Promise.resolve();
 }
 
-/** Mode-switch hand-off: the single↔three-pane toggle is a full page reload, so
- *  a live session is torn down by it. Before reloading, capture each live
- *  session's {uid, roomId} (and flush its record so unsynced edits persist); the
- *  post-reload flow auto-resumes each into the doc that reopens under that uid.
- *  Provided by collab-ui; resolves [] when collab isn't loaded (no sessions). */
+/** Mode-switch flush: the single↔three-pane toggle is a full page reload, so a
+ *  live session is torn down by it. Before reloading, FLUSH each live session's
+ *  record so unsynced edits persist, and return each one's {uid, roomId}. The
+ *  co-edited docs then close across the toggle (excluded from the reopen marker)
+ *  and stay resumable from the home-screen Sessions list — the uids are how the
+ *  toggle knows which docs those are. Provided by collab-ui; resolves [] when
+ *  collab isn't loaded (no sessions — always the case on web). */
 let handoffProvider: (() => Promise<{ uid: string; roomId: string }[]>) | null = null;
 
 export function setCollabHandoffProvider(
@@ -211,4 +213,17 @@ export function setCollabHandoffProvider(
 
 export function collabCaptureSessionHandoff(): Promise<{ uid: string; roomId: string }[]> {
   return handoffProvider?.() ?? Promise.resolve([]);
+}
+
+/** How many live co-editing sessions this window holds — a synchronous, no-flush
+ *  read for the mode-switch confirm dialog (which must warn BEFORE the user
+ *  commits). Provided by collab-ui; 0 when collab isn't loaded. */
+let sessionCountProvider: (() => number) | null = null;
+
+export function setCollabSessionCountProvider(fn: (() => number) | null): void {
+  sessionCountProvider = fn;
+}
+
+export function collabLiveSessionCount(): number {
+  return sessionCountProvider?.() ?? 0;
 }

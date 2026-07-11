@@ -424,7 +424,7 @@ describe('collab UI flows through the editor seams', () => {
     viewE.destroy();
   }, 20_000);
 
-  it('mode-switch hand-off: captures {uid,roomId}+flushes, resumes into the reopened doc', async () => {
+  it('session flush + keep-resumable close + resume-in-place (existingDoc)', async () => {
     const view = mkIndexStyleView('ho-doc');
     const depsFor = (uid: string, v: EditorView, onNewDoc?: () => void) => ({
       getView: () => v,

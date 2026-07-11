@@ -30,6 +30,7 @@ import {
   notifyCollabCopresenceChange,
   setCollabCloseActions,
   setCollabHandoffProvider,
+  setCollabSessionCountProvider,
 } from './collab-hooks.js';
 import { RoomsError } from './room-client.js';
 import { getElectronHost } from '../host/index.js';
@@ -150,6 +151,7 @@ setCollabHandoffProvider(async () => {
   await Promise.all([...sessions.values()].map((s) => s.persist.flush()));
   return list;
 });
+setCollabSessionCountProvider(() => sessions.size);
 
 /** The session the shared chip / no-deps flows act on: the focused doc's, or —
  *  when focus isn't resolvable (or that doc has no session) — the sole session
@@ -691,18 +693,17 @@ export async function resumeSessionFlow(
     });
     // Fresh doc first — its uid owns the session. A false return keeps the
     // record (still resumable) — no seams installed yet, so nothing to unwind.
-    // EXCEPT the mode-switch hand-off (`existingDoc`): the doc was already
-    // reopened from its journal under the same uid, so bind into THAT view
-    // instead of swapping in a new one (which would duplicate the pane). The
-    // Loro binding replaces the reopened content with the CRDT's — same doc.
+    // EXCEPT `existingDoc`: bind into an ALREADY-open doc under its uid instead
+    // of creating one (the binding replaces its content with the CRDT's —
+    // same doc). A capability for resuming in place; no caller today.
     if (!opts?.existingDoc && !(await deps.newSessionDoc())) {
       await session.stop();
       showToast('Resume cancelled');
       return;
     }
-    // Owner = the doc that will hold the session: for existingDoc (mode-switch
-    // reopen) it is the already-open doc under its original uid; otherwise the
-    // fresh doc newSessionDoc() just made. Capture now, past the awaits.
+    // Owner = the doc that will hold the session: for existingDoc it is the
+    // already-open doc under its uid; otherwise the fresh doc newSessionDoc()
+    // just made (single-pane swap, or multi-pane slot). Capture past the awaits.
     const ownerUid = deps.getOwnerUid?.() ?? '';
     sessRef = installSeams(session, deps, record.shareCode, ownerUid);
     deps.refreshPlugins();
