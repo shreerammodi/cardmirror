@@ -1344,7 +1344,8 @@ you're offline.
 | **Draft a flashcard** | From Create Flashcard | Drafts a question/answer or cloze from the selection. |
 
 You can set the author name AI notes are attributed under, customize
-the cite-formatting prompt, and point AI at a specific Claude model
+the cite-formatter and cite-researcher prompts, and point AI at a
+specific Claude model
 (**AI model (advanced)** — leave blank to use the model built into your
 release) in Settings → Comments & AI. If a model is ever retired, AI
 features show a message telling you to update CardMirror or set a newer
