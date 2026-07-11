@@ -55,6 +55,10 @@ export interface LlmRequest {
   temperature?: number;
   /** System prompt. Falls back to the explainer-flavored default. */
   system?: string;
+  /** Enable provider-native web search: the Anthropic `web_search`
+   *  server tool, or the OpenRouter `web` plugin. Used by the cite
+   *  researcher; off for everything else. */
+  webSearch?: boolean;
   messages: LlmMessage[];
 }
 
@@ -218,6 +222,9 @@ async function callAnthropicApi(req: LlmRequest): Promise<LlmReply> {
     max_tokens: req.maxTokens ?? defaultMaxTokens(),
     ...(req.temperature != null ? { temperature: req.temperature } : {}),
     ...(req.system ? { system: req.system } : {}),
+    ...(req.webSearch
+      ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }] }
+      : {}),
     messages: req.messages,
   };
 
@@ -320,6 +327,7 @@ async function callOpenRouter(req: LlmRequest): Promise<LlmReply> {
     model,
     max_tokens: req.maxTokens ?? defaultMaxTokens(),
     ...(req.temperature != null ? { temperature: req.temperature } : {}),
+    ...(req.webSearch ? { plugins: [{ id: 'web' }] } : {}),
     messages: toOpenRouterMessages(req),
   };
 
