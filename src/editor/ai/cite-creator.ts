@@ -44,10 +44,17 @@ import { showToast } from '../toast.js';
  *  text. */
 const DATE_PLACEHOLDER = '{DATE}';
 
+/** Placeholder substituted with the citation format template (the
+ *  `citeFormatTemplate` setting, or `DEFAULT_CITE_FORMAT_GUIDE`) at run
+ *  time. Both default prompts reference it so editing the template once
+ *  flows into the formatter and researcher alike. */
+const FORMAT_PLACEHOLDER = '{FORMAT}';
+
 // The formatting rules + examples shared verbatim by both default
-// prompts (formatter and researcher). Kept as one fragment so the two
+// prompts (formatter and researcher). Editable via the "citation format
+// template" setting; both prompts pull it in through {FORMAT} so the two
 // defaults can't drift apart.
-const CITE_FORMAT_GUIDE = `1. Author names should be in the format: FirstName LastName Date, where Date is:
+export const DEFAULT_CITE_FORMAT_GUIDE = `1. Author names should be in the format: FirstName LastName Date, where Date is:
    - The publication date in mm/dd format (or m/dd, or m/d, respectively, if the month or day require just one digit) for publications within the last month of the current year
    - The publication year in y format (for single-digit years) or yy format (for double-digit years) or yyyy (for years prior to 1950) for all other publications
 2. For multiple authors, use '&' for two authors and 'et al.' for three or more.
@@ -107,7 +114,7 @@ export const DEFAULT_AI_CITE_PROMPT = `Today's date is ${DATE_PLACEHOLDER}.
 
 You are an expert in formatting academic citations. Your task is to reformat the given citation to match the following style:
 
-${CITE_FORMAT_GUIDE}
+${FORMAT_PLACEHOLDER}
 
 Important:
 - Do not remove any information from the citation that was included in the submission.
@@ -126,7 +133,7 @@ Your task is to research and create a citation for debate from whatever informat
 
 Format the citation exactly per the following style; do not deviate from it:
 
-${CITE_FORMAT_GUIDE}
+${FORMAT_PLACEHOLDER}
 
 Research qualifications for authors as necessary. Emphasize very succinct qualifications, including only portions relevant to supporting their credibility to write on the topic of the article, and excluding extraneous qualifications. Shorten the verbiage of qualifications when possible. Ensure that qualifications are readable at a glance; debaters will need to quickly scan them and find key quals in a time-pressured environment.
 
@@ -148,10 +155,20 @@ function formatToday(now: Date = new Date()): string {
   return `${now.getMonth() + 1}-${now.getDate()}-${now.getFullYear()}`;
 }
 
-/** Replace the prompt's {DATE} placeholders. */
-export function resolveCitePrompt(template: string, now: Date = new Date()): string {
+/** Replace the prompt's {DATE} and {FORMAT} placeholders. `formatGuide`
+ *  is the citation format template (setting override or default); a
+ *  prompt with no {FORMAT} token is left untouched by that substitution. */
+export function resolveCitePrompt(
+  template: string,
+  now: Date = new Date(),
+  formatGuide: string = DEFAULT_CITE_FORMAT_GUIDE,
+): string {
   const today = formatToday(now);
-  return template.split(DATE_PLACEHOLDER).join(today);
+  return template
+    .split(DATE_PLACEHOLDER)
+    .join(today)
+    .split(FORMAT_PLACEHOLDER)
+    .join(formatGuide);
 }
 
 /** Parse the model's delimited-block reply. The format dodges all
@@ -425,7 +442,8 @@ function runCiteCommand(view: EditorView, cfg: CiteCommandConfig): void {
   }
 
   const promptTemplate = settings.get(cfg.promptKey).trim() || cfg.defaultPrompt;
-  const systemPrompt = resolveCitePrompt(promptTemplate);
+  const formatGuide = settings.get('citeFormatTemplate').trim() || DEFAULT_CITE_FORMAT_GUIDE;
+  const systemPrompt = resolveCitePrompt(promptTemplate, new Date(), formatGuide);
 
   // Lease the selection so the cite lands where the user selected even if
   // the doc shifts during the request, and user edits inside it are held.

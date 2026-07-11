@@ -1344,7 +1344,8 @@ you're offline.
 | **Draft a flashcard** | From Create Flashcard | Drafts a question/answer or cloze from the selection. |
 
 You can set the author name AI notes are attributed under, customize
-the cite-formatter and cite-researcher prompts, and point AI at a
+the cite-formatter and cite-researcher prompts and the shared citation
+format template, and point AI at a
 specific Claude model
 (**AI model (advanced)** — leave blank to use the model built into your
 release) in Settings → Comments & AI. If a model is ever retired, AI
@@ -2021,6 +2022,10 @@ remove one, **↺** to restore its default. A few window-level shortcuts
   leave blank for the built-in default.
 - **AI cite-researcher prompt** - the system prompt Research Cite uses;
   leave blank for the built-in default.
+- **Citation format template** - the shared formatting rules and examples
+  both cite prompts pull in through their `{FORMAT}` placeholder; edit it
+  to change the citation style used by both commands. Leave blank for the
+  built-in default.
 
 ### Accessibility
 

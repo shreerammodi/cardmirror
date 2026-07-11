@@ -37,15 +37,21 @@ describe('DEFAULT_AI_RESEARCH_CITE_PROMPT', () => {
     expect(DEFAULT_AI_RESEARCH_CITE_PROMPT).not.toContain('Do not remove any information');
   });
 
-  it('shares the formatting guide and output block with the formatter default', () => {
-    // Guide sentinels present in both.
-    for (const s of [
-      'Examples of the desired format:',
-      'Jie Jiang et al. 23',
-      "use '&' for two authors and 'et al.' for three or more",
-    ]) {
-      expect(DEFAULT_AI_CITE_PROMPT).toContain(s);
-      expect(DEFAULT_AI_RESEARCH_CITE_PROMPT).toContain(s);
+  it('references the format template via {FORMAT} and resolves it in both', () => {
+    // The guide is no longer inlined — both defaults carry the placeholder.
+    expect(DEFAULT_AI_CITE_PROMPT).toContain('{FORMAT}');
+    expect(DEFAULT_AI_RESEARCH_CITE_PROMPT).toContain('{FORMAT}');
+    // Resolving expands {FORMAT} to the default guide in both.
+    for (const prompt of [DEFAULT_AI_CITE_PROMPT, DEFAULT_AI_RESEARCH_CITE_PROMPT]) {
+      const resolved = resolveCitePrompt(prompt, new Date(2026, 6, 11));
+      expect(resolved).not.toContain('{FORMAT}');
+      for (const s of [
+        'Examples of the desired format:',
+        'Jie Jiang et al. 23',
+        "use '&' for two authors and 'et al.' for three or more",
+      ]) {
+        expect(resolved).toContain(s);
+      }
     }
     // Both end with the byte-identical output-format instructions.
     const tailStart = DEFAULT_AI_CITE_PROMPT.indexOf('Respond using the delimited block format');
@@ -62,10 +68,12 @@ describe('DEFAULT_AI_CITE_PROMPT (regression: fragment refactor is a verbatim mo
       'You are an expert in formatting academic citations.',
       'Important:',
       '- Do not remove any information from the citation that was included in the submission.',
-      'Robert N. Stavins 18',
+      '{FORMAT}',
       'Each token MUST be a verbatim substring of the cite so the editor can locate it.',
     ]) {
       expect(DEFAULT_AI_CITE_PROMPT).toContain(s);
     }
+    // The Stavins example lives in the format template, injected at {FORMAT}.
+    expect(resolveCitePrompt(DEFAULT_AI_CITE_PROMPT)).toContain('Robert N. Stavins 18');
   });
 });

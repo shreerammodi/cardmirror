@@ -1158,6 +1158,11 @@ export interface Settings {
    *  Selection"). Same edit-modal treatment as `aiCitePrompt`. Empty
    *  string falls back to `DEFAULT_AI_RESEARCH_CITE_PROMPT`. */
   aiResearchCitePrompt: string;
+  /** Citation format template — the shared formatting rules + examples
+   *  both cite prompts pull in via their `{FORMAT}` placeholder. Same
+   *  edit-modal treatment. Empty string falls back to
+   *  `DEFAULT_CITE_FORMAT_GUIDE`. */
+  citeFormatTemplate: string;
   /** Translator backend. `'auto'` uses Anthropic when AI features are
    *  ready, otherwise MyMemory. `'mymemory'` (no key, works with AI off),
    *  `'anthropic'` (needs AI features), `'google'` (needs an API key). */
@@ -1544,6 +1549,7 @@ const DEFAULTS: Settings = {
   },
   aiCitePrompt: '',
   aiResearchCitePrompt: '',
+  citeFormatTemplate: '',
   translationProvider: 'auto',
   translationTargetLang: 'en',
   translationSourceLang: 'auto',
@@ -3023,6 +3029,20 @@ export const SETTING_METADATA: SettingMeta[] = [
     dependsOn: 'aiFeaturesEnabled',
     aliases: ['research cite', 'cite researcher'],
   },
+  {
+    key: 'citeFormatTemplate',
+    label: 'Citation format template',
+    description:
+      'The formatting rules + worked examples shared by both cite commands - ' +
+      'author name style, quals, titles, publication details. Both prompts pull ' +
+      'it in through their "{FORMAT}" placeholder, so editing it here updates ' +
+      'both. Click "Edit template" to open a full-size editor. Leave blank to use ' +
+      'the built-in default.',
+    kind: 'aiCitePrompt',
+    category: 'comments-ai',
+    dependsOn: 'aiFeaturesEnabled',
+    aliases: ['cite format', 'citation format', 'format template', 'cite style'],
+  },
   // ─── Card Cutter (experimental; console-gated, hidden until on) ──
   {
     key: 'cardCutterReadTimeSec',
@@ -3934,6 +3954,10 @@ function sanitize(s: Settings): Settings {
       typeof s.aiResearchCitePrompt === 'string'
         ? s.aiResearchCitePrompt
         : DEFAULTS.aiResearchCitePrompt,
+    citeFormatTemplate:
+      typeof s.citeFormatTemplate === 'string'
+        ? s.citeFormatTemplate
+        : DEFAULTS.citeFormatTemplate,
     translationProvider: (['auto', 'mymemory', 'anthropic', 'google'] as const).includes(
       s.translationProvider as Settings['translationProvider'],
     )

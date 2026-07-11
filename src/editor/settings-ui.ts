@@ -1095,10 +1095,12 @@ class SettingsModal {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'pmd-settings-btn';
-      btn.textContent = 'Edit prompt';
+      btn.textContent = meta.key === 'citeFormatTemplate' ? 'Edit template' : 'Edit prompt';
       btn.addEventListener('click', () => {
         void import('./ai/edit-prompt-modal.js').then((m) =>
-          m.openCitePromptEditor(meta.key as 'aiCitePrompt' | 'aiResearchCitePrompt'),
+          m.openCitePromptEditor(
+            meta.key as 'aiCitePrompt' | 'aiResearchCitePrompt' | 'citeFormatTemplate',
+          ),
         );
       });
       label.appendChild(btn);

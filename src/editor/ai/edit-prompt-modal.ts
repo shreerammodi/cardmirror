@@ -1,24 +1,58 @@
 /**
- * Modal editor for the AI cite-formatter / cite-researcher prompts.
+ * Modal editor for the AI cite-formatter / cite-researcher prompts and
+ * the shared citation format template.
  *
- * The prompt is long enough that the inline settings text input
- * doesn't fit. This dialog opens on demand with a full-size
- * textarea pre-populated with the current prompt (or the default
- * when the setting is empty). Save persists the value; "Restore
- * default" clears the override.
+ * Each is long enough that the inline settings text input doesn't fit.
+ * This dialog opens on demand with a full-size textarea pre-populated
+ * with the current value (or the default when the setting is empty).
+ * Save persists the value; "Restore default" clears the override.
  */
 
 import { settings } from '../settings.js';
-import { DEFAULT_AI_CITE_PROMPT, DEFAULT_AI_RESEARCH_CITE_PROMPT } from './cite-creator.js';
+import {
+  DEFAULT_AI_CITE_PROMPT,
+  DEFAULT_AI_RESEARCH_CITE_PROMPT,
+  DEFAULT_CITE_FORMAT_GUIDE,
+} from './cite-creator.js';
 import { setIcon } from '../icons';
 import { pushOverlay, popOverlay, isTopOverlay } from '../overlay-stack.js';
 
-type CitePromptKey = 'aiCitePrompt' | 'aiResearchCitePrompt';
+type CitePromptKey = 'aiCitePrompt' | 'aiResearchCitePrompt' | 'citeFormatTemplate';
+
+const PROMPT_NOTE =
+  'This system prompt is sent to the AI before your selected text. ' +
+  "Use `{DATE}` anywhere you want today's date substituted in (M-D-YYYY), " +
+  'and `{FORMAT}` where the citation format template should be inserted. ' +
+  'The reply must use the delimited [[CITE]] … [[TOKENS]] … [[END]] block format at the bottom of the prompt — the editor splits on those exact markers to insert the cite and apply the F8 cite mark to each token, so leave that part intact unless you know what you\'re doing.';
+
+const EDITOR_CONFIG: Record<
+  CitePromptKey,
+  { title: string; default: string; note: string }
+> = {
+  aiCitePrompt: {
+    title: 'AI cite-formatter prompt',
+    default: DEFAULT_AI_CITE_PROMPT,
+    note: PROMPT_NOTE,
+  },
+  aiResearchCitePrompt: {
+    title: 'AI cite-researcher prompt',
+    default: DEFAULT_AI_RESEARCH_CITE_PROMPT,
+    note: PROMPT_NOTE,
+  },
+  citeFormatTemplate: {
+    title: 'Citation format template',
+    default: DEFAULT_CITE_FORMAT_GUIDE,
+    note:
+      'The formatting rules and worked examples both cite prompts pull in ' +
+      'through their `{FORMAT}` placeholder. Edit it here to change the citation ' +
+      'style used by both "Format Cite" and "Research Cite".',
+  },
+};
 
 export function openCitePromptEditor(key: CitePromptKey = 'aiCitePrompt'): void {
   if (document.querySelector('.pmd-prompt-overlay')) return;
-  const isResearch = key === 'aiResearchCitePrompt';
-  const defaultPrompt = isResearch ? DEFAULT_AI_RESEARCH_CITE_PROMPT : DEFAULT_AI_CITE_PROMPT;
+  const cfg = EDITOR_CONFIG[key];
+  const defaultPrompt = cfg.default;
   const overlayToken = pushOverlay();
 
   const overlay = document.createElement('div');
@@ -34,7 +68,7 @@ export function openCitePromptEditor(key: CitePromptKey = 'aiCitePrompt'): void 
   const header = document.createElement('header');
   header.className = 'pmd-prompt-header';
   const title = document.createElement('h2');
-  title.textContent = isResearch ? 'AI cite-researcher prompt' : 'AI cite-formatter prompt';
+  title.textContent = cfg.title;
   header.appendChild(title);
   const close = (): void => {
     overlay.remove();
@@ -52,10 +86,7 @@ export function openCitePromptEditor(key: CitePromptKey = 'aiCitePrompt'): void 
 
   const note = document.createElement('p');
   note.className = 'pmd-prompt-note';
-  note.textContent =
-    'This system prompt is sent to the AI before your selected text. ' +
-    'Use `{DATE}` anywhere you want today\'s date substituted in (M-D-YYYY). ' +
-    'The reply must use the delimited [[CITE]] … [[TOKENS]] … [[END]] block format at the bottom of the prompt — the editor splits on those exact markers to insert the cite and apply the F8 cite mark to each token, so leave that part intact unless you know what you\'re doing.';
+  note.textContent = cfg.note;
   dialog.appendChild(note);
 
   const stored = settings.get(key);
