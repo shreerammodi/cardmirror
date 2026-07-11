@@ -1,5 +1,6 @@
 /**
- * AI cite creator.
+ * AI cite creator: reformat ("Format Cite From Selection") and
+ * research ("Research Cite From Selection").
  *
  * User selects raw citation info (URL, byline, abstract, article
  * chunk — whatever they have). On invocation we send the selection
@@ -21,6 +22,10 @@
  * While the request is in flight, a floating tooltip pinned near
  * the selection cycles through Clod activity text (or "Thinking…"
  * when Clod mode is off).
+ *
+ * The research variant sends the same request with webSearch enabled
+ * and its own standalone default prompt; everything downstream of the
+ * reply (parsing, cite-mark tokens, lease, activity pill) is shared.
  */
 
 import type { EditorView } from 'prosemirror-view';
@@ -39,17 +44,10 @@ import { showToast } from '../toast.js';
  *  text. */
 const DATE_PLACEHOLDER = '{DATE}';
 
-// Default prompt — ported from the Card Formatting Tools utility's
-// cite-formatter prompt (reference-docs/Card Formatting Tools.py),
-// with the delimited-block output instructions appended at the
-// bottom. The wrapper is what distinguishes this from the
-// clipboard-only utility: the editor needs a machine-parsable shape
-// to apply `cite_mark` to the right tokens.
-export const DEFAULT_AI_CITE_PROMPT = `Today's date is ${DATE_PLACEHOLDER}.
-
-You are an expert in formatting academic citations. Your task is to reformat the given citation to match the following style:
-
-1. Author names should be in the format: FirstName LastName Date, where Date is:
+// The formatting rules + examples shared verbatim by both default
+// prompts (formatter and researcher). Kept as one fragment so the two
+// defaults can't drift apart.
+const CITE_FORMAT_GUIDE = `1. Author names should be in the format: FirstName LastName Date, where Date is:
    - The publication date in mm/dd format (or m/dd, or m/d, respectively, if the month or day require just one digit) for publications within the last month of the current year
    - The publication year in y format (for single-digit years) or yy format (for double-digit years) or yyyy (for years prior to 1950) for all other publications
 2. For multiple authors, use '&' for two authors and 'et al.' for three or more.
@@ -79,14 +77,11 @@ Robert N. Stavins 18, A.J. Meyer Professor of Energy and Economic Development, J
 
 Yael Parag & Sarah Darby 9, Parag is the Vice Dean of Reichman University's School of Sustainability at Reichman University (IDC); Derby is BSc DPhil, Associate Professor, Energy Programme, Environmental Change Institute, University of Oxford, "Consumer–Supplier–Government Triangular Relations: Rethinking the UK Policy Path for Carbon Emissions Reduction from the UK Residential Sector," Energy Policy, vol. 37, no. 10, 10/01/2009, pp. 3984–3992
 
-Jie Jiang et al. 23, Jie Jiang, School of Intellectual Property at Nanjing University of Science and Technology; Qihang Zhang, School of Intellectual Property at Nanjing University of Science and Technology; Yifan Hui, School of Mathematics and Statistics at University of Glasgow, "The Impact of Market and Non-Market-Based Environmental Policy Instruments on Firms' Sustainable Technological Innovation: Evidence from Chinese Firms," Sustainability, vol. 15, no. 5, 5, Multidisciplinary Digital Publishing Institute, 01/15/2023, p. 4425
+Jie Jiang et al. 23, Jie Jiang, School of Intellectual Property at Nanjing University of Science and Technology; Qihang Zhang, School of Intellectual Property at Nanjing University of Science and Technology; Yifan Hui, School of Mathematics and Statistics at University of Glasgow, "The Impact of Market and Non-Market-Based Environmental Policy Instruments on Firms' Sustainable Technological Innovation: Evidence from Chinese Firms," Sustainability, vol. 15, no. 5, 5, Multidisciplinary Digital Publishing Institute, 01/15/2023, p. 4425`;
 
-Important:
-- Do not remove any information from the citation that was included in the submission.
-- Do not add any information to the citation that was not included in the submission.
-- If the title or publication or names or qualifications are in another language, translate them to English.
-
-Respond using the delimited block format below — no JSON, no quoting, no escaping. Quotes inside the cite (around the title, for instance) just appear literally; the parser splits on the markers, not the punctuation.
+// The delimited-block output instructions shared verbatim by both
+// defaults. parseCiteResponse depends on these exact markers.
+const CITE_OUTPUT_FORMAT = `Respond using the delimited block format below — no JSON, no quoting, no escaping. Quotes inside the cite (around the title, for instance) just appear literally; the parser splits on the markers, not the punctuation.
 
 [[CITE]]
 <the full reformatted citation, exactly as you'd otherwise have returned it>
@@ -101,6 +96,47 @@ The TOKENS section lists every substring that should be highlighted with the F8 
   - Three+ authors ("Carla Norrlöf et al. 24"): TOKENS = "Norrlöf et al. 24"
 
 For the two-author case, the first token ends with "& " (ampersand + trailing space) and the second token starts with the second lastname — the firstname between them stays unmarked. For "et al." cases the whole "Lastname et al. Date" is one contiguous token. Each token MUST be a verbatim substring of the cite so the editor can locate it.`;
+
+// Default prompt — ported from the Card Formatting Tools utility's
+// cite-formatter prompt (reference-docs/Card Formatting Tools.py),
+// with the delimited-block output instructions appended at the
+// bottom. The wrapper is what distinguishes this from the
+// clipboard-only utility: the editor needs a machine-parsable shape
+// to apply `cite_mark` to the right tokens.
+export const DEFAULT_AI_CITE_PROMPT = `Today's date is ${DATE_PLACEHOLDER}.
+
+You are an expert in formatting academic citations. Your task is to reformat the given citation to match the following style:
+
+${CITE_FORMAT_GUIDE}
+
+Important:
+- Do not remove any information from the citation that was included in the submission.
+- Do not add any information to the citation that was not included in the submission.
+- If the title or publication or names or qualifications are in another language, translate them to English.
+
+${CITE_OUTPUT_FORMAT}`;
+
+// Researcher default: same formatting guide and output block, but the
+// model is told to find the source and quals itself (web search), and
+// the formatter's add/remove-nothing constraints are deliberately
+// absent - they would forbid researching.
+export const DEFAULT_AI_RESEARCH_CITE_PROMPT = `Today's date is ${DATE_PLACEHOLDER}.
+
+Your task is to research and create a citation for debate from whatever information the user gives you - a URL, a title, a byline, an abstract, or a topic fragment. Use web search to find the source and fill in the publication details.
+
+Format the citation exactly per the following style; do not deviate from it:
+
+${CITE_FORMAT_GUIDE}
+
+Research qualifications for authors as necessary. Emphasize very succinct qualifications, including only portions relevant to supporting their credibility to write on the topic of the article, and excluding extraneous qualifications. Shorten the verbiage of qualifications when possible. Ensure that qualifications are readable at a glance; debaters will need to quickly scan them and find key quals in a time-pressured environment.
+
+Only evidence that has been published within a month of today's date should be formatted using the time-sensitive citation style.
+
+If the title or publication or names or qualifications are in another language, translate them to English.
+
+Only output the formatted citation. No "Tag" prefix, no extraneous comments, just the citation.
+
+${CITE_OUTPUT_FORMAT}`;
 
 export interface AiCiteResult {
   cite: string;
@@ -354,12 +390,19 @@ export function applyCiteToSelection(
 
 // --------------------------- command ----------------------------
 
-/** Entry point — fires on `aiCreateCite` ribbon command. Reads
- *  the current selection, kicks off the API call, shows the
- *  in-flight tooltip, and on resolve replaces the selection
- *  with the formatted + marked cite. No-op when AI features are
- *  off, the key isn't set, or the selection is empty. */
-export function runAiCreateCite(view: EditorView): void {
+interface CiteCommandConfig {
+  /** Settings key holding the user's prompt override. */
+  promptKey: 'aiCitePrompt' | 'aiResearchCitePrompt';
+  defaultPrompt: string;
+  /** Provider-native web search (the research command). */
+  webSearch: boolean;
+  /** Toast prefix for error/lost-region messages. */
+  toastPrefix: string;
+  /** Region-lease label (shows up in coordinator diagnostics). */
+  leaseLabel: string;
+}
+
+function runCiteCommand(view: EditorView, cfg: CiteCommandConfig): void {
   if (!settings.get('aiFeaturesEnabled')) {
     showToast('AI features are disabled — enable them in Settings.');
     return;
@@ -381,12 +424,12 @@ export function runAiCreateCite(view: EditorView): void {
     return;
   }
 
-  const promptTemplate = settings.get('aiCitePrompt').trim() || DEFAULT_AI_CITE_PROMPT;
+  const promptTemplate = settings.get(cfg.promptKey).trim() || cfg.defaultPrompt;
   const systemPrompt = resolveCitePrompt(promptTemplate);
 
   // Lease the selection so the cite lands where the user selected even if
   // the doc shifts during the request, and user edits inside it are held.
-  const lease = claimRegion(view, { from: sel.from, to: sel.to }, { label: 'cite' });
+  const lease = claimRegion(view, { from: sel.from, to: sel.to }, { label: cfg.leaseLabel });
   if (!lease) {
     showToast('Another AI edit is working on this selection — try again in a moment.');
     return;
@@ -402,6 +445,7 @@ export function runAiCreateCite(view: EditorView): void {
       const reply = await callLlm({
         apiKey,
         system: systemPrompt,
+        webSearch: cfg.webSearch,
         messages: [{ role: 'user', content: raw }],
       });
       const parsed = parseCiteResponse(reply.text);
@@ -410,19 +454,44 @@ export function runAiCreateCite(view: EditorView): void {
       // collapsed (its container was removed); surface that as a toast.
       const region = lease.region();
       if (!region) {
-        showToast('Cite: the selected text is no longer in the document.');
+        showToast(`${cfg.toastPrefix}: the selected text is no longer in the document.`);
         return;
       }
       applyCiteToSelection(view, region.from, region.to, parsed, (tr) => lease.apply(tr));
     } catch (e) {
       if (e instanceof LlmError) {
-        showToast(`Cite: ${e.message}`);
+        showToast(`${cfg.toastPrefix}: ${e.message}`);
       } else {
-        showToast(`Cite: ${e instanceof Error ? e.message : String(e)}`);
+        showToast(`${cfg.toastPrefix}: ${e instanceof Error ? e.message : String(e)}`);
       }
     } finally {
       lease.release();
       activity.stop();
     }
   })();
+}
+
+/** Entry point — fires on `aiCreateCite` ribbon command. Reformats the
+ *  selected citation info in place. */
+export function runAiCreateCite(view: EditorView): void {
+  runCiteCommand(view, {
+    promptKey: 'aiCitePrompt',
+    defaultPrompt: DEFAULT_AI_CITE_PROMPT,
+    webSearch: false,
+    toastPrefix: 'Cite',
+    leaseLabel: 'cite',
+  });
+}
+
+/** Entry point — fires on `aiResearchCite` ribbon command. Researches
+ *  the selected fragment (URL, title, topic) with web search and writes
+ *  the citation. */
+export function runAiResearchCite(view: EditorView): void {
+  runCiteCommand(view, {
+    promptKey: 'aiResearchCitePrompt',
+    defaultPrompt: DEFAULT_AI_RESEARCH_CITE_PROMPT,
+    webSearch: true,
+    toastPrefix: 'Research cite',
+    leaseLabel: 'research-cite',
+  });
 }

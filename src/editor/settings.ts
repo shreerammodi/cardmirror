@@ -1154,6 +1154,10 @@ export interface Settings {
    *  full textarea makes more sense than an inline input. Empty
    *  string falls back to `DEFAULT_AI_CITE_PROMPT`. */
   aiCitePrompt: string;
+  /** System prompt for the AI cite researcher ("Research Cite From
+   *  Selection"). Same edit-modal treatment as `aiCitePrompt`. Empty
+   *  string falls back to `DEFAULT_AI_RESEARCH_CITE_PROMPT`. */
+  aiResearchCitePrompt: string;
   /** Translator backend. `'auto'` uses Anthropic when AI features are
    *  ready, otherwise MyMemory. `'mymemory'` (no key, works with AI off),
    *  `'anthropic'` (needs AI features), `'google'` (needs an API key). */
@@ -1539,6 +1543,7 @@ const DEFAULTS: Settings = {
     reflexive: 'themself',
   },
   aiCitePrompt: '',
+  aiResearchCitePrompt: '',
   translationProvider: 'auto',
   translationTargetLang: 'en',
   translationSourceLang: 'auto',
@@ -3910,6 +3915,10 @@ function sanitize(s: Settings): Settings {
     aiPersonaCustomPronouns: sanitizeCustomPronouns(s.aiPersonaCustomPronouns),
     aiCitePrompt:
       typeof s.aiCitePrompt === 'string' ? s.aiCitePrompt : DEFAULTS.aiCitePrompt,
+    aiResearchCitePrompt:
+      typeof s.aiResearchCitePrompt === 'string'
+        ? s.aiResearchCitePrompt
+        : DEFAULTS.aiResearchCitePrompt,
     translationProvider: (['auto', 'mymemory', 'anthropic', 'google'] as const).includes(
       s.translationProvider as Settings['translationProvider'],
     )
