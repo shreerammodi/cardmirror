@@ -63,6 +63,10 @@ export const DEFAULT_CITE_FORMAT_GUIDE = `1. Author names should be in the forma
 5. Include publication details such as journal name, volume, issue, date (mm/dd/yyyy), and page numbers when available.
 6. Include URLs or DOIs at the end of the citation when provided.
 7. If the title or publication or names or qualifications are in all caps, change the capitalization so that it is appropriate for a cite.
+8. Highlighting (the F8 cite mark): highlight the LASTNAME(s) + SHORTDATE of the leading author block; firstnames stay unmarked. This is what you list in the TOKENS section of the reply.
+   - One author ("Michael Townsend 25"): highlight "Townsend 25"
+   - Two authors ("Laura Weiss & John Bresnahan 3/26"): highlight "Weiss & " then "Bresnahan 3/26" as two separate tokens — the first ends with "& " (ampersand + trailing space), the second starts with the second lastname, and the firstname between them stays unmarked
+   - Three+ authors ("Carla Norrlöf et al. 24"): highlight the whole "Norrlöf et al. 24" as one contiguous token
 
 Examples of the desired format:
 
@@ -86,23 +90,20 @@ Yael Parag & Sarah Darby 9, Parag is the Vice Dean of Reichman University's Scho
 
 Jie Jiang et al. 23, Jie Jiang, School of Intellectual Property at Nanjing University of Science and Technology; Qihang Zhang, School of Intellectual Property at Nanjing University of Science and Technology; Yifan Hui, School of Mathematics and Statistics at University of Glasgow, "The Impact of Market and Non-Market-Based Environmental Policy Instruments on Firms' Sustainable Technological Innovation: Evidence from Chinese Firms," Sustainability, vol. 15, no. 5, 5, Multidisciplinary Digital Publishing Institute, 01/15/2023, p. 4425`;
 
-// The delimited-block output instructions shared verbatim by both
-// defaults. parseCiteResponse depends on these exact markers.
+// The delimited-block wire protocol shared verbatim by both defaults.
+// parseCiteResponse depends on these exact markers, so this stays fixed
+// and out of the user-editable format guide. WHAT to highlight (the
+// TOKENS policy) lives in DEFAULT_CITE_FORMAT_GUIDE instead, so users
+// can redefine their F8 convention via the citation format template.
 const CITE_OUTPUT_FORMAT = `Respond using the delimited block format below — no JSON, no quoting, no escaping. Quotes inside the cite (around the title, for instance) just appear literally; the parser splits on the markers, not the punctuation.
 
 [[CITE]]
 <the full reformatted citation, exactly as you'd otherwise have returned it>
 [[TOKENS]]
-<one token per line>
+<the substrings to highlight, one token per line, per the highlighting rule in the format guide above>
 [[END]]
 
-The TOKENS section lists every substring that should be highlighted with the F8 cite mark. The highlighted portion is the LASTNAME(s) + SHORTDATE of the leading author block; firstnames stay unmarked.
-
-  - One author ("Michael Townsend 25"): TOKENS = "Townsend 25"
-  - Two authors ("Laura Weiss & John Bresnahan 3/26"): TOKENS = "Weiss & " then "Bresnahan 3/26" on the next line
-  - Three+ authors ("Carla Norrlöf et al. 24"): TOKENS = "Norrlöf et al. 24"
-
-For the two-author case, the first token ends with "& " (ampersand + trailing space) and the second token starts with the second lastname — the firstname between them stays unmarked. For "et al." cases the whole "Lastname et al. Date" is one contiguous token. Each token MUST be a verbatim substring of the cite so the editor can locate it.`;
+Each token MUST be a verbatim substring of the cite so the editor can locate it.`;
 
 // Default prompt — ported from the Card Formatting Tools utility's
 // cite-formatter prompt (reference-docs/Card Formatting Tools.py),
