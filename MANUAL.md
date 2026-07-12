@@ -368,10 +368,16 @@ over just what you pasted, merging its paragraphs into a single block. It's the
 quick way to drop in a quote you want condensed on arrival. Desktop only, since
 the web edition can't read the clipboard on a keypress.
 
-### Smart quotes, dashes, and quote flipping
+### Autocorrect: quotes, dashes, replacements, and capitalization
 
-CardMirror ships a few opt-in typing aids. The two autoformatters are off by
-default and reversible with a single **Backspace** right after they fire:
+CardMirror ships a family of opt-in typing aids, all Word-style autocorrects:
+they fire as you type, every one is off by default, and every conversion is
+reversible with a single **Backspace** right after it fires — you always get
+back exactly what you typed. When several are enabled they never fight: at
+most one converts per keystroke, in a fixed order (smart quotes, then the
+dash, then your custom entries, then auto-capitalization), and the settings
+table warns you when a custom entry can't fire because another aid would
+intercept it first.
 
 - **Smart quotes** (Settings → Editing → "Smart quotes") curl a straight `'` or
   `"` to the right direction as you type — opening after a space, dash, bracket,
