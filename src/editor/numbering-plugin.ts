@@ -115,7 +115,30 @@ export function createNumberGlyph(
   return span;
 }
 
+/** Everything that bakes into the rendered decoration set (or gates it).
+ *  Both settings subscribers (single-doc index.ts, multi-pane shell) diff
+ *  this to decide when to dispatch NUMBERING_REFRESH. */
+export const numberingDisplaySig = (): string =>
+  [
+    settings.get('showCardNumbering'),
+    settings.get('cardNumberingFormat'),
+    settings.get('cardNumberingSubFormat'),
+    settings.get('cardNumberingSubCapitalized'),
+    settings.get('cardNumberingIndent'),
+    settings.get('cardNumberingSubIndent'),
+    settings.get('cardNumberingMatchHeadingColor'),
+  ].join('|');
+
+const EMPTY_STATE: NumberingState = { decorations: DecorationSet.empty };
+
 function build(doc: PMNode): NumberingState {
+  // Numbering display OFF: skip the whole computation (perf audit A-02 —
+  // the O(numbered cards × top-level children) rebuild used to run on every
+  // doc-changing transaction for EVERY doc, display on or off; the props
+  // gate only hid the result). Turning the display on reaches every view
+  // via NUMBERING_REFRESH: the single-doc settings subscriber nudges the
+  // focused view, and the multi-pane shell broadcasts to every pane stack.
+  if (!settings.get('showCardNumbering')) return EMPTY_STATE;
   const { cards } = computeNumbering(doc);
   const decos: Decoration[] = [];
 
@@ -194,7 +217,14 @@ export const cardNumberingPlugin: Plugin<NumberingState> = new Plugin<NumberingS
   key: numberingPluginKey,
   state: {
     init: (_config, { doc }) => build(doc),
-    apply: (tr, prev) => (tr.docChanged || tr.getMeta(NUMBERING_REFRESH) ? build(tr.doc) : prev),
+    apply: (tr, prev) => {
+      if (!settings.get('showCardNumbering')) {
+        // Display off: never rebuild on edits; drop any stale set when the
+        // off-flip's explicit refresh arrives (frees the old decorations).
+        return tr.getMeta(NUMBERING_REFRESH) ? EMPTY_STATE : prev;
+      }
+      return tr.docChanged || tr.getMeta(NUMBERING_REFRESH) ? build(tr.doc) : prev;
+    },
   },
   props: {
     decorations(state) {

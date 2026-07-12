@@ -34,6 +34,7 @@ import { schema, newHeadingId } from '../schema/index.js';
 import { fromDocxFull, parseNative, serializeNativeAsync, NATIVE_FILE_EXTENSION } from '../index.js';
 import { settings } from './settings.js';
 import { MARK_UNREAD_TOGGLE } from './mark-unread-plugin.js';
+import { NUMBERING_REFRESH, numberingDisplaySig } from './numbering-plugin.js';
 import { getHost, getElectronHost, isSameOpenHandle, type OpenedFile } from './host/index.js';
 import { isFileOpenInAnotherWindow } from './window-coordination.js';
 import { getCommentsState, loadThreads, type Thread } from './comments-plugin.js';
@@ -1239,6 +1240,7 @@ function closeOpenStackDropdown(): void {
 /** Last-applied value of the global `markUnreadAfterMarker` toggle, so the
  *  shell only rebuilds pane decorations when it actually flips. */
 let shellLastMarkUnread = settings.get('markUnreadAfterMarker');
+let shellLastNumberingSig = numberingDisplaySig();
 
 class MultiPaneShell {
   private slots: Record<SlotId, Slot>;
@@ -1380,6 +1382,21 @@ class MultiPaneShell {
         for (const id of SLOT_IDS) {
           for (const rec of this.slots[id].stack) {
             rec.view.dispatch(rec.view.state.tr.setMeta(MARK_UNREAD_TOGGLE, true));
+          }
+        }
+      }
+      // Numbering display changed (on/off, format, indent, color mode):
+      // rebuild every pane's decorations — including hidden stacked docs,
+      // whose views are live. Without this, only the focused view (nudged
+      // by the single-doc subscriber) would repaint; with the display-off
+      // gate in the plugin state, a hidden doc toggled on would otherwise
+      // show no numbers until its next edit.
+      const numberingSig = numberingDisplaySig();
+      if (numberingSig !== shellLastNumberingSig) {
+        shellLastNumberingSig = numberingSig;
+        for (const id of SLOT_IDS) {
+          for (const rec of this.slots[id].stack) {
+            rec.view.dispatch(rec.view.state.tr.setMeta(NUMBERING_REFRESH, true));
           }
         }
       }

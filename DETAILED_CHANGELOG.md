@@ -7,6 +7,22 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Numbering display-off gate** (perf audit A-02 tier 1;
+  `numbering-plugin.ts`, `index.ts`, `multi-pane-shell.ts`; tests in
+  `numbering-live-update.test.ts`). build() ran on EVERY doc-changing
+  transaction regardless of `showCardNumbering` — the props-level gate only
+  hid the result, so display-off docs still paid the full
+  O(numbered cards × top-level children) rebuild per keystroke (~5.5 ms
+  measured at 2,000 cards). build()/apply() now early-return an empty state
+  while the display is off (the off-flip's refresh drops the stale set).
+  Correctness of the on-flip: `numberingDisplaySig` moved into the plugin
+  module and is now diffed by BOTH settings subscribers — single-doc
+  index.ts nudges the focused view (as before), and the multi-pane shell
+  broadcasts NUMBERING_REFRESH to every pane stack's views including hidden
+  stacked docs (new — previously those healed via the rebuild-per-keystroke
+  behavior this gate removes). The fast-path tier (structural-transaction
+  classification) lands separately with its own equivalence suite.
+
 - **Selection-chrome: relevance gate + frame coalescing + fused walk**
   (perf audit A-01, the 2026-07-01 audit's open P-4; new
   `selection-chrome.ts`; `index.ts`, `numbering-commands.ts`; property

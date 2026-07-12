@@ -78,6 +78,42 @@ function coloredCard(runs: Array<[string, string | null]>): PMNode {
   ]);
 }
 
+describe('display-off gate (perf audit A-02)', () => {
+  it('with numbering off, the plugin STATE holds no decorations and edits never build', () => {
+    settings.set('showCardNumbering', false);
+    const v = mkView(schema.nodes['doc']!.create(null, [numberedCard('FIRST', 'number')]));
+    const state = () => cardNumberingPlugin.getState(v.state)!;
+    expect(state().decorations.find().length).toBe(0);
+    // A doc-changing transaction must not rebuild while the display is off.
+    v.dispatch(v.state.tr.insertText('x', 3));
+    expect(state().decorations.find().length).toBe(0);
+    expect(glyphText(v)).toBe('');
+    v.destroy();
+  });
+
+  it('flipping the display on rebuilds via NUMBERING_REFRESH (the subscribers dispatch it)', () => {
+    settings.set('showCardNumbering', false);
+    settings.set('cardNumberingFormat', 'period');
+    const v = mkView(schema.nodes['doc']!.create(null, [numberedCard('FIRST', 'number')]));
+    expect(glyphText(v)).toBe('');
+    settings.set('showCardNumbering', true);
+    refresh(v); // what index.ts / the multi-pane shell dispatch on the sig change
+    expect(glyphText(v)).toBe('1.');
+    v.destroy();
+  });
+
+  it('flipping the display off drops the stale set on the refresh nudge', () => {
+    settings.set('showCardNumbering', true);
+    const v = mkView(schema.nodes['doc']!.create(null, [numberedCard('FIRST', 'number')]));
+    expect(cardNumberingPlugin.getState(v.state)!.decorations.find().length).toBeGreaterThan(0);
+    settings.set('showCardNumbering', false);
+    refresh(v);
+    expect(cardNumberingPlugin.getState(v.state)!.decorations.find().length).toBe(0);
+    expect(glyphText(v)).toBe('');
+    v.destroy();
+  });
+});
+
 describe('match-heading numbering color', () => {
   it('off → token class only, no inline color', () => {
     settings.set('showCardNumbering', true);

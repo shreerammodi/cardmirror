@@ -19,6 +19,12 @@ see `DETAILED_CHANGELOG.md`.
   an enclosing section short, and send-current-heading could truncate a
   section at a live zone's mirrored heading.
 
+- **Card numbering no longer costs anything while its display is off.** The
+  numbering plugin was recomputing every card's number on every edit even
+  with numbering hidden (~5 ms per keystroke on a 2,000-card file). With the
+  display off it now does nothing at all; toggling it on rebuilds instantly
+  in every open pane.
+
 - **Selecting and drag-selecting on large documents is much lighter.** The
   ribbon readouts that mirror the selection (font-size chip, style buttons,
   numbering buttons) used to recompute on every transaction — including ~60+

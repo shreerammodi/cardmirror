@@ -180,7 +180,7 @@ import { absorbPlugin } from './absorb-plugin.js';
 import { citeClassifierPlugin } from './cite-classifier-plugin.js';
 import { namedStyleNormalizerPlugin } from './named-style-normalizer-plugin.js';
 import { fontSizeClassPlugin } from './font-size-class-plugin.js';
-import { cardNumberingPlugin, NUMBERING_REFRESH, numberingSampleGlyph } from './numbering-plugin.js';
+import { cardNumberingPlugin, NUMBERING_REFRESH, numberingSampleGlyph, numberingDisplaySig } from './numbering-plugin.js';
 import { numberingSelectionState } from './numbering-commands.js';
 import {
   buildSimilarSelectionPlugin,
@@ -3178,16 +3178,6 @@ let lastKeyboardMacros = settings.get('keyboardMacros');
 let lastReadMode = settings.get('readMode');
 let lastReadModeBorders = settings.get('hideEmphasisBordersInReadMode');
 let lastMarkUnread = settings.get('markUnreadAfterMarker');
-const numberingDisplaySig = (): string =>
-  [
-    settings.get('showCardNumbering'),
-    settings.get('cardNumberingFormat'),
-    settings.get('cardNumberingSubFormat'),
-    settings.get('cardNumberingSubCapitalized'),
-    settings.get('cardNumberingIndent'),
-    settings.get('cardNumberingSubIndent'),
-    settings.get('cardNumberingMatchHeadingColor'),
-  ].join('|');
 let lastNumberingDisplay = numberingDisplaySig();
 
 /** Show/hide the chrome's optional clusters per their (default-off) settings:
