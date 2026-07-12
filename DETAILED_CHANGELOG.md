@@ -7,6 +7,27 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **OpenRouter as a second AI provider** (PR #13, thanks to
+  [Shreeram Modi](https://github.com/shreerammodi); `anthropic.ts` →
+  `llm.ts`). All nine AI call sites now go through one `callLlm`
+  dispatcher keyed on the `aiProvider` setting. The Anthropic path is the
+  previous client unchanged (same headers, same error kinds, same
+  friendly retired-model message). The OpenRouter path speaks the
+  OpenAI-compatible chat API: system prompts become a leading `system`
+  message, base64 image blocks become data-URL `image_url` parts, and
+  `finish_reason: "length"` maps onto the existing `max_tokens`
+  truncation contract so downstream repair passes keep working. New
+  settings: `aiProvider`, `openrouterApiKey` (secret — stripped from
+  settings exports like the other keys), `openrouterModel` (required, no
+  default), and `aiMaxTokens` (shared output budget for features without
+  their own; floor 1024, default 4096 — reasoning models spend hidden
+  thinking tokens from the same budget). `dependsOn` in the settings
+  registry generalized from a bare key to a `SettingCondition`
+  (key | {key, equals} | array) so provider-specific fields show only
+  under their provider. Translate's AI backend follows the provider
+  (marker: `[TRANSLATION BY OPENROUTER]`); PRIVACY §5/§10 and TERMS §5
+  updated for the new recipient.
+
 - **Custom autocorrections + engine decorator phase** (new
   `custom-autocorrect-plugin.ts`; `autocorrect.ts` gains decorators +
   shared `marksAreUniform`/`WORD_COMMIT_DELIMITER`; settings

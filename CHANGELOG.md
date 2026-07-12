@@ -9,6 +9,13 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **AI features can now use OpenRouter** as an inference provider, alongside
+  the Anthropic API. Pick the provider under **Settings → Comments & AI → AI
+  provider**. OpenRouter needs its own API key and a model id (for example
+  `anthropic/claude-sonnet-4.6`); there is no built-in default, so set the
+  model before using AI features. (PR #13, thanks to
+  [Shreeram Modi](https://github.com/shreerammodi).)
+
 - **Custom autocorrect** (Settings → Editing → Typing, off by default).
   Word-style "replace text as you type" with your own entries — `fwk` →
   `framework`, `--` → `---` — expanding when you finish the sequence with a
@@ -123,14 +130,6 @@ see `DETAILED_CHANGELOG.md`.
 
 Co-editing bug-fix release, focused on the three-pane workspace. (Co-editing
 remains **experimental** — keep your own saved copies.)
-
-### Added
-
-- **AI features can now use OpenRouter** as an inference provider, alongside the
-  Anthropic API. Pick the provider under **Settings → Comments & AI → AI
-  provider**. OpenRouter needs its own API key and a model id (for example
-  `anthropic/claude-sonnet-4.6`); there is no built-in default, so set the model
-  before using AI features.
 
 ### Changed
 

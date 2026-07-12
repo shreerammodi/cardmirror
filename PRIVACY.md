@@ -101,15 +101,29 @@ participants.
 ## 5. AI features (optional — off by default, your own key)
 
 CardMirror's AI features (such as citation generation, flashcard creation, and
-text cleanup) are **off by default**. To use them you enter **your own Anthropic
-API key**, which is stored **locally** on your device and sent only to Anthropic.
+text cleanup) are **off by default**. To use them you choose an AI provider —
+**Anthropic** (the default) or **OpenRouter** — and enter **your own API key**
+for that provider. The key is stored **locally** on your device and sent only to
+the provider it belongs to.
 
 When you invoke an AI feature, the relevant content — the text you selected,
 surrounding document text, any image you ask it to look at, and your prompt — is
-sent directly from your device to **Anthropic** (`api.anthropic.com`) to produce
-the result. That content is handled under **Anthropic's** terms and privacy
-policy, not ours; we neither see nor store it. If you don't enter a key and don't
-use these features, nothing is ever sent to Anthropic.
+sent directly from your device to your chosen provider to produce the result:
+
+- **Anthropic** (`api.anthropic.com`): the content goes to Anthropic and is
+  handled under **Anthropic's** terms and privacy policy.
+- **OpenRouter** (`openrouter.ai`): OpenRouter is a routing service — it
+  receives the content and forwards it to the operator of whichever model you
+  configured (which may be Anthropic, OpenAI, Google, or another provider).
+  The content is handled under **OpenRouter's** terms and privacy policy *and*
+  those of the downstream model operator. Note that some models on OpenRouter —
+  particularly free-tier ones — are offered on terms that allow the model
+  operator to use submitted content for training; review the model's listing
+  on openrouter.ai before sending it anything sensitive.
+
+In all cases we neither see nor store this content; none of it passes through
+any CardMirror server. If you don't enter a key and don't use these features,
+nothing is ever sent to an AI provider.
 
 ---
 
@@ -180,7 +194,8 @@ a feature that inherently requires it, and only to the extent that feature needs
 | Service | When it's contacted | What it receives |
 |---|---|---|
 | **Railway** (relay host) | Card sharing / co‑editing (opt‑in) | End‑to‑end‑encrypted data it can't read; connection metadata incl. IP |
-| **Anthropic** | AI features (opt‑in, your key) | The text/images and prompt you submit |
+| **Anthropic** | AI features (opt‑in, your key, provider set to Anthropic) | The text/images and prompt you submit |
+| **OpenRouter** (+ the model operator it routes to) | AI features (opt‑in, your key, provider set to OpenRouter) | The text/images and prompt you submit |
 | **MyMemory / Google** | Translate action | The text you translate |
 | **GitHub** | Update checks (opt‑in) | Your IP address and app version |
 | **alphacephei.com** | First‑time voice‑model download (opt‑in) | Your IP address |

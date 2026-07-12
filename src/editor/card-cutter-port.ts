@@ -213,10 +213,10 @@ export async function tryLoadCardCutterEngine(): Promise<boolean> {
 
 // ─── LLM injection ────────────────────────────────────────────────
 
-// ponytail: card-cutter forwards bare Anthropic model ids (claude-…) from its
-// engine, so it is effectively Anthropic-only under OpenRouter (OpenRouter needs
-// the "anthropic/…" prefix). Make model selection provider-aware here if the
-// card cutter needs OpenRouter support.
+// The engine hands this caller bare Anthropic model ids (`claude-…`), which
+// OpenRouter rejects (it needs the `anthropic/…` prefix) — so the card cutter
+// works only with the Anthropic provider. Model selection here must become
+// provider-aware before the card cutter can run over OpenRouter.
 function makeLlm(): LlmCaller {
   return async (system, user, model) => {
     const reply = await callLlm({

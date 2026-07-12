@@ -71,10 +71,11 @@ the relevant authorities (for example, apparent child sexual abuse material).
 ## 5. Third-party services
 
 Some optional features connect to third-party services under **their own** terms
-and privacy policies — for example, AI features you enable with your own Anthropic
-API key, or translation services. You are responsible for your use of those
-services and for any keys or accounts you provide; that use is between you and the
-applicable provider.
+and privacy policies — for example, AI features you enable with your own API key
+(Anthropic, or OpenRouter and the model operators it routes your requests to), or
+translation services. You are responsible for your use of those services and for
+any keys or accounts you provide; that use is between you and the applicable
+provider.
 
 ## 6. Privacy
 

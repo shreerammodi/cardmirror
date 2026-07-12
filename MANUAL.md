@@ -1339,10 +1339,14 @@ turn it off under Settings → Appearance → **Flashcards-due dot**.
 
 ## 13. AI features
 
-A handful of features call out to Anthropic's Claude. They're **off by
-default** and require a key.
+A handful of features call out to a large language model. They're **off by
+default** and require a key. Two providers are supported, chosen under
+**Settings → Comments & AI → AI provider**: **Anthropic** (the default —
+CardMirror talks straight to Anthropic's Claude, and picks a current model
+automatically) and **OpenRouter** (one account that can route to many
+models, including Claude).
 
-### Setup
+### Setup (Anthropic, the default)
 
 You need an Anthropic API key — a personal access code that lets
 CardMirror talk to Claude on your behalf. It's separate from a Claude.ai
@@ -1367,10 +1371,33 @@ amount of credit. If you've never made one, here's the whole process:
 Treat the key like a password: anyone who has it can spend your
 credit. Don't share it, don't paste it into documents you send.
 
-Your key is stored locally and sent directly to Anthropic when you
-trigger a feature — it doesn't pass through any third-party server. With
-AI off, every AI control is hidden, and AI features gray out cleanly when
-you're offline.
+### Setup (OpenRouter)
+
+If you'd rather use [OpenRouter](https://openrouter.ai/) — say, you
+already have an account there, or you want a non-Claude model — set **AI
+provider** to **OpenRouter**, paste your key (from openrouter.ai →
+**Keys**) into the **OpenRouter API key** field, and fill in the
+**OpenRouter model** field with a model id from their catalog (for
+example `anthropic/claude-sonnet-4.6`). The model field is **required**:
+there is no built-in default, and AI features won't run until it's set.
+Two things to know:
+
+- CardMirror's prompts are written and tested against Claude. Other
+  models generally work, but cite formatting, text repair, and table
+  extraction are tuned for Claude — an `anthropic/…` model id is the
+  safe choice.
+- OpenRouter is a routing service: it forwards each request to the
+  company that serves the model you picked. Free-tier models on
+  OpenRouter may allow their operators to train on your prompts — avoid
+  them for evidence you care about (see the privacy policy).
+
+### Keys and privacy
+
+Whichever provider you pick, the key is stored locally and sent directly
+to that provider when you trigger a feature — it doesn't pass through
+any CardMirror server. API keys are also stripped from settings exports,
+so sharing a settings file never shares a key. With AI off, every AI
+control is hidden, and AI features gray out cleanly when you're offline.
 
 ### What AI can do
 
@@ -1379,18 +1406,22 @@ you're offline.
 | **Format Cite** | Mod-Shift-X on a selection | Turns a pasted citation or URL into a properly styled cite, with the cite mark on the author and date. |
 | **Repair Text** | Mod-Shift-R on a selection | Fixes OCR / PDF extraction errors (dropped ligatures, `rn`/`m`, mid-word hyphenation, run-together words) without changing the wording. Corrections apply in place, one at a time with a highlight; the whole repair is a single undo. |
 | **Repair Formatting** | Mod-Alt-R on a selection | Normalizes an imported card's formatting to Verbatim's four-layer scheme (underline / emphasis / highlighting / background color) — fixing bold or italics standing in for emphasis, direct underlining, bold-underline, and underlining lost to an unsupported style. It never changes your text. |
-| **Translate** | Mod-Shift-T on a selection | Translates the selection and copies it to the clipboard, leaving your document unchanged. Uses Anthropic when AI is on; otherwise falls back to a free, keyless backend, so it works even with AI off. |
+| **Translate** | Mod-Shift-T on a selection | Translates the selection and copies it to the clipboard, leaving your document unchanged. Uses your AI provider when AI is on; otherwise falls back to a free, keyless backend, so it works even with AI off. |
 | **Ask AI about selection** | Mod-Shift-Q on a selection | Asks Claude a question about the selection — including any images in it (up to five pictures are sent to the model), with the surrounding card as context; the answer lands as an AI note. Works on a selected image on its own, too ("what does this chart show?"). Or type **@AI** in any comment or note — including its first message — to summon the AI right there; once a thread has an AI reply, further replies continue the conversation. |
 | **Generate alt text** | Right-click an image | Writes an alt-text description and inserts it under the image; offers to keep or regenerate if the image already has alt text. |
 | **Generate table from image** | Right-click an image | Extracts a real, editable table from a picture of one. |
 | **Draft a flashcard** | From Create Flashcard | Drafts a question/answer or cloze from the selection. |
 
 You can set the author name AI notes are attributed under, customize
-the cite-formatting prompt, and point AI at a specific Claude model
-(**AI model (advanced)** — leave blank to use the model built into your
-release) in Settings → Comments & AI. If a model is ever retired, AI
-features show a message telling you to update CardMirror or set a newer
-model id there.
+the cite-formatting prompt, and — on the Anthropic provider — point AI
+at a specific Claude model (**AI model (advanced)** — leave blank to use
+the model built into your release) in Settings → Comments & AI. If a
+model is ever retired, AI features show a message telling you to update
+CardMirror or set a newer model id there. On OpenRouter, the model is
+whatever the **OpenRouter model** field says. **Max output tokens** caps
+how long AI replies can run (both providers); if you use a reasoning
+model, raise it — hidden thinking spends from the same budget, and too
+low a cap can cut the answer off.
 
 You can keep working while an AI action runs, and you can run more than one
 at once — they don't trip over each other. Each action reserves the stretch
@@ -1441,19 +1472,23 @@ where you want it). Configure it under Settings → Editing → **Translation**:
 
 - **Backend** — **MyMemory** (free, needs no key, and works even with AI
   features off; add your email to raise its daily limit), **Anthropic**
-  (used when AI features are on; highest quality), or **Google Cloud
-  Translation** (paste a Google API key). The default, *Automatic*, uses
-  Anthropic when AI is on and MyMemory otherwise.
+  (used when AI features are on; highest quality — this backend follows
+  your **AI provider** setting, so with OpenRouter selected it translates
+  through OpenRouter), or **Google Cloud Translation** (paste a Google
+  API key). The default, *Automatic*, uses the AI backend when AI is on
+  and MyMemory otherwise.
 - **Languages** — the source auto-detects; the target defaults to English
   and is configurable.
 - **Marker** — by default a `[TRANSLATION BY …]` line is placed above the
   translation on the clipboard, naming the engine (the model for
-  Anthropic, MYMEMORY, or GOOGLE TRANSLATE). It uses the same delimiter as
+  Anthropic, OPENROUTER, MYMEMORY, or GOOGLE TRANSLATE). It uses the same
+  delimiter as
   "Condense with warning" and is protected from Shrink. Turn it off in the
   same settings group.
 
-A note on Anthropic translation: the prompt directs the model to preserve
-the original meaning above all, but its output isn't deterministic —
+A note on AI translation (either provider): the prompt directs the model
+to preserve the original meaning above all, but its output isn't
+deterministic —
 re-running can reword slightly. Keep that in mind in leagues or circuits
 where translated evidence needs a paper trail or reproducibility.
 
