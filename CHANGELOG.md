@@ -19,6 +19,14 @@ see `DETAILED_CHANGELOG.md`.
   an enclosing section short, and send-current-heading could truncate a
   section at a live zone's mirrored heading.
 
+- **Card numbering is ~30x cheaper per keystroke while displayed.** Typing
+  used to renumber and rebuild every card's glyph on each edit (~6 ms per
+  keystroke at 2,000 cards). Ordinary edits now keep the existing numbers
+  and just shift their positions, doing the full rebuild only when structure
+  actually changes (cards/headings added, removed, moved, or renumbered).
+  With **Match heading** color on, every edit still rebuilds — a text edit
+  inside a colored heading can change the number's color.
+
 - **Card numbering no longer costs anything while its display is off.** The
   numbering plugin was recomputing every card's number on every edit even
   with numbering hidden (~5 ms per keystroke on a 2,000-card file). With the

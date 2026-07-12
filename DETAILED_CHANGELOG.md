@@ -7,6 +7,36 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Numbering fast path** (perf audit A-02 tier 2; `numbering-plugin.ts`;
+  comprehensive suite in `tests/editor/numbering-fastpath.test.ts`).
+  apply() rebuilt the full DecorationSet on every doc-changing transaction.
+  Now, with the display on: NUMBERING_REFRESH → build; match-heading-color
+  ON → always build (a plain text edit inside a colored tag changes the
+  glyph's color input without touching labels — untrackable cheaply, so
+  that mode keeps pre-change behavior); `isStructuralTr` (conservative
+  step classification: mark steps pass except none needed — color handled
+  above; Replace/ReplaceAround steps pass iff their inserted slice
+  contains no card/analytic_unit/heading/zone/view; ANY other step type —
+  attr steps carry numRole/numRestart — rebuilds); surviving transactions
+  recompute the label signature via computeNumbering (O(top-level
+  children) — it never descends into card content) and compare: unchanged
+  → `DecorationSet.map`, changed → build. Deletions of numbered cards are
+  caught by the signature; moves carry the card in their insert slice;
+  restart-badge flips with identical labels (first-card-in-scope edge) are
+  attr steps → structural. Measured through the real plugin at 2,000
+  cards: 5.99 → 0.18 ms per keystroke (33x). Accepted cosmetic: mapped
+  widget keys keep their build-time positions, so the NEXT structural
+  rebuild re-creates glyph DOM that pure position-shifts would have reused
+  (the key-scheme change that avoids this was deliberately deferred).
+  Tests: per-edit equivalence vs a from-scratch build across every
+  structure kind (typing in body/tag/cite/undertag/analytic/paragraph/
+  heading/zone-inner/view-inner; insertion+deletion of every top-level
+  kind incl. zones and live views; card move; real toggle commands;
+  restart-badge-with-identical-labels; undo/redo; mixed multi-step
+  transactions; match-heading rebuilds), a map-not-rebuild fingerprint
+  (mapped keys drift from positions), and a 120-op seeded random soup
+  with equivalence asserted after every op.
+
 - **Numbering display-off gate** (perf audit A-02 tier 1;
   `numbering-plugin.ts`, `index.ts`, `multi-pane-shell.ts`; tests in
   `numbering-live-update.test.ts`). build() ran on EVERY doc-changing

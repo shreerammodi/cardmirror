@@ -15,14 +15,19 @@
  * docChanged is fine at this size (numbering is inherently non-local).
  */
 
-import { Plugin, PluginKey } from 'prosemirror-state';
+import { Plugin, PluginKey, type Transaction } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import type { Node as PMNode } from 'prosemirror-model';
+import { AddMarkStep, RemoveMarkStep, ReplaceStep, ReplaceAroundStep } from 'prosemirror-transform';
 import { computeNumbering, type NumberLabel } from './numbering.js';
 import { settings, type NumberingSeparator } from './settings.js';
 
 interface NumberingState {
   decorations: DecorationSet;
+  /** Serialized doc-order label sequence from the last build — the fast
+   *  path's ground truth: a non-structural edit whose recomputed sequence
+   *  matches can keep the existing decorations, merely position-mapped. */
+  labelSig: string;
 }
 
 export const numberingPluginKey = new PluginKey<NumberingState>('cardNumbering');
@@ -129,7 +134,7 @@ export const numberingDisplaySig = (): string =>
     settings.get('cardNumberingMatchHeadingColor'),
   ].join('|');
 
-const EMPTY_STATE: NumberingState = { decorations: DecorationSet.empty };
+const EMPTY_STATE: NumberingState = { decorations: DecorationSet.empty, labelSig: '' };
 
 function build(doc: PMNode): NumberingState {
   // Numbering display OFF: skip the whole computation (perf audit A-02 —
@@ -140,6 +145,7 @@ function build(doc: PMNode): NumberingState {
   // focused view, and the multi-pane shell broadcasts to every pane stack.
   if (!settings.get('showCardNumbering')) return EMPTY_STATE;
   const { cards } = computeNumbering(doc);
+  const labelSig = sigFromCards(cards);
   const decos: Decoration[] = [];
 
   // Computed number / letter glyphs on host cards, plus optional per-level
@@ -210,7 +216,60 @@ function build(doc: PMNode): NumberingState {
 
   return {
     decorations: decos.length ? DecorationSet.create(doc, decos) : DecorationSet.empty,
+    labelSig,
   };
+}
+
+/** Doc-order label sequence, serialized. Everything the glyphs render from
+ *  EXCEPT positions and settings: kind + value per numbered card. Restart
+ *  badges don't need to be in the signature — they render from card/block
+ *  attrs, and attrs can only change via step types the fast path already
+ *  classifies as structural. */
+function sigFromCards(cards: ReadonlyMap<number, NumberLabel>): string {
+  const parts: string[] = [];
+  for (const label of cards.values()) parts.push(label.kind === 'sub' ? `s${label.value}` : `n${label.value}`);
+  return parts.join(',');
+}
+
+/** Node types whose insertion can renumber cards or add badge/indent
+ *  decorations — a replace step whose slice contains any of them forces a
+ *  full rebuild. */
+const STRUCTURAL_TYPES = new Set([
+  'card',
+  'analytic_unit',
+  'pocket',
+  'hat',
+  'block',
+  'transclusion_ref',
+  'self_ref',
+]);
+
+/** Conservative per-step classification (perf audit A-02): could this
+ *  transaction change numbering-relevant STRUCTURE in a way the label
+ *  signature alone can't catch? Mark steps never can (match-heading color
+ *  is handled by the always-rebuild rule in apply). Replace steps are safe
+ *  iff their inserted slice contains no structural node — deletions of
+ *  numbered cards are caught by the signature; a delete+insert MOVE carries
+ *  the card in its insert slice and lands here. Anything else (attr steps,
+ *  future step types) rebuilds: numRole/numRestart live in attrs. */
+function isStructuralTr(tr: Transaction): boolean {
+  for (const step of tr.steps) {
+    if (step instanceof AddMarkStep || step instanceof RemoveMarkStep) continue;
+    if (step instanceof ReplaceStep || step instanceof ReplaceAroundStep) {
+      let structural = false;
+      step.slice.content.descendants((node) => {
+        if (STRUCTURAL_TYPES.has(node.type.name)) {
+          structural = true;
+          return false;
+        }
+        return true;
+      });
+      if (structural) return true;
+      continue;
+    }
+    return true;
+  }
+  return false;
 }
 
 export const cardNumberingPlugin: Plugin<NumberingState> = new Plugin<NumberingState>({
@@ -223,7 +282,23 @@ export const cardNumberingPlugin: Plugin<NumberingState> = new Plugin<NumberingS
         // off-flip's explicit refresh arrives (frees the old decorations).
         return tr.getMeta(NUMBERING_REFRESH) ? EMPTY_STATE : prev;
       }
-      return tr.docChanged || tr.getMeta(NUMBERING_REFRESH) ? build(tr.doc) : prev;
+      if (tr.getMeta(NUMBERING_REFRESH)) return build(tr.doc);
+      if (!tr.docChanged) return prev;
+      // Match-heading color reads the heading TEXT's marks — a plain text
+      // edit inside a colored tag changes the glyph color input without
+      // touching labels or structure, so that mode always rebuilds
+      // (match-heading users keep the pre-fast-path behavior).
+      if (settings.get('cardNumberingMatchHeadingColor')) return build(tr.doc);
+      // Fast path (perf audit A-02): a non-structural edit whose recomputed
+      // label sequence is unchanged can't alter any glyph or badge — keep
+      // the existing decorations, position-mapped. computeNumbering never
+      // descends into card content, so the recompute is O(top-level
+      // children), not O(doc) — ~100x cheaper than the full rebuild on
+      // numbered master files.
+      if (isStructuralTr(tr)) return build(tr.doc);
+      const labelSig = sigFromCards(computeNumbering(tr.doc).cards);
+      if (labelSig !== prev.labelSig) return build(tr.doc);
+      return { decorations: prev.decorations.map(tr.mapping, tr.doc), labelSig };
     },
   },
   props: {
