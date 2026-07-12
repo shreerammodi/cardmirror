@@ -7,6 +7,40 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Selection-chrome: relevance gate + frame coalescing + fused walk**
+  (perf audit A-01, the 2026-07-01 audit's open P-4; new
+  `selection-chrome.ts`; `index.ts`, `numbering-commands.ts`; property
+  tests in `tests/editor/selection-chrome.test.ts`). dispatchTransaction
+  ran four chrome refreshers unconditionally on EVERY transaction; with a
+  range selection three did O(selection) work (font-size nodesBetween,
+  rangeHasMark per mark button, numbering-units nodesBetween), and
+  multi-pane's per-transaction setActiveView ran all four AGAIN.
+  Drag-select dispatches a selection transaction per pointermove
+  (~60-125/s). Now: (1) GATE — refresh only when doc, selection, or
+  storedMarks changed (complete: the readouts are pure functions of those
+  + settings, and settings changes keep their own direct refresh calls —
+  which now also include refreshFormattingPanelButtonStates, fixing a
+  re-show sync gap); meta-only ticks (spellcheck, comments GC, collab
+  leases) skip entirely. (2) COALESCE — one requestAnimationFrame flush
+  reads view.state at frame time; a burst of drag transactions costs one
+  refresh, and setActiveView routes through the same scheduler so
+  three-pane stops double-paying. (3) FUSE — computeSelectionChrome
+  answers font uniformity + mark presence (early-exit once all found) +
+  numbering units in one dependency-injected walk; consumers keep their
+  O(1) empty-selection paths; numberingSelectionState accepts precomputed
+  units; numbering buttons skip DOM writes when unchanged; the mark
+  computation is skipped when the formatting panel is hidden. HONEST
+  NUMBERS (1,920-card doc, whole-doc selection, 115k text runs): per
+  refresh the fusion is ~parity in the realistic case (3.08 → 3.13 ms —
+  prosemirror's rangeHasMark stops DESCENDING after a hit, so
+  present-mark queries were already cheap; the audit's 3-walk cost is the
+  absent-mark case, where fused wins 7.07 → 6.18 ms). The structural
+  wins dominate: during drag-select at ~100 tx/s, main-thread chrome time
+  drops ~308 → ~188 ms/s (worst case ~707 → ~371), three-pane halves
+  again on top (no double-run), and idle/meta transactions go to zero.
+  Behavior: property test (60 random docs × 8 selections) pins fused ≡
+  the three naive references; readouts land ≤1 frame later.
+
 - **Section-boundary family: flat sibling scans replace O(rest of doc)
   walks** (perf audit A-12/A-13/A-14/A-49; `headings.ts`,
   `speech-doc-send.ts`, `drag-editor-surface.ts`, `word-selection-keymap.ts`,

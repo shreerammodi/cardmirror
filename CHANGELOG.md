@@ -19,6 +19,15 @@ see `DETAILED_CHANGELOG.md`.
   an enclosing section short, and send-current-heading could truncate a
   section at a live zone's mirrored heading.
 
+- **Selecting and drag-selecting on large documents is much lighter.** The
+  ribbon readouts that mirror the selection (font-size chip, style buttons,
+  numbering buttons) used to recompute on every transaction — including ~60+
+  times per second while drag-selecting, and twice per keystroke in
+  three-pane. They now refresh at most once per frame, only when the
+  document, selection, or pending marks actually changed, and share one pass
+  over the selection. Readouts land within a frame (~16 ms) — visually
+  identical, at a fraction of the cost.
+
 ### Fixed
 
 - **Renamed or moved folders no longer strand your document.** If a file's
