@@ -7,6 +7,35 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Shared autocorrect engine** (new `autocorrect.ts`;
+  `smart-quotes-plugin.ts` and `custom-dash-plugin.ts` rebuilt on it; tests
+  in `tests/editor/autocorrect.test.ts`). Review finding (2026-07-13): the
+  two plugins were line-for-line clones of the same pattern — a
+  handleTextInput trigger, a meta-tracked one-shot Backspace-revert window,
+  and a handleKeyDown revert with cursor/content safety checks. Extracted
+  `makeAutocorrectPlugin(key, rules)` with a rule interface (triggers /
+  enabled / match → {replaceFrom, insert, revertTo}) explicitly shaped for
+  the two PLANNED consumers: user-defined text replacements and
+  auto-capitalization (multi-rule engines supported; first enabled match
+  wins). Both existing plugins keep their public exports (keys, curlFor,
+  dashOutput, factories) and registration. Fixes folded into the engine:
+  (1) the revert window now ends on docChanged/selectionSet instead of ANY
+  transaction — meta-only background traffic (collab cursor leases,
+  spellcheck results, numbering refreshes) no longer kills it, and the
+  stored positions remain valid by construction since meta-only
+  transactions move nothing; (2) the revert compares against the inserted
+  string captured at conversion time (the dash revert used to compare
+  against the CURRENT dashOutput(), which a mid-window settings change
+  could invalidate — it now also restores the conversion-time trigger);
+  (3) quotes: a preceding inline atom (footnote marker) is closing
+  context — textBetween yields '' for atoms, which fell into the
+  block-start=opening branch; (4) the `---` trigger gained `--`'s
+  hyphen-run guard. Equivalence: existing suites (33 tests) pass
+  unchanged; new table test drives 23 contexts × both quote chars and 23
+  contexts × both dash triggers against reference implementations of the
+  OLD decision logic — identical outcomes except the run-guard delta,
+  asserted explicitly with proof the old behavior differed.
+
 - **Numbering widget keys: position component dropped** (perf audit A-02
   follow-up; `numbering-plugin.ts`, tests in `numbering-fastpath.test.ts`).
   Widget keys were `cnum:<cardPos>:<kind>:<glyph>:<color>` — but PM only

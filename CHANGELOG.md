@@ -44,6 +44,18 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Autocorrect polish (smart quotes + custom dashes).** The
+  Backspace-revert (press Backspace right after a conversion to get the
+  literal characters back) no longer dies silently when background activity —
+  a co-editing session's cursor updates, spellcheck results — happens between
+  the conversion and the Backspace. A quote typed right after a footnote
+  marker now curls closed instead of open. And the `---` dash trigger no
+  longer converts the tail of a longer hyphen run (pasted hyphens, ASCII
+  dividers) — only a clean sequence fires, matching the `--` trigger's
+  existing behavior.
+
+
+
 - **Renamed or moved folders no longer strand your document.** If a file's
   folder is renamed, moved, or deleted while the document is open (for
   example by a cloud-sync change on a shared Dropbox), saving used to fail
