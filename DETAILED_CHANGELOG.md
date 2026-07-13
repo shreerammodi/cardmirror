@@ -63,6 +63,20 @@ in each release, see `CHANGELOG.md`.
   behavior on a stale-path save). Electron-only — the web
   `showSaveFilePicker` has no equivalent for a gone file.
 
+- **Card numbers in the nav pane** (`nav-panel.ts`; tests in
+  `tests/editor/nav-panel-card-numbers.test.ts`). The outline now runs
+  the same `computeNumbering` pass as the editor's decoration plugin
+  and prefixes each numbered card/analytic_unit's row with the computed
+  glyph — same `showCardNumbering` gate, same format/capitalization
+  settings (the nav settings subscriber diffs `numberingDisplaySig` so
+  a toggle or format change re-renders without a doc edit). Only the
+  wrapper's FIRST heading row carries the number (matching the editor's
+  tag-line decoration); live-view projection rows are skipped (their
+  entries point at the window, not the mirrored cards — cards inside
+  linked copies/zones are numbered normally); the glyph always uses the
+  numbering color token, since "match heading color" reads editor
+  colors that don't apply to nav rows.
+
 - **Nav-pane drop indicators are overlays, not spacers** (`nav-panel.ts`,
   `style.css`). Drop slots used to render as 4px in-flow spacer divs
   between entries, which accumulated down the outline — on a long doc

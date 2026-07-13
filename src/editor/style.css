@@ -4986,6 +4986,14 @@ body.pmd-nav-resize-active {
   content: '\00a0';
 }
 
+/* Card number glyph on a nav row — the editor's numbering pass
+   mirrored (same computed labels, same on/off + format settings).
+   Fixed flex item so the truncating label's ellipsis never eats it. */
+.pmd-nav-card-number {
+  flex: 0 0 auto;
+  font-size: 0.85em;
+}
+
 /* Indent + emphasis per outline level (Word's nav pane convention). */
 .pmd-nav-level-1 { padding-left: 0.75rem;  font-weight: 700; font-size: 0.95rem; }
 .pmd-nav-level-2 { padding-left: 1.5rem;   font-weight: 600; font-size: 0.9rem; }

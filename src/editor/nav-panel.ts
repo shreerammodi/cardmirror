@@ -57,6 +57,8 @@ import {
 } from './headings.js';
 import { setIcon } from './icons';
 import { isMobileShellActive } from './mobile-plugin.js';
+import { createNumberGlyph, numberingDisplaySig } from './numbering-plugin.js';
+import { computeNumbering } from './numbering.js';
 
 /** Minimum nav-pane width — must fit the 4 level buttons + the
  *  close (×) button + row padding; anything narrower clips the ×. */
@@ -360,15 +362,23 @@ export class NavigationPanel {
     // `localMaxLevel` + a direct render, not this subscriber.)
     let lastNavMaxLevel = settings.get('navMaxLevel');
     let lastShowCitePreview = settings.get('showCitePreview');
+    // Card numbering bakes into the rows, so any display-affecting
+    // numbering setting re-renders too — same signature the editor's
+    // NUMBERING_REFRESH subscribers diff.
+    let lastNumberingSig = numberingDisplaySig();
     this.unsubscribeSettings = settings.subscribe((s) => {
       applyNavWidthCss(s.navWidth);
       this.updateLevelButtonsActive();
+      const numberingSig = numberingDisplaySig();
       if (
         this.currentDoc &&
-        (s.navMaxLevel !== lastNavMaxLevel || s.showCitePreview !== lastShowCitePreview)
+        (s.navMaxLevel !== lastNavMaxLevel ||
+          s.showCitePreview !== lastShowCitePreview ||
+          numberingSig !== lastNumberingSig)
       ) {
         lastNavMaxLevel = s.navMaxLevel;
         lastShowCitePreview = s.showCitePreview;
+        lastNumberingSig = numberingSig;
         this.render(this.currentDoc);
       }
     });
@@ -726,6 +736,12 @@ export class NavigationPanel {
     // first nav row can carry a "source updated" dot, mirroring the editor badge.
     const divergedZones = this.divergedZonePositions(doc);
 
+    // Card numbers, mirroring the editor's numbering pass: wrapping
+    // card/analytic_unit position → computed label, gated on the same
+    // display toggle. O(top-level children) — cheap next to the DOM
+    // rebuild below.
+    const numberLabels = settings.get('showCardNumbering') ? computeNumbering(doc).cards : null;
+
     // Clear and re-build. For doc sizes we care about (max ~600 headings
     // in the example corpus) this is fine; if profiling shows it's hot,
     // diff against the previous render.
@@ -811,6 +827,24 @@ export class NavigationPanel {
         chevron.classList.add('pmd-nav-chevron-leaf');
       }
       li.appendChild(chevron);
+
+      // Card number glyph — the editor's computed label for this row's
+      // wrapping card/analytic_unit. Only the wrapper's FIRST heading
+      // row carries it (parentOffset 0), matching the editor, which
+      // decorates the tag line — an in-card analytic under a numbered
+      // tag stays bare. Windowed (live-view projection) rows skip:
+      // their pos points at the window, not the mirrored card.
+      if (numberLabels && !entry.windowed && (entry.type === 'tag' || entry.type === 'analytic')) {
+        const $pos = doc.resolve(entry.pos);
+        if ($pos.parentOffset === 0) {
+          const numLabel = numberLabels.get($pos.before());
+          if (numLabel) {
+            const glyph = createNumberGlyph(numLabel);
+            glyph.classList.add('pmd-nav-card-number');
+            li.appendChild(glyph);
+          }
+        }
+      }
 
       const label = document.createElement('span');
       label.className = 'pmd-nav-label';

@@ -30,6 +30,12 @@ see `DETAILED_CHANGELOG.md`.
     half-written file, and rapid overlapping saves of the same file
     can no longer collide.
 
+- **Card numbers now show in the navigation pane.** When auto-numbering
+  is on, each numbered card's row in the outline carries the same
+  computed number or letter as the editor, in your configured format.
+  Toggling numbering or changing its format updates the outline
+  immediately.
+
 - **Dragging in the navigation pane no longer shifts the outline.**
   Drop targets used to open up as small gaps that pushed every entry
   below them further down — noticeably so near the bottom of a long
