@@ -2461,6 +2461,11 @@ code {
   font-weight: 500;
   opacity: 0.85;
 }
+/* "Bold substructure letters" OFF (`cardNumberingSubBold`): letters at
+   normal weight; numbers keep theirs regardless. */
+.pmd-card-number-sub-plain {
+  font-weight: 400;
+}
 
 /* Compact color control used in the Card numbering settings section. Shares the
    customColorOverrides['pmd-c-card-number'] value with Accessibility → Color

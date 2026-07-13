@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { settings } from '../../src/editor/settings.js';
-import { createNumberGlyph } from '../../src/editor/numbering-plugin.js';
+import { createNumberGlyph, numberingDisplaySig } from '../../src/editor/numbering-plugin.js';
 import type { NumberLabel } from '../../src/editor/numbering.js';
 
 const num: NumberLabel = { kind: 'number', value: 1, text: '1' };
@@ -58,5 +58,25 @@ describe('substructure separator + capitalization', () => {
   it('capitalization leaves numbers untouched', () => {
     settings.set('cardNumberingSubCapitalized', true);
     expect(glyph(num)).toBe('1.');
+  });
+});
+
+describe('substructure weight (cardNumberingSubBold)', () => {
+  afterEach(() => settings.set('cardNumberingSubBold', true));
+
+  it('defaults to bold: no plain-weight class on the sub glyph', () => {
+    expect(createNumberGlyph(sub).classList.contains('pmd-card-number-sub-plain')).toBe(false);
+  });
+
+  it('off → the sub glyph carries the plain-weight class; numbers never do', () => {
+    settings.set('cardNumberingSubBold', false);
+    expect(createNumberGlyph(sub).classList.contains('pmd-card-number-sub-plain')).toBe(true);
+    expect(createNumberGlyph(num).classList.contains('pmd-card-number-sub-plain')).toBe(false);
+  });
+
+  it('flipping it changes the display signature (drives NUMBERING_REFRESH + nav re-render)', () => {
+    const before = numberingDisplaySig();
+    settings.set('cardNumberingSubBold', false);
+    expect(numberingDisplaySig()).not.toBe(before);
   });
 });

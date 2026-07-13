@@ -63,6 +63,18 @@ in each release, see `CHANGELOG.md`.
   behavior on a stale-path save). Electron-only — the web
   `showSaveFilePicker` has no equivalent for a gone file.
 
+- **Bold-substructure toggle** (`cardNumberingSubBold`, default true;
+  `settings.ts`, `numbering-plugin.ts`, tests in
+  `numbering-format.test.ts`). Parallel to `cardNumberingSubCapitalized`:
+  off adds `.pmd-card-number-sub-plain` (weight 400) to sub glyphs in
+  BOTH the editor decorations and the nav-pane rows (shared
+  `createNumberGlyph`). The flag joins `numberingDisplaySig` (drives
+  NUMBERING_REFRESH + the nav re-render) AND the widget key — same
+  lesson as the separator field bug: anything that bakes into the
+  render without changing text or position must bust the key, or PM
+  reuses the old DOM. Registry `kind: 'toggle'` → the settings row and
+  the command-bar Toggle command derive automatically.
+
 - **Card numbers in the nav pane** (`nav-panel.ts`; tests in
   `tests/editor/nav-panel-card-numbers.test.ts`). The outline now runs
   the same `computeNumbering` pass as the editor's decoration plugin

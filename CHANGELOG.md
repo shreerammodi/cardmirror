@@ -36,6 +36,11 @@ see `DETAILED_CHANGELOG.md`.
   Toggling numbering or changing its format updates the outline
   immediately.
 
+- **New numbering option: Bold substructure letters** (Settings →
+  Appearance → Card numbering). On by default (today's look); turn it
+  off to render substructure letters at normal weight while numbers
+  stay bold. Display-only, like the capitalization toggle.
+
 - **Dragging in the navigation pane no longer shifts the outline.**
   Drop targets used to open up as small gaps that pushed every entry
   below them further down — noticeably so near the bottom of a long

@@ -104,7 +104,12 @@ export function createNumberGlyph(
 ): HTMLElement {
   const span = document.createElement('span');
   span.className = 'pmd-card-number';
-  if (label.kind === 'sub') span.classList.add('pmd-card-number-sub');
+  if (label.kind === 'sub') {
+    span.classList.add('pmd-card-number-sub');
+    // Weight is a per-user display option for substructure only —
+    // numbers always render bold.
+    if (!settings.get('cardNumberingSubBold')) span.classList.add('pmd-card-number-sub-plain');
+  }
   if (opts?.match) {
     // The widget sits inside the heading element but OUTSIDE its text runs'
     // font_color spans — `inherit` picks up the block color (tag/analytic
@@ -129,6 +134,7 @@ export const numberingDisplaySig = (): string =>
     settings.get('cardNumberingFormat'),
     settings.get('cardNumberingSubFormat'),
     settings.get('cardNumberingSubCapitalized'),
+    settings.get('cardNumberingSubBold'),
     settings.get('cardNumberingIndent'),
     settings.get('cardNumberingSubIndent'),
     settings.get('cardNumberingMatchHeadingColor'),
@@ -188,7 +194,11 @@ function build(doc: PMNode): NumberingState {
         // (new positions → new keys → eq false), even when every glyph read
         // the same. Position-free keys let a rebuild reuse the spans of all
         // unchanged numbers (perf audit A-02 follow-up, 2026-07-13).
-        key: `cnum:${label.kind}:${glyphText(label)}:${matchHeading ? headingColor ?? 'inh' : 'tok'}`,
+        //
+        // Sub WEIGHT joins the key for the same reason the glyph does: it
+        // bakes into the render (a class) without changing text or position,
+        // so a same-key reuse would leave the old weight on screen.
+        key: `cnum:${label.kind}:${glyphText(label)}:${matchHeading ? headingColor ?? 'inh' : 'tok'}${label.kind === 'sub' && !settings.get('cardNumberingSubBold') ? ':plain' : ''}`,
         ignoreSelection: true,
       }),
     );

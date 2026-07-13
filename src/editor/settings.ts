@@ -630,6 +630,9 @@ export interface Settings {
   /** Whether substructure letters render uppercase (`A)`) instead of lowercase
    *  (`a)`). Display-only. */
   cardNumberingSubCapitalized: boolean;
+  /** Whether substructure letters render bold like the numbers (default) or at
+   *  normal weight. Display-only. */
+  cardNumberingSubBold: boolean;
   /** Whether/where NUMBER cards indent (display-only). `off` = none; `tag` =
    *  indent just the tag line; `card` = indent the whole card. */
   cardNumberingIndent: 'off' | 'tag' | 'card';
@@ -1438,6 +1441,7 @@ const DEFAULTS: Settings = {
   cardNumberingFormat: 'period',
   cardNumberingSubFormat: 'paren',
   cardNumberingSubCapitalized: false,
+  cardNumberingSubBold: true,
   cardNumberingIndent: 'off',
   cardNumberingSubIndent: 'off',
   cardNumberingMatchHeadingColor: false,
@@ -2480,6 +2484,16 @@ export const SETTING_METADATA: SettingMeta[] = [
     category: 'appearance',
     section: 'Card numbering',
     aliases: ['uppercase substructure', 'capital letters', 'sub capitalization'],
+  },
+  {
+    key: 'cardNumberingSubBold',
+    label: 'Bold substructure letters',
+    description:
+      'Render substructure letters bold, like the numbers. Turn off for normal-weight letters. Display-only.',
+    kind: 'toggle',
+    category: 'appearance',
+    section: 'Card numbering',
+    aliases: ['substructure bold', 'sub weight', 'letter weight'],
   },
   {
     // Backed by customColorOverrides['pmd-c-card-number'] (a custom builder, not
@@ -3733,6 +3747,7 @@ function sanitize(s: Settings): Settings {
       ? (s.cardNumberingSubFormat as NumberingSeparator)
       : 'paren',
     cardNumberingSubCapitalized: !!s.cardNumberingSubCapitalized,
+    cardNumberingSubBold: s.cardNumberingSubBold === false ? false : true,
     cardNumberingIndent:
       s.cardNumberingIndent === 'tag' || s.cardNumberingIndent === 'card'
         ? s.cardNumberingIndent
