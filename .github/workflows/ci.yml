@@ -8,9 +8,23 @@ on:
 
 jobs:
   test:
-    name: Typecheck + tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: Typecheck + tests (${{ matrix.os }})
+    # 3-OS matrix: the save/write pipeline (tests/desktop) does real
+    # filesystem work — stat-based existence checks, tmp+rename atomic
+    # writes, ancestor walks for the Save-As dialog — whose semantics
+    # genuinely differ across ext4/APFS/NTFS, so Linux-only CI left
+    # Windows behavior untested. Linux + mac run the full suite;
+    # Windows starts scoped to tests/desktop (the fs-touching layer)
+    # until the rest of the suite is verified clean on win32.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: windows-latest
+            test-scope: tests/desktop
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -46,4 +60,5 @@ jobs:
           # ~4 GB V8 heap on a CI runner (they build megabyte-scale docs and
           # many Loro peers). Give the vitest fork workers more headroom.
           NODE_OPTIONS: --max-old-space-size=6144
-        run: npm test
+        # An empty test-scope (linux/mac) runs the full suite.
+        run: npm test -- ${{ matrix.test-scope }}
