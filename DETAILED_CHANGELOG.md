@@ -5,7 +5,7 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
-## 0.1.0-beta.15 — 2026-07-13
+## 0.1.0-beta.14 — 2026-07-13
 
 - **Web-edition download + GitHub header buttons** (new
   `web-download.ts`; `index.html`, `icons.css`; 9 tests in
