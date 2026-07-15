@@ -7,6 +7,17 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Nav width per-window** (`nav-panel.ts`; tests in
+  `tests/editor/nav-width.test.ts`). `--nav-width` was applied from the
+  `navWidth` setting in every panel's settings subscriber — and since
+  settings sync across windows via the `storage` event, a drag in one
+  window resized every window live. The setting now seeds the CSS var
+  ONCE at window boot (module init, not panel construction — multi-pane
+  constructs panels per opened doc, which would re-pull whatever
+  another window persisted since); drags apply locally and persist the
+  value only as the default for future windows. The single-doc panel
+  and multi-pane rail still share `--nav-width` within a window.
+
 - **Restart toggle is scope-aware** (`numbering-commands.ts`,
   `nav-panel.ts`; tests in `numbering-commands.test.ts` +
   `nav-panel-card-numbers.test.ts`). `toggleNumRestart` gains the same

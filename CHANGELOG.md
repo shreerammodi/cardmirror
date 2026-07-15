@@ -9,6 +9,11 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Changed
 
+- **Nav pane width is now per-window.** Dragging the outline's edge
+  resizes only the window you're in; other open windows keep their
+  widths. The width you set still becomes the default for windows you
+  open afterwards — same model as the new Default navigation depth.
+
 - **Numbering restart works on selections too.** Select several blocks
   in the navigation pane (Shift/Ctrl-click) and hit the restart toggle:
   every selected block flips to "continue" in one press, so arguments

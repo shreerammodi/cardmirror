@@ -95,14 +95,28 @@ function applyNavWidthCss(px: number): void {
   document.documentElement.style.setProperty('--nav-width', `${clamped}px`);
 }
 
+// Nav width is PER-WINDOW: applied once from the `navWidth` setting when
+// this window boots (module init — NOT per panel construction, which in
+// multi-pane happens per opened doc and would re-pull whatever another
+// window persisted since). Drags apply locally and persist the value as
+// the DEFAULT for windows opened later; the settings subscriber
+// deliberately does not re-apply it, so a drag in one window never
+// resizes another (field request 2026-07-15 — same model as the nav
+// depth default).
+if (typeof document !== 'undefined') {
+  applyNavWidthCss(settings.get('navWidth'));
+}
+
 /**
  * Attach a draggable resize handle to the right edge of `host`. Width is
  * stored in the `--nav-width` CSS custom property — shared by the single-doc
- * nav panel and the multi-pane rail, so both layouts resize in lockstep — and
- * persisted as the `navWidth` setting. While dragging, `host` carries
- * `pmd-nav-resizing` and `<body>` carries `pmd-nav-resize-active`. The host
- * must be a positioned element so the absolutely-positioned handle aligns to
- * its right edge. Returns the handle element.
+ * nav panel and the multi-pane rail, so both layouts resize in lockstep
+ * WITHIN a window — and persisted as the `navWidth` setting, which is the
+ * DEFAULT for windows opened later (never applied live to other windows).
+ * While dragging, `host` carries `pmd-nav-resizing` and `<body>` carries
+ * `pmd-nav-resize-active`. The host must be a positioned element so the
+ * absolutely-positioned handle aligns to its right edge. Returns the
+ * handle element.
  */
 export function installNavResizeHandle(host: HTMLElement): HTMLElement {
   const handle = document.createElement('div');
@@ -348,7 +362,6 @@ export class NavigationPanel {
     this.emptyEl.textContent = 'No headings.';
     this.root.appendChild(this.emptyEl);
 
-    applyNavWidthCss(settings.get('navWidth'));
     this.installResizeHandle();
 
     // Re-render only when a setting the outline depends on changes —
@@ -364,7 +377,8 @@ export class NavigationPanel {
     // NUMBERING_REFRESH subscribers diff.
     let lastNumberingSig = numberingDisplaySig();
     this.unsubscribeSettings = settings.subscribe((s) => {
-      applyNavWidthCss(s.navWidth);
+      // `navWidth` deliberately NOT applied here — per-window (see the
+      // module-init comment above applyNavWidthCss).
       const numberingSig = numberingDisplaySig();
       if (
         this.currentDoc &&
