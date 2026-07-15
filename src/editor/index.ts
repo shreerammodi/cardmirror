@@ -2906,6 +2906,16 @@ function applyStyleAlignments(a: StyleAlignments): void {
   }
 }
 
+/** Card content-visibility intrinsic-width sync state. Declared HERE
+ *  (not next to its functions further down) because the boot-time
+ *  `applyMaxTextWidth(...)` module-level call reaches
+ *  `scheduleSyncCardIntrinsicWidth` during module evaluation — `let`
+ *  declarations after that call site would still be in their temporal
+ *  dead zone and throw (field error 2026-07-15). */
+let lastCardIntrinsicWidth = -1;
+let cardIntrinsicWidthRaf: number | null = null;
+let cardIntrinsicWidthInstalled = false;
+
 /** Cap + center the ProseMirror content column (accessibility "max
  *  text width"). 0 = off → the var is removed and layout is exactly
  *  the pre-feature CSS. Changing the cap changes the width cards lay
@@ -5150,9 +5160,10 @@ function mountView(doc: PMNode, threads: Thread[] = []): void {
  *  measured width crept up each iteration after the user clicked
  *  into the editor. Explicit triggers can't re-fire from our own
  *  mutations. */
-let lastCardIntrinsicWidth = -1;
-let cardIntrinsicWidthRaf: number | null = null;
-let cardIntrinsicWidthInstalled = false;
+// (State for these lives up next to applyMaxTextWidth — a boot-time
+// applyMaxTextWidth call reaches scheduleSyncCardIntrinsicWidth, and
+// `let` state declared down here would still be in its temporal dead
+// zone at that point.)
 
 function syncCardIntrinsicWidth(): void {
   if (!editorEl || editorEl.hidden) return;
