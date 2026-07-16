@@ -119,6 +119,12 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- Saving to Word no longer produces a corrupted file when the document
+  contains invisible control characters (most often picked up by
+  pasting from a PDF). Word refuses to open an XML file containing
+  them; CardMirror now strips them at export. Thanks to J.Li for the
+  precise report.
+
 - Turning a numbered tag into an analytic (or an analytic back into a
   tag) no longer clears the card's numbering or restart flag — the
   number carries across the swap.

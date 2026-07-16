@@ -13,9 +13,27 @@
  *     and any literal whitespace in <w:t> is content).
  */
 
+/** Characters XML 1.0 cannot represent AT ALL — not even entity-escaped:
+ *  C0 controls other than tab/LF/CR, the noncharacters U+FFFE/U+FFFF, and
+ *  lone surrogate halves. Word rejects the entire .docx over a single one
+ *  (field report 2026-07-15: a U+001D — likely pasted from a PDF —
+ *  corrupted a shared file). They are STRIPPED, not escaped: there is no
+ *  legal spelling for them in XML 1.0.
+ *
+ *  The alternation captures VALID surrogate pairs first and keeps them
+ *  (deliberately no lookbehind — some older engines reject lookbehind at
+ *  parse time); everything else the pattern matches is illegal and
+ *  dropped. */
+const XML_ILLEGAL_OR_PAIR =
+  /([\uD800-\uDBFF][\uDC00-\uDFFF])|[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF\uD800-\uDFFF]/g;
+
+function stripXmlIllegal(s: string): string {
+  return s.replace(XML_ILLEGAL_OR_PAIR, (_m, pair: string | undefined) => pair ?? '');
+}
+
 /** Escape text for inclusion in XML element content. */
 export function escText(s: string): string {
-  return s
+  return stripXmlIllegal(s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
@@ -23,7 +41,7 @@ export function escText(s: string): string {
 
 /** Escape text for inclusion in an XML attribute value (double-quoted). */
 export function escAttr(s: string): string {
-  return s
+  return stripXmlIllegal(s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/"/g, '&quot;');

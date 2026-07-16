@@ -7,6 +7,21 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **XML-illegal characters stripped at export** (`ooxml/xml.ts`; tests
+  in `tests/export/xml-illegal-chars.test.ts`). Field report (J.Li,
+  Baylor): a shared .docx wouldn't open — `word/document.xml` carried a
+  U+001D. `escText`/`escAttr` only entity-escaped `&<>"`; characters
+  XML 1.0 cannot represent AT ALL (C0 controls besides tab/LF/CR, the
+  noncharacters U+FFFE/U+FFFF, lone surrogate halves — typically pasted
+  in from PDFs) passed through raw, and Word rejects the whole package
+  over one of them. Both escapers now strip that set first — stripped,
+  not escaped, because XML 1.0 has no legal spelling for them. The
+  pattern captures valid surrogate pairs first and keeps them,
+  avoiding lookbehind (parse-time syntax error on older engines).
+  Reproduced exactly per the report before fixing; five tests pin the
+  full C0 sweep, tab/LF/CR preservation, lone vs paired surrogates,
+  noncharacters, and the untouched entity escaping.
+
 - **Numbering survives tag↔analytic swaps** (`ribbon-commands.ts`;
   tests in `ribbon-commands.test.ts`). `cardToAnalyticUnitNode` /
   `analyticUnitToCardNode` created the converted node with null attrs,
