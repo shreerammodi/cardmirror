@@ -2509,6 +2509,16 @@ code {
 }
 .pmd-max-text-width-input {
   width: 4.5rem;
+  /* Breathing room around the inline number input — the row otherwise
+     reads as one cramped run of checkbox/label/input/unit. */
+  margin: 0 0.25rem;
+  padding: 0.15rem 0.35rem;
+}
+.pmd-max-text-width-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
 }
 
 /* Accessibility → Text alignment rows: style label left, the
@@ -2529,6 +2539,16 @@ code {
 }
 .pmd-max-text-width-input {
   width: 4.5rem;
+  /* Breathing room around the inline number input — the row otherwise
+     reads as one cramped run of checkbox/label/input/unit. */
+  margin: 0 0.25rem;
+  padding: 0.15rem 0.35rem;
+}
+.pmd-max-text-width-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
 }
 
 /* Compact color control used in the Card numbering settings section. Shares the
