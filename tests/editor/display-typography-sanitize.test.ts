@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { SettingsStore } from '../../src/editor/settings.js';
 
 function typographyAfterImport(dt: Record<string, unknown>): {
+  pocketBox: boolean;
   pocketBoxSize: number;
   emphasisBoxSize: number;
 } {
@@ -34,5 +35,11 @@ describe('displayTypography box-size sanitize', () => {
     expect(typographyAfterImport({ pocketBoxSize: -3 }).pocketBoxSize).toBe(2.25);
     expect(typographyAfterImport({ pocketBoxSize: 99 }).pocketBoxSize).toBe(2.25);
     expect(typographyAfterImport({ pocketBoxSize: 'wide' }).pocketBoxSize).toBe(2.25);
+  });
+
+  it('pocketBox flag: default true when missing; false round-trips', () => {
+    expect(typographyAfterImport({}).pocketBox).toBe(true);
+    expect(typographyAfterImport({ pocketBox: false }).pocketBox).toBe(false);
+    expect(typographyAfterImport({ pocketBox: 1 }).pocketBox).toBe(true); // coerced
   });
 });

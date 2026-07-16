@@ -2301,6 +2301,13 @@ code {
   page-break-before: always;
 }
 
+/* Pocket box off (Style typography flag): plain centered heading —
+   the padding goes with the border, like a hat at pocket size. */
+.pmd-pocket-box-off .pmd-pocket {
+  border: none;
+  padding: 0;
+}
+
 /* Hat = Heading 2, centered, double underline (single under the
    `hatUnderlineDouble` display-typography flag's off state). */
 .pmd-hat {

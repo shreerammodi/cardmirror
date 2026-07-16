@@ -2950,6 +2950,9 @@ function applyDisplayTypography(t: DisplayTypography): void {
   document.documentElement.style.setProperty('--pmd-emphasis-box-size', `${t.emphasisBoxSize}pt`);
   editorEl.style.setProperty('--pmd-pocket-box-size', `${t.pocketBoxSize}pt`);
   document.documentElement.style.setProperty('--pmd-pocket-box-size', `${t.pocketBoxSize}pt`);
+  // Predicate class for the NON-default state; base CSS keeps the box.
+  editorEl.classList.toggle('pmd-pocket-box-off', !t.pocketBox);
+  document.documentElement.classList.toggle('pmd-pocket-box-off', !t.pocketBox);
   // Mirror the undertag/cite/emphasis flags to documentElement so the
   // ribbon's formatting-panel preview (which lives outside #editor)
   // can react to the same settings.

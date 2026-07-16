@@ -1205,6 +1205,7 @@ function buildTypographyEditor(): HTMLElement {
   wrap.appendChild(flagRow('emphasisBold', 'Emphasis: bold'));
   wrap.appendChild(flagRow('emphasisItalic', 'Emphasis: italic'));
   wrap.appendChild(flagRow('emphasisBox', 'Emphasis: boxed'));
+  wrap.appendChild(flagRow('pocketBox', 'Pocket: boxed'));
 
   const sizeRow = document.createElement('label');
   sizeRow.className = 'pmd-typography-size-row';
@@ -1304,7 +1305,7 @@ function buildTypographyEditor(): HTMLElement {
     const flagKeys: (keyof DisplayTypography)[] = [
       'citeUnderlined', 'underlineBold', 'hatUnderlineDouble',
       'undertagItalic', 'undertagBold',
-      'emphasisBold', 'emphasisItalic', 'emphasisBox',
+      'emphasisBold', 'emphasisItalic', 'emphasisBox', 'pocketBox',
     ];
     flagKeys.forEach((k, i) => {
       const cb = checkboxes[i];
