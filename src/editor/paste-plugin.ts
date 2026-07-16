@@ -328,6 +328,28 @@ export function applyPlainPasteFromText(
   if (ctx.condenseOnPaste()) condensePastedRange(view, pasteFrom, ctx);
 }
 
+/**
+ * True when the clipboard's text flavors carry actual content — not
+ * just markup wrapping the image flavor. Decides image-vs-text
+ * precedence in `handlePaste`: Word ships a rendered bitmap of the
+ * copied selection ALONGSIDE text/html + text/plain, and the bitmap
+ * must not win over the real content. A browser "Copy image", by
+ * contrast, has an empty text/plain and (at most) a bare `<img>`
+ * as text/html — no text once tags are stripped.
+ *
+ * Exported for tests.
+ */
+export function clipboardHasMeaningfulText(cd: DataTransfer): boolean {
+  const plain = cd.getData('text/plain');
+  if (plain.trim() !== '') return true;
+  const html = cd.getData('text/html');
+  if (!html) return false;
+  // Text content outside tags. Entity-decoded only as far as the
+  // decision needs: a whitespace entity is still "no real text".
+  const text = html.replace(/<[^>]*>/g, ' ').replace(/&(nbsp|#0*160|#x0*a0);/gi, ' ');
+  return /\S/.test(text);
+}
+
 export function buildPastePlugin(ctx: PastePluginCtx): Plugin<PluginState> {
   return new Plugin<PluginState>({
     key: plainPasteKey,
@@ -389,10 +411,20 @@ export function buildPastePlugin(ctx: PastePluginCtx): Plugin<PluginState> {
         // browser, etc. Take precedence over text / HTML branches
         // when the clipboard carries `image/*` file data; users
         // pasting a screenshot don't want the fallback text label.
-        const files = event.clipboardData?.files;
-        if (files && files.length > 0) {
+        //
+        // EXCEPT when the clipboard ALSO carries meaningful text:
+        // Word (and other rich editors) put a rendered bitmap of the
+        // selection alongside the real text/html flavors, and letting
+        // the bitmap win pasted a PICTURE of the copied cards (field
+        // report 2026-07-15). Text flavors win whenever they have
+        // actual content; the image branch is for image-only
+        // clipboards, whose text/html — when present at all — is
+        // just an <img> wrapper with no text of its own.
+        const cd = event.clipboardData;
+        const files = cd?.files;
+        if (cd && files && files.length > 0) {
           const imageFile = Array.from(files).find((f) => f.type.startsWith('image/'));
-          if (imageFile) {
+          if (imageFile && !clipboardHasMeaningfulText(cd)) {
             event.preventDefault();
             void (async () => {
               const node = await buildImageNodeFromBlob(imageFile);

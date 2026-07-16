@@ -119,6 +119,12 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- Pasting from Word no longer inserts a picture of the copied text.
+  Word puts a rendered image of the selection on the clipboard
+  alongside the actual text, and CardMirror preferred the image; the
+  real text now wins whenever it's present. Screenshots and copied
+  images still paste as images.
+
 - Saving to Word no longer produces a corrupted file when the document
   contains invisible control characters (most often picked up by
   pasting from a PDF). Word refuses to open an XML file containing

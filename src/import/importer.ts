@@ -44,7 +44,15 @@ import {
 } from '../ooxml/styles.js';
 import { buildLegacyHeadingMap, isUnambiguousLegacy, legacyRole } from '../ooxml/legacy-styles.js';
 
-interface ParaInfo {
+/**
+ * The importer's paragraph-level intermediate: phase (a) turns docx
+ * XML into `ParaInfo[]`; phase (b) (`assembleDoc`) turns `ParaInfo[]`
+ * into a PM doc (card grouping, cite slotting, numbering
+ * reconstruction). Exported because the smart-paste converters (Word
+ * clipboard HTML, haku.cards HTML) are alternative phase-(a)
+ * front-ends emitting this same shape and reusing `assembleDoc`.
+ */
+export interface ParaInfo {
   /** Schema node type to use for this paragraph (resolved from pStyle). */
   nodeType: string;
   /** Parsed inline content (text nodes + marks). */
@@ -1271,8 +1279,14 @@ function resolveNodeType(pStyle: string | null, ctx: ImportContext, pPr: XmlNode
  * This mirrors the way real Verbatim docs are structured — the card
  * boundary is implicit in the paragraph sequence; we promote it to a
  * schema node for editor-side ergonomics.
+ *
+ * Exported as the shared phase-(b) back-end for the smart-paste
+ * converters (see the `ParaInfo` doc comment) — they classify foreign
+ * clipboard HTML into `ParaInfo[]` and hand assembly to this exact
+ * code path so paste and .docx import can never disagree about
+ * structure.
  */
-function assembleDoc(
+export function assembleDoc(
   paragraphs: ParaInfo[],
   provenance?: Map<string, number>,
 ): PMNode {

@@ -7,6 +7,49 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Word paste no longer inserts a picture of the copied text**
+  (`paste-plugin.ts` `handlePaste`; tests in
+  `tests/editor/paste-image-precedence.test.ts`). Word (and other
+  rich editors) put a rendered bitmap of the copied selection on the
+  clipboard alongside the real `text/html`/`text/plain` flavors, and
+  `handlePaste`'s image branch ran before the text branches — so
+  pasting cards from Word inserted an image node. The image branch is
+  now gated on `clipboardHasMeaningfulText`: text flavors win whenever
+  they carry actual content once tags and whitespace entities are
+  discounted. Image-only clipboards (screenshots, browser "Copy
+  image" — whose `text/html` is at most a bare `<img>` wrapper) take
+  the image branch exactly as before. First slice of the smart-paste
+  conversion work; the Word/haku structure converters build on this.
+
+- **Paste-source detection for smart paste conversion**
+  (`paste-dialect.ts`, new; tests in
+  `tests/editor/paste-dialect.test.ts`). `detectPasteDialect(html)`
+  routes clipboard HTML to a converter — `'word'`, `'haku'`, or null
+  for "leave it alone." Word is recognized by its document shell
+  (Generator/ProgId metas, `xmlns:w` office namespace), which only
+  Word itself writes — browsers serialize just the selected fragment
+  on web copies, so page metas can't ride along; bare `mso-*`
+  properties or `Mso*` classes deliberately do NOT match
+  (CMS-laundered Word remnants). haku.cards emits classless
+  inline-styled HTML, so it's matched by a scored structural
+  fingerprint of its copy builders (Calibri wrapper div, 13pt bold
+  `<h4>` tag, pt-sized runs with literal `<u>`,
+  `mso-highlight`/`box-decoration-break:clone` highlight spans,
+  26/22pt `h1`/`h2` case exports). CardMirror's own clipboard
+  (`pmd-*` classes) and Google Docs (`docs-internal-guid`) are
+  explicit excluders. Not yet wired into `handlePaste` — the
+  converters land next, gated behind a "smart paste conversion"
+  setting (default on).
+
+- **Importer's assembly seam exported for the paste converters**
+  (`import/importer.ts`). `ParaInfo` and `assembleDoc` — the
+  paragraph-level intermediate and the phase-(b) back-end that does
+  card grouping, cite slotting, and numbering reconstruction — are
+  now exported. The paste converters classify foreign clipboard HTML
+  into `ParaInfo[]` and reuse `assembleDoc` verbatim, so paste and
+  `.docx` import can never disagree about document structure. No
+  behavior change.
+
 - **Direction-based head in dynamic drag selection**
   (`word-selection-plugin.ts`; tests in
   `tests/editor/word-selection-drag.test.ts`). Single-click drags had
