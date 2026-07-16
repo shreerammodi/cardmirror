@@ -14,6 +14,14 @@
  * false-positive dialect match degrades to today's behavior, never to
  * mangled output.
  *
+ * SCOPE (explicit design stance, 2026-07-16): this is a best-effort
+ * convenience, deliberately NOT built to chase clipboard edge cases.
+ * The full-fidelity path is and will remain opening the .docx in
+ * CardMirror and copying from there — the real importer sees the real
+ * OOXML instead of Word's lossy HTML rendition of it. Extend this
+ * module for failure modes that are common in the wild; resist
+ * hardening it against exotic ones.
+ *
  * Two classification layers, mirroring the importer:
  *   1. NAMES: Word carries its style table in the head `<style>` block
  *      (`span.Style13ptBold {mso-style-name:"Style 13 pt Bold\,Cite"}`)

@@ -353,6 +353,24 @@ paste: the status bar shows a pill, and your next Ctrl/Cmd-V pastes as
 plain text. If **Condense on paste** is on (Settings → Editing), the
 pasted text is condensed as it lands.
 
+<a id="smart-paste"></a>
+### Smart paste from Word and haku.cards
+
+A regular Ctrl/Cmd-V of content copied from Microsoft Word (including
+Verbatim files) or from haku.cards is converted into real CardMirror
+structure — tags, cites, headings, underlining, emphasis, highlighting,
+and card numbering — instead of arriving as unformatted text. Content
+with no recognizable structure pastes exactly as before, and F2 still
+pastes plain. The **Smart paste conversion** toggle lives in Settings →
+Editing → Paste (on by default).
+
+Know its place: smart paste is a best-effort convenience working from
+the clipboard's HTML rendition of the source, and it is deliberately
+not built to handle every edge case. When fidelity matters — or when a
+paste comes out wrong — **open the .docx in CardMirror and copy from
+there**: the real importer reads the actual document and will always do
+better.
+
 ### Condense, pilcrows, and case
 
 The F3 family collapses card text the way Verbatim's does:

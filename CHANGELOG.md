@@ -18,7 +18,9 @@ see `DETAILED_CHANGELOG.md`.
   uses for it — the normal Emphasis style (which Word copies as a
   bare "em" tag), renames like "Emphasis1", "Text Bold", and "Char
   Char" duplicates, and even fully random names, which are recognized
-  by their box border.
+  by their box border. One honest caveat: smart paste is a best-effort
+  convenience, not built to chase every edge case — for full fidelity,
+  open the .docx in CardMirror and copy from there instead.
   haku pastes additionally translate haku's formatting back into
   CardMirror semantics: bold-underlined text becomes Emphasis (old
   files where every underline is bold are recognized and kept as plain

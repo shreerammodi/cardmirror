@@ -2761,7 +2761,7 @@ export const SETTING_METADATA: SettingMeta[] = [
     key: 'smartPasteConversion',
     label: 'Smart paste conversion',
     description:
-      'Recognize content copied from Microsoft Word or haku.cards and convert it into CardMirror structure on paste — tags, cites, headings, underlining, and highlighting instead of unformatted text. When off, or when the pasted content has no recognizable structure, pasting works exactly as before. Paste Text (F2) always pastes plain.',
+      'Recognize content copied from Microsoft Word or haku.cards and convert it into CardMirror structure on paste — tags, cites, headings, underlining, and highlighting instead of unformatted text. Best effort: for full fidelity, open the .docx in CardMirror and copy from there. When off, or when the pasted content has no recognizable structure, pasting works exactly as before. Paste Text (F2) always pastes plain.',
     kind: 'toggle',
     category: 'editing',
     section: 'Paste',
