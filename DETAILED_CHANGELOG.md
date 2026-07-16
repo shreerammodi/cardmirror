@@ -85,6 +85,30 @@ in each release, see `CHANGELOG.md`.
   by both passes: there the sizes and bold+underline combinations are
   the user's own formatting (guarded by test).
 
+- **Word paste: the CANONICAL Emphasis style is recognized — Word
+  spells it `<em>`** (`StyleDict.elements` in `import/html-paste.ts`;
+  root-caused against two field docs whose style tables were perfectly
+  canonical yet still lost their borders on paste). Word maps built-in
+  character styles to semantic HTML elements: a run styled with
+  (Verbatim's redefined) Emphasis is copied as a bare `<em>` — no
+  class, no inline style — with ALL the formatting in a head `em {…}`
+  ELEMENT rule (`border:solid windowtext 1.0pt; padding:0in;
+  font-weight:normal; font-style:normal; text-decoration:underline`,
+  verified from a live Word 15 Mac clipboard capture of the field
+  doc). The style dictionary read only class selectors, so the rule
+  was invisible and every emphasis run imported as italic (the `<em>`
+  tag default). The dictionary now also records bare inline-element
+  rules (em/strong/b/i/u/s), and `foldElement` folds the tag's element
+  rule between the tag's own semantics and its classes — so the rule's
+  `border` makes the run boxed → emphasis_mark, and its
+  `font-style:normal` cancels the tag-implied italic (foldCss now lets
+  an explicit `normal` reset italic). In a non-Verbatim doc whose `em`
+  rule is italic-only, `<em>` still imports as plain italic — the
+  border decides, same formatting-truth principle as the rename
+  handling. Verified end-to-end against the real captured clipboard:
+  46 emphasis runs, zero italic leakage, full structure (pocket / hat
+  / blocks / cards / cite).
+
 - **Word paste: renamed Emphasis styles are recognized**
   (`charTokenToMark` + widened border detection in
   `import/html-paste.ts`). Word's style-duplication bugs rename

@@ -254,6 +254,34 @@ describe('convertWordHtml — marks and runs', () => {
     expect(marksAt(doc, 'alt bordered')).toContain('emphasis_mark');
   });
 
+  it('built-in Emphasis arrives as bare <em> + an em ELEMENT rule (live Word 15 capture shape) → emphasis_mark', () => {
+    // Word maps built-in character styles to semantic elements: a run
+    // styled with (redefined) Emphasis is `<em>text</em>` with all the
+    // formatting in the head's element rule — no class, no inline style.
+    const doc = convertWordHtml(
+      wordDoc(
+        `<h4>Tag</h4><p class=MsoNormal><span style='font-size:8.0pt'>lead-in </span><em>epidemics</em><span style='font-size:8.0pt'> trail</span></p>`,
+        `em {mso-style-priority:8; mso-ansi-font-size:11.0pt; font-family:"Times New Roman",serif; border:solid windowtext 1.0pt; padding:0in; font-weight:normal; font-style:normal; text-decoration:underline; text-underline:single;}`,
+      ),
+    )!;
+    const m = marksAt(doc, 'epidemics');
+    expect(m).toContain('emphasis_mark');
+    expect(m).not.toContain('italic'); // the rule's font-style:normal cancels <em>'s implied italic
+    expect(m).not.toContain('bold');
+  });
+
+  it('<em> in a non-Verbatim Word doc (no border in the em rule) stays plain italic', () => {
+    const doc = convertWordHtml(
+      wordDoc(
+        `<h4>Tag</h4><p class=MsoNormal>an <em>italicized aside</em> here</p>`,
+        `em {mso-style-priority:20; font-style:italic;}`,
+      ),
+    )!;
+    const m = marksAt(doc, 'italicized aside');
+    expect(m).toContain('italic');
+    expect(m).not.toContain('emphasis_mark');
+  });
+
   it("Word's italic built-ins (Subtle/Intense Emphasis) are NOT the Verbatim box", () => {
     const doc = convertWordHtml(
       wordDoc(

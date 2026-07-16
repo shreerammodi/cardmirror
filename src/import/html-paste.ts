@@ -166,13 +166,37 @@ interface ClassInfo {
   css: string;
 }
 
-/** Parse every `<style>` block into className → info. Word separates
- *  rules per class (`p.X, li.X, div.X {...}` / `span.Y {...}`); we
- *  record each class token found in a selector list against the rule's
+interface StyleDict {
+  /** `span.X` / `p.X` / … class rules, keyed by class name. */
+  classes: Map<string, ClassInfo>;
+  /** Bare inline-element rules (`em {…}`, `strong {…}`), keyed by tag.
+   *  Word maps BUILT-IN character styles to semantic elements — the
+   *  Verbatim Emphasis style (a redefined built-in) comes through as a
+   *  bare `<em>` with ALL its formatting in the head's `em` element
+   *  rule: `border:solid windowtext 1.0pt; font-style:normal;
+   *  text-decoration:underline; …` (verified against a live Word 15
+   *  Mac clipboard capture, 2026-07-16). Class-only parsing missed it
+   *  entirely, importing every emphasis run as italic. */
+  elements: Map<string, ClassInfo>;
+}
+
+const INLINE_ELEMENT_RULES = new Set(['em', 'strong', 'b', 'i', 'u', 's', 'strike']);
+
+/** Parse every `<style>` block into class + element dictionaries. Word
+ *  separates rules per style (`p.X, li.X, div.X {...}` / `span.Y {...}`
+ *  / `em {...}`); we record each recognized selector against the rule's
  *  declarations. Good enough for Word's machine-generated CSS — this is
  *  a dictionary read, not a CSS engine. */
-function parseStyleDict(dom: Document): Map<string, ClassInfo> {
-  const dict = new Map<string, ClassInfo>();
+function parseStyleDict(dom: Document): StyleDict {
+  const classes = new Map<string, ClassInfo>();
+  const elements = new Map<string, ClassInfo>();
+  const record = (map: Map<string, ClassInfo>, key: string, msoName: string | null, body: string): void => {
+    const prev = map.get(key);
+    map.set(key, {
+      msoName: msoName ?? prev?.msoName ?? null,
+      css: prev ? `${prev.css};${body}` : body,
+    });
+  };
   for (const styleEl of Array.from(dom.querySelectorAll('style'))) {
     const cssText = (styleEl.textContent ?? '').replace(/<!--|-->/g, '');
     for (const m of cssText.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
@@ -181,17 +205,18 @@ function parseStyleDict(dom: Document): Map<string, ClassInfo> {
       const msoName = readMsoStyleName(body);
       for (const sel of selectors.split(',')) {
         const cm = /^\s*(?:p|li|div|span|h[1-6])?\.([A-Za-z][\w-]*)\s*$/.exec(sel);
-        if (!cm) continue;
-        const cls = cm[1]!;
-        const prev = dict.get(cls);
-        dict.set(cls, {
-          msoName: msoName ?? prev?.msoName ?? null,
-          css: prev ? `${prev.css};${body}` : body,
-        });
+        if (cm) {
+          record(classes, cm[1]!, msoName, body);
+          continue;
+        }
+        const em = /^\s*([a-z]+)\s*$/.exec(sel);
+        if (em && INLINE_ELEMENT_RULES.has(em[1]!)) {
+          record(elements, em[1]!, msoName, body);
+        }
       }
     }
   }
-  return dict;
+  return { classes, elements };
 }
 
 function readMsoStyleName(css: string): string | null {
@@ -280,11 +305,16 @@ function classifyBackground(value: string): { highlight?: string; shading?: stri
 }
 
 /** Fold one inline element's contribution into a copy of the current
- *  run style. `dict` supplies class CSS for UNKNOWN classes only — a
- *  class that resolves to a named-style mark contributes the mark and
- *  nothing else (its CSS is the style's own display formatting, e.g.
- *  Style13ptBold's bold+13pt, which must not double as direct marks). */
-function foldElement(el: Element, rs: RunStyle, dict: Map<string, ClassInfo>): RunStyle {
+ *  run style. Order: the tag's own semantics, then the tag's ELEMENT
+ *  rule from the head CSS (Word spells redefined built-in styles this
+ *  way — `<em>` + `em {border:…; font-style:normal}` IS the Verbatim
+ *  Emphasis style, and the rule must be able to cancel the tag's
+ *  implied italic), then classes, then inline style. `dict` class CSS
+ *  folds for UNKNOWN classes only — a class that resolves to a
+ *  named-style mark contributes the mark and nothing else (its CSS is
+ *  the style's own display formatting, e.g. Style13ptBold's bold+13pt,
+ *  which must not double as direct marks). */
+function foldElement(el: Element, rs: RunStyle, dict: StyleDict): RunStyle {
   const out: RunStyle = { ...rs };
   const tag = el.tagName.toLowerCase();
   if (tag === 'b' || tag === 'strong') out.bold = true;
@@ -298,8 +328,11 @@ function foldElement(el: Element, rs: RunStyle, dict: Map<string, ClassInfo>): R
     if (href) out.href = href;
   }
 
+  const elementRule = dict.elements.get(tag);
+  if (elementRule) foldCss(elementRule.css, out);
+
   for (const cls of Array.from(el.classList)) {
-    const info = dict.get(cls);
+    const info = dict.classes.get(cls);
     let mark: string | null = null;
     for (const token of classTokens(cls, info)) {
       mark = charTokenToMark(token);
@@ -333,6 +366,9 @@ function foldCss(css: string, out: RunStyle): void {
         break;
       case 'font-style':
         if (v.includes('italic') || v.includes('oblique')) out.italic = true;
+        // An explicit normal cancels an inherited/tag-implied italic —
+        // Verbatim's Emphasis rule does exactly this on Word's <em>.
+        else if (v === 'normal') out.italic = false;
         break;
       case 'text-decoration':
       case 'text-decoration-line':
@@ -394,7 +430,7 @@ function skipElement(el: Element): boolean {
 }
 
 /** Collect the inline runs of one block element. */
-function collectRuns(block: Element, dict: Map<string, ClassInfo>): HtmlRun[] {
+function collectRuns(block: Element, dict: StyleDict): HtmlRun[] {
   const runs: HtmlRun[] = [];
   const walk = (node: globalThis.Node, rs: RunStyle): void => {
     if (node.nodeType === 3 /* TEXT_NODE */) {
@@ -509,13 +545,13 @@ function readMsoList(style: string): { numId: number; ilvl: number } | null {
 function classifyBlock(
   el: Element,
   runs: HtmlRun[],
-  dict: Map<string, ClassInfo>,
+  dict: StyleDict,
 ): string {
   // 1. Named paragraph style via class (mso-style-name aware). Checked
   //    before the h-tag so a custom style based on a heading (Analytic
   //    is basedOn Heading4) classifies by its own name.
   for (const cls of Array.from(el.classList)) {
-    for (const token of classTokens(cls, dict.get(cls))) {
+    for (const token of classTokens(cls, dict.classes.get(cls))) {
       const node = PARA_TOKEN_TO_NODE[token];
       if (node) return node;
       // Mirror fallbackNodeType's rule 2: any paragraph style whose
@@ -552,7 +588,7 @@ function classifyBlock(
 
 const BLOCK_TAGS = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'pre', 'blockquote']);
 
-function collectParas(root: Element, dict: Map<string, ClassInfo>): ParaInfo[] {
+function collectParas(root: Element, dict: StyleDict): ParaInfo[] {
   const paras: ParaInfo[] = [];
   const visit = (el: Element): void => {
     if (skipElement(el)) return;

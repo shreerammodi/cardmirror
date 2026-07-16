@@ -14,10 +14,11 @@ see `DETAILED_CHANGELOG.md`.
   including Verbatim files — or from haku.cards now recreates real
   CardMirror structure: tags, cites, headings, underlining,
   highlighting, and card numbering, instead of unformatted text.
-  Renamed Emphasis styles — "Emphasis1", "Text Bold", "Char Char"
-  duplicates, even fully random names — are recognized by name
-  pattern or by their box border, so emphasis survives the paste even
-  from files the style cleaner hasn't repaired.
+  Emphasis (boxed) text survives the paste in every spelling Word
+  uses for it — the normal Emphasis style (which Word copies as a
+  bare "em" tag), renames like "Emphasis1", "Text Bold", and "Char
+  Char" duplicates, and even fully random names, which are recognized
+  by their box border.
   haku pastes additionally translate haku's formatting back into
   CardMirror semantics: bold-underlined text becomes Emphasis (old
   files where every underline is bold are recognized and kept as plain
