@@ -7,6 +7,15 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Style font sizes: reset-to-defaults button**
+  (`buildDisplaySizesEditor` in `settings-ui.ts`). One-click restore
+  of `DEFAULT_DISPLAY_SIZES` (now exported from `settings.ts`), using
+  the same footer/icon-button treatment as the paragraph-spacing
+  reset. Also reordered the Style typography flag checkboxes into
+  outline-hierarchy order — pocket and hat first, then cite /
+  underline / undertag / emphasis (the index-based sync list updated
+  to match).
+
 - **Pocket box settings: on/off + thickness** (`pocketBox` /
   `pocketBoxSize` in `DisplayTypography`; UI rows in the Style
   typography editor; tests in

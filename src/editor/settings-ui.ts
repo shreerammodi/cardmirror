@@ -25,6 +25,7 @@ import {
   evalDependsOn,
   type ReaderConfig,
   type DisplaySizes,
+  DEFAULT_DISPLAY_SIZES,
   DEFAULT_PARAGRAPH_SPACING,
   type ParagraphSpacingKey,
   type DisplayTypography,
@@ -1197,15 +1198,16 @@ function buildTypographyEditor(): HTMLElement {
     return row;
   }
 
+  // Hierarchy order: the top-of-outline styles (pocket, hat) lead.
+  wrap.appendChild(flagRow('pocketBox', 'Pocket: boxed'));
+  wrap.appendChild(flagRow('hatUnderlineDouble', 'Hat: double underline'));
   wrap.appendChild(flagRow('citeUnderlined', 'Cite: underlined'));
   wrap.appendChild(flagRow('underlineBold', 'Underline: bold'));
-  wrap.appendChild(flagRow('hatUnderlineDouble', 'Hat: double underline'));
   wrap.appendChild(flagRow('undertagItalic', 'Undertag: italic'));
   wrap.appendChild(flagRow('undertagBold', 'Undertag: bold'));
   wrap.appendChild(flagRow('emphasisBold', 'Emphasis: bold'));
   wrap.appendChild(flagRow('emphasisItalic', 'Emphasis: italic'));
   wrap.appendChild(flagRow('emphasisBox', 'Emphasis: boxed'));
-  wrap.appendChild(flagRow('pocketBox', 'Pocket: boxed'));
 
   const sizeRow = document.createElement('label');
   sizeRow.className = 'pmd-typography-size-row';
@@ -1303,9 +1305,10 @@ function buildTypographyEditor(): HTMLElement {
     // matches flagKeys), the last is the hide-emphasis-borders toggle.
     const checkboxes = wrap.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
     const flagKeys: (keyof DisplayTypography)[] = [
-      'citeUnderlined', 'underlineBold', 'hatUnderlineDouble',
+      'pocketBox', 'hatUnderlineDouble',
+      'citeUnderlined', 'underlineBold',
       'undertagItalic', 'undertagBold',
-      'emphasisBold', 'emphasisItalic', 'emphasisBox', 'pocketBox',
+      'emphasisBold', 'emphasisItalic', 'emphasisBox',
     ];
     flagKeys.forEach((k, i) => {
       const cb = checkboxes[i];
@@ -1965,6 +1968,22 @@ function buildDisplaySizesEditor(): HTMLElement {
 
       wrap.appendChild(row);
     }
+
+    // Reset-to-defaults footer (reuses the line-heights footer/button
+    // look — same icon-button treatment, no new CSS).
+    const footer = document.createElement('div');
+    footer.className = 'pmd-line-heights-footer';
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'pmd-line-heights-reset-btn';
+    setIcon(resetBtn, 'reset');
+    resetBtn.title = 'Restore defaults';
+    resetBtn.setAttribute('aria-label', 'Restore style font size defaults');
+    resetBtn.addEventListener('click', () => {
+      commit({ ...DEFAULT_DISPLAY_SIZES });
+    });
+    footer.appendChild(resetBtn);
+    wrap.appendChild(footer);
   }
 
   const unsubscribe = settings.subscribe((s) => {

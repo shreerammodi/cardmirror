@@ -132,7 +132,7 @@ export const DISPLAY_SIZE_KEYS: (keyof DisplaySizes)[] = [
   'analytic', 'cite', 'underline', 'emphasis', 'undertag',
 ];
 
-const DEFAULT_DISPLAY_SIZES: DisplaySizes = {
+export const DEFAULT_DISPLAY_SIZES: DisplaySizes = {
   normal: 11,
   pocket: 26,
   hat: 22,

@@ -54,6 +54,10 @@ see `DETAILED_CHANGELOG.md`.
   thickness, mirroring the existing emphasis box controls.
   Display-only — exports are unchanged.
 
+- **Reset style font sizes**: the per-style font size editor
+  (Settings → Appearance) now has a reset button that restores every
+  style's size to its default in one click.
+
 ### Changed
 
 - **Copy Previous Cite now copies only the nearest cite.** Copy
