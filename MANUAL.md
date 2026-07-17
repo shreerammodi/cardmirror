@@ -1845,6 +1845,10 @@ headers shown inside each tab.
 - **Three-pane workspace** — switch between one document per window and a
   single window with three panes
   (see [The multi-doc workspace](#7-the-multi-doc-workspace)).
+- **Default navigation depth** — the outline level the nav pane starts
+  at when a document opens (Pocket / Hat / Block / Tag; Block by
+  default). The 1–4 buttons in the pane change the depth for that
+  window only.
 - **Multi-doc layout** — with three docs open, show all three at once
   (compact) or two-and-a-bit with click-to-snap (wide). No effect with
   one or two docs.
@@ -1983,7 +1987,12 @@ How things look. None of these change the file — only your view (see
 **Document typography**
 
 - **Style font sizes (pt)** — render size for each named style.
-- **Style typography** — bold / italic / underline / box per named style.
+- **Style typography** — bold / italic / underline / box per named
+  style, including: hat underline style (double, the classic look, or
+  single), whether pockets draw their box (and its thickness), the
+  emphasis box thickness, and whether substructure letters are bolded.
+  The font-size editor above it has a reset button that restores every
+  style's default size.
 - **Body font** — the editor's content font, including dyslexia-friendly
   options.
 - **Line spacing** — the line-height multiplier, per paragraph type.
@@ -2085,6 +2094,20 @@ Typing helpers and the behavior of the cutting and condense commands
   separate, default), or Demolish (merge everything).
 - **Condense with warning: marker delimiter** — the bracket style around
   the PARAGRAPH INTEGRITY PAUSES / RESUMES markers.
+
+**Paste**
+
+- **Smart paste conversion** — recognize content copied from Microsoft
+  Word or haku.cards and convert it into CardMirror structure on paste
+  (see the Smart paste section above). On by default; Paste Text (F2)
+  always pastes plain.
+
+**Cites**
+
+- **Copy Previous Cite: nearest cite only** — Copy Previous Cite
+  (Alt-F8) copies only the single nearest preceding cite paragraph (the
+  default). Off copies every cite under the most recent source, the
+  Verbatim-style behavior.
 
 **Formatting operations**
 
@@ -2193,6 +2216,15 @@ remove one, **↺** to restore its default. A few window-level shortcuts
 - **Default document zoom** — the body-text zoom level documents open at, and
   reset to on reload (zoom is per-editor and does not persist across reloads).
   50–300%, 100% by default.
+- **Text alignment** — center or fully justify text per structural
+  style (tags, paragraphs, card bodies, analytic bodies, analytics,
+  undertags, cite paragraphs). Pockets, hats, and blocks keep their
+  normal look, and a paragraph you've aligned yourself keeps its own
+  alignment.
+- **Maximum text width** — cap how wide the document text column gets,
+  so reading doesn't require sweeping your eyes across the whole
+  screen. Off by default; when on, choose whether the column sits
+  centered or pinned to the left or right edge.
 - **Screen reader support** *(desktop)* — let screen readers and other
   assistive technology read CardMirror. **Off by default**: a current Chromium
   bug crashes the window (white screen, lost work) while building the
