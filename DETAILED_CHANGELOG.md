@@ -7,6 +7,24 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Explicit document icons for the file associations**
+  (`apps/desktop/scripts/generate-doc-icons.py` → `build/docx.icns` /
+  `.ico` + `build/cmir.icns` / `.ico`; field report 2026-07-16). The
+  `fileAssociations` shipped no document icon, so macOS DERIVED one
+  from the app icon at render time — and that derivation failed
+  reproducibly on a user's machine (uniform corrupted tiles on every
+  .docx in their file manager; an iconservices cache flush didn't fix
+  it, and a third-party Finder replacement rendering through its own
+  icon pipeline made it worse). Shipping real icons removes the
+  fragile step for every consumer — Finder, third-party file managers,
+  and Windows Explorer (the .ico twins ride the same electron-builder
+  by-extension convention: `build/<ext>.icns`/`.ico` are picked up with
+  no config change; verified in the built bundle's
+  CFBundleDocumentTypes). Icons are generated, not hand-drawn —
+  standard macOS document language (white folded-corner page, app
+  mark, extension label); regenerate with the script after changing
+  `build/icon.png`.
+
 - **Atomic-save rename: retry transient Windows locks, friendly
   ELOCKED error** (`doc-writes.ts` writeAtomic; classifier
   `fileLockedMessage` in `error-surface.ts`; tests in

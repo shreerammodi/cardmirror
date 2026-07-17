@@ -167,6 +167,12 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- CardMirror now ships real document icons for `.docx` and `.cmir`
+  files instead of letting the system derive one from the app icon —
+  fixing the corrupted-looking file icons some users saw in Finder and
+  third-party file managers after making CardMirror their default
+  .docx app.
+
 - Rapid back-to-back saves into a Dropbox (or antivirus-watched)
   folder on Windows no longer fail with a scary EPERM error. Dropbox
   briefly locks a freshly-saved file to sync it, and Windows refuses
