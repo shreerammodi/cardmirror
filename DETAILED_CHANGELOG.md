@@ -5,6 +5,24 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
+## Unreleased
+
+- **Nav drag scroll-gate cache validated against re-parenting**
+  (`findNavScrollGate` in `src/editor/nav-panel.ts`; field report
+  2026-07-17, three-pane). The drag hit-test gates pointer positions
+  against the panel's nearest scrolling ancestor, cached per instance
+  and revalidated with `isConnected` only. The multi-pane shell
+  re-parents nav sections between containers when panes are
+  rearranged, so the cached gate could remain in the DOM — as another
+  slot's scroller — while no longer being this panel's ancestor. Every
+  drag hit-test then failed the gate rect check and returned null:
+  pickup and hover-highlighting worked (separate code path), but no
+  drop indicator ever lit anywhere in that doc — including the
+  always-valid end-of-doc slot — and drops snapped back, until the doc
+  was closed and reopened. The cache now also requires
+  `contains(this.root)`, recomputing whenever the panel has moved.
+  Regression test: `tests/editor/nav-scroll-gate-reparent.test.ts`.
+
 ## 0.1.0-beta.15 — 2026-07-17
 
 - **Per-card `contain-intrinsic-height` estimates — fixes the

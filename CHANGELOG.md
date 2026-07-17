@@ -5,6 +5,18 @@ changes in each release, written for users of the editor. For
 in-depth rationale and implementation context behind each entry,
 see `DETAILED_CHANGELOG.md`.
 
+## Unreleased
+
+### Fixed
+
+- **Drag-to-reorder in the outline no longer goes dead after
+  rearranging panes.** In the three-pane workspace, rearranging panes
+  could leave one document's outline unable to offer any drop
+  position: picking up a heading worked, but the insertion line never
+  appeared and releasing snapped it back, until the document was
+  closed and reopened. Reordering now works regardless of how panes
+  have been shuffled.
+
 ## 0.1.0-beta.15 — 2026-07-17
 
 ### Added

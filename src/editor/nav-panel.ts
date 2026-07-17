@@ -505,7 +505,19 @@ export class NavigationPanel {
    *  itself (single-doc, where the panel is position:fixed and its
    *  own rect already gates correctly). Cached per instance. */
   private findNavScrollGate(): HTMLElement {
-    if (this.navScrollGateEl && this.navScrollGateEl.isConnected) {
+    // Cache validity needs `contains(this.root)`, not just
+    // `isConnected`: the multi-pane shell RE-PARENTS nav sections
+    // between containers when panes are rearranged, so a cached gate
+    // can remain in the DOM — as some other slot's scroller — while
+    // no longer being this panel's ancestor. Hit-testing drags
+    // against that stale rect rejected every pointer position, so
+    // drops offered no slot anywhere in the affected doc until it
+    // was closed and reopened (field report 2026-07-17, three-pane).
+    if (
+      this.navScrollGateEl &&
+      this.navScrollGateEl.isConnected &&
+      this.navScrollGateEl.contains(this.root)
+    ) {
       return this.navScrollGateEl;
     }
     let cur: HTMLElement | null = this.root;
