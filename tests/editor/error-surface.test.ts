@@ -11,6 +11,7 @@ import {
   installGlobalErrorSurface,
   isFileGoneError,
   isFileChangedOnDiskError,
+  fileLockedMessage,
 } from '../../src/editor/error-surface.js';
 
 describe('isFileGoneError', () => {
@@ -137,5 +138,28 @@ describe('installGlobalErrorSurface', () => {
     // with whatever event object arrives (reads .reason, possibly undefined).
     expect(() => window.dispatchEvent(new Event('unhandledrejection'))).not.toThrow();
     expect(consoleSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('fileLockedMessage — transiently locked file (ELOCKED)', () => {
+  it('extracts the friendly sentence from the IPC-wrapped message', () => {
+    const err = new Error(
+      "Error invoking remote method 'host:save-existing': Error: ELOCKED: " +
+        '"Working (Max, Summer).docx" is temporarily locked by another program ' +
+        '— often Dropbox or an antivirus scanner still processing the previous ' +
+        'save. Wait a few seconds and save again. (EPERM)',
+    );
+    const msg = fileLockedMessage(err);
+    expect(msg).not.toBeNull();
+    expect(msg).toContain('temporarily locked');
+    expect(msg).not.toContain('invoking remote method');
+    expect(msg).not.toContain('ELOCKED');
+  });
+
+  it('null for unrelated errors', () => {
+    expect(fileLockedMessage(new Error('EPERM: operation not permitted'))).toBeNull();
+    expect(fileLockedMessage(new Error('ENOENT: no such file'))).toBeNull();
+    expect(fileLockedMessage(null)).toBeNull();
+    expect(fileLockedMessage('string')).toBeNull();
   });
 });

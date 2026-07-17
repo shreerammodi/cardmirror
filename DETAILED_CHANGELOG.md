@@ -7,6 +7,28 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Atomic-save rename: retry transient Windows locks, friendly
+  ELOCKED error** (`doc-writes.ts` writeAtomic; classifier
+  `fileLockedMessage` in `error-surface.ts`; tests in
+  `tests/desktop/doc-writes.test.ts` +
+  `tests/editor/error-surface.test.ts`; field report 2026-07-16,
+  Max U., Windows + Dropbox). Windows refuses `rename` over a file
+  another process holds open (POSIX doesn't care), and Dropbox /
+  antivirus grab a freshly-saved file within milliseconds to
+  sync/scan it — so the SECOND of two quick saves hit EPERM renaming
+  its .cmtmp over the target while Dropbox still held the FIRST
+  save's output. The rename now retries on EPERM/EACCES/EBUSY with
+  50→800ms backoff (~1.5s total — the holds are sub-second, matching
+  the field timing of "seconds apart fails, minutes apart fine");
+  non-transient errors still throw immediately, and per-path
+  serialization already prevents CardMirror racing itself. If the
+  backoff is exhausted, the error is marked ELOCKED with a
+  human sentence ("temporarily locked by another program — often
+  Dropbox or an antivirus scanner…"), and all three renderer
+  save-failure alerts strip Electron's IPC wrapper and show just that
+  sentence. The .cmtmp is still cleaned up and the original file left
+  intact on every failure path.
+
 - **Tournament pause for automatic update checks**
   (`updateChecksPausedUntil` setting; button in the About-this-install
   section next to the auto-check toggle; sanitize test in

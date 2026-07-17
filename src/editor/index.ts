@@ -264,6 +264,7 @@ import { countReadAloudWords, formatReadTime, formatNumber } from './word-count.
 import { getHost, getElectronHost, isWindowsHost, isSameOpenHandle, type OpenedFile, type JournalEntry } from './host/index.js';
 import {
   installGlobalErrorSurface,
+  fileLockedMessage,
   isFileGoneError,
   isFileChangedOnDiskError,
 } from './error-surface.js';
@@ -6741,7 +6742,8 @@ async function runSaveAsFlowInner(): Promise<boolean> {
     return true;
   } catch (err) {
     console.error('Save failed:', err);
-    void alertDialog(`Save failed: ${err instanceof Error ? err.message : err}`);
+    const lockedMsg = fileLockedMessage(err);
+    void alertDialog(`Save failed: ${lockedMsg ?? (err instanceof Error ? err.message : err)}`);
     return false;
   }
 }
@@ -7029,7 +7031,8 @@ async function runSaveFlowInner(): Promise<boolean> {
       );
       return rescue ? runSaveAsFlow() : false;
     }
-    void alertDialog(`Save failed: ${err instanceof Error ? err.message : err}`);
+    const lockedMsg = fileLockedMessage(err);
+    void alertDialog(`Save failed: ${lockedMsg ?? (err instanceof Error ? err.message : err)}`);
     return false;
   }
 }
@@ -8619,7 +8622,8 @@ async function saveRecoveryEntry(entry: JournalEntry): Promise<boolean> {
       // exit (saveExisting no longer recreates files at stale paths).
       if (!isFileGoneError(err)) {
         console.error('Recovery save failed:', err);
-        void alertDialog(`Save failed: ${err instanceof Error ? err.message : err}`);
+        const lockedMsg = fileLockedMessage(err);
+    void alertDialog(`Save failed: ${lockedMsg ?? (err instanceof Error ? err.message : err)}`);
         return false;
       }
     }

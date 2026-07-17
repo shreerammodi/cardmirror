@@ -28,6 +28,7 @@ import {
   resetDocWritesForTests,
   nearestExistingDir,
   CHANGED_ON_DISK_MARKER,
+  FILE_LOCKED_MARKER,
 } from '../../apps/desktop/src/doc-writes.js';
 
 const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'cardmirror-doc-writes-'));
@@ -241,5 +242,89 @@ describe('chainDocWrite — per-path serialization', () => {
       saveExistingDoc(p, Buffer.from('manual save bytes')),
     ]);
     expect(await read(p)).toBe('manual save bytes');
+  });
+});
+
+describe('rename retry — transiently locked target (Dropbox/antivirus holds)', () => {
+  // Field report 2026-07-16 (Windows + Dropbox): the second of two
+  // quick saves hit EPERM because Dropbox still held the first save's
+  // output for upload. Windows refuses rename-over-open-file; the
+  // retry backoff must absorb sub-second holds and mark longer ones
+  // with the friendly ELOCKED message.
+  it('absorbs transient EPERM on rename and completes the save', async () => {
+    const target = docPath('locked.docx');
+    await fs.writeFile(target, 'v1');
+    await recordDiskStateFromDisk(target);
+    const realRename = fs.rename;
+    let failures = 2;
+    let calls = 0;
+    (fs as { rename: typeof fs.rename }).rename = async (a, b) => {
+      calls++;
+      if (failures-- > 0) {
+        const err = new Error('EPERM: operation not permitted') as NodeJS.ErrnoException;
+        err.code = 'EPERM';
+        throw err;
+      }
+      return realRename(a, b);
+    };
+    try {
+      await saveExistingDoc(target, Buffer.from('v2'));
+    } finally {
+      (fs as { rename: typeof fs.rename }).rename = realRename;
+    }
+    expect(calls).toBe(3);
+    expect(await fs.readFile(target, 'utf8')).toBe('v2');
+  });
+
+  it('exhausted retries throw the friendly ELOCKED error and clean the tmp file', async () => {
+    const target = docPath('stuck.docx');
+    await fs.writeFile(target, 'v1');
+    await recordDiskStateFromDisk(target);
+    const realRename = fs.rename;
+    (fs as { rename: typeof fs.rename }).rename = async () => {
+      const err = new Error('EPERM: operation not permitted') as NodeJS.ErrnoException;
+      err.code = 'EPERM';
+      throw err;
+    };
+    let message = '';
+    try {
+      await saveExistingDoc(target, Buffer.from('v2'));
+    } catch (err) {
+      message = (err as Error).message;
+    } finally {
+      (fs as { rename: typeof fs.rename }).rename = realRename;
+    }
+    expect(message).toContain(FILE_LOCKED_MARKER);
+    expect(message).toContain('temporarily');
+    expect(message).toContain('stuck.docx');
+    // Old contents intact; tmp sibling cleaned up.
+    expect(await fs.readFile(target, 'utf8')).toBe('v1');
+    const leftovers = (await fs.readdir(caseDir)).filter((f) => f.includes('cmtmp'));
+    expect(leftovers).toEqual([]);
+  }, 15000);
+
+  it('non-transient rename errors propagate immediately (no retry loop)', async () => {
+    const target = docPath('hard-fail.docx');
+    await fs.writeFile(target, 'v1');
+    await recordDiskStateFromDisk(target);
+    const realRename = fs.rename;
+    let calls = 0;
+    (fs as { rename: typeof fs.rename }).rename = async () => {
+      calls++;
+      const err = new Error('EXDEV: cross-device link') as NodeJS.ErrnoException;
+      err.code = 'EXDEV';
+      throw err;
+    };
+    let message = '';
+    try {
+      await saveExistingDoc(target, Buffer.from('v2'));
+    } catch (err) {
+      message = (err as Error).message;
+    } finally {
+      (fs as { rename: typeof fs.rename }).rename = realRename;
+    }
+    expect(calls).toBe(1);
+    expect(message).toContain('EXDEV');
+    expect(message).not.toContain(FILE_LOCKED_MARKER);
   });
 });

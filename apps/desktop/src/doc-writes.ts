@@ -48,6 +48,28 @@ import * as path from 'node:path';
  *  Mirrored by `isFileChangedOnDiskError` in src/editor/error-surface.ts. */
 export const CHANGED_ON_DISK_MARKER = 'EMODIFIED';
 
+/** Marker for "the target file is transiently locked by another
+ *  process" rename failures (same message-marker convention as
+ *  EMODIFIED). Mirrored by `fileLockedMessage` in
+ *  src/editor/error-surface.ts. */
+export const FILE_LOCKED_MARKER = 'ELOCKED';
+
+/** Windows refuses to rename over a file another process holds open
+ *  (POSIX doesn't care) — and Dropbox/antivirus grab a freshly-saved
+ *  file within milliseconds to sync/scan it. Field report 2026-07-16
+ *  (Max U., Windows + Dropbox): two saves seconds apart — the second
+ *  save's rename hit Dropbox's upload handle on the FIRST save's
+ *  output → EPERM. Those holds are sub-second, so a short backoff
+ *  absorbs nearly all of them; ~1.5s total before giving up. */
+const RENAME_RETRY_DELAYS_MS = [50, 100, 200, 400, 800];
+
+function isTransientRenameCode(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException | null)?.code;
+  return code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
 interface DiskState {
   mtimeMs: number;
   size: number;
@@ -112,9 +134,30 @@ async function writeAtomic(filePath: string, buf: Buffer, mode?: number): Promis
   const tmpPath = path.join(dir, `.${path.basename(filePath)}.cmtmp`);
   await fs.writeFile(tmpPath, buf, mode !== undefined ? { mode } : {});
   try {
-    await fs.rename(tmpPath, filePath);
+    // Retry transient sharing violations (see RENAME_RETRY_DELAYS_MS);
+    // anything else — and anything that outlives the backoff — throws.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await fs.rename(tmpPath, filePath);
+        break;
+      } catch (err) {
+        if (attempt >= RENAME_RETRY_DELAYS_MS.length || !isTransientRenameCode(err)) {
+          throw err;
+        }
+        await sleep(RENAME_RETRY_DELAYS_MS[attempt]!);
+      }
+    }
   } catch (err) {
     await fs.unlink(tmpPath).catch(() => {});
+    if (isTransientRenameCode(err)) {
+      const code = (err as NodeJS.ErrnoException).code;
+      throw new Error(
+        `${FILE_LOCKED_MARKER}: "${path.basename(filePath)}" is temporarily ` +
+          `locked by another program — often Dropbox or an antivirus scanner ` +
+          `still processing the previous save. Wait a few seconds and save ` +
+          `again. (${code})`,
+      );
+    }
     throw err;
   }
 }

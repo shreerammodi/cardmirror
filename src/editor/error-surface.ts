@@ -57,6 +57,21 @@ export function isFileChangedOnDiskError(err: unknown): boolean {
   return typeof message === 'string' && message.includes('EMODIFIED');
 }
 
+/** The friendly text of a "file temporarily locked" save failure, or
+ *  null for every other error. Raised by the atomic-write rename in
+ *  the Electron main process (doc-writes.ts) after its retry backoff
+ *  is exhausted — marked 'ELOCKED' in the message because only the
+ *  message survives the IPC boundary (same convention as EMODIFIED /
+ *  ENOENT above). Returns just the human sentence so callers can show
+ *  it WITHOUT Electron's "Error invoking remote method …" wrapper. */
+export function fileLockedMessage(err: unknown): string | null {
+  if (typeof err !== 'object' || err === null) return null;
+  const { message } = err as { message?: unknown };
+  if (typeof message !== 'string') return null;
+  const idx = message.indexOf('ELOCKED: ');
+  return idx >= 0 ? message.slice(idx + 'ELOCKED: '.length) : null;
+}
+
 /** Benign browser noise that arrives as a window `error` event without
  *  anything actually being broken: ResizeObserver fires this whenever
  *  layout observers need another tick (both wordings, per browser).

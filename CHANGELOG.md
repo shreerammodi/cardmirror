@@ -167,6 +167,14 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- Rapid back-to-back saves into a Dropbox (or antivirus-watched)
+  folder on Windows no longer fail with a scary EPERM error. Dropbox
+  briefly locks a freshly-saved file to sync it, and Windows refuses
+  to replace a locked file — CardMirror now retries for a moment,
+  which absorbs nearly all of these, and if the file stays locked the
+  message plainly says what happened and to try again in a few
+  seconds. Thanks to Max U. for the report.
+
 - Pasting from Word no longer inserts a picture of the copied text.
   Word puts a rendered image of the selection on the clipboard
   alongside the actual text, and CardMirror preferred the image; the
