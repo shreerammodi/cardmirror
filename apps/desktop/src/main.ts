@@ -2383,20 +2383,26 @@ function showUpdateAvailableDialog(info: { version: string }): void {
   // the background and installs from the status-bar chip.
   const macManual =
     process.platform === 'darwin' && !macBundleSelfUpdatable(app.getPath('exe'));
+  // Self-installing platforms lead with OK — the chip owns the install
+  // (install-on-confirm); the release page is a secondary escape hatch.
+  // Only the can't-self-update mac case leads with the release page,
+  // because there the download IS the action.
+  const buttons = macManual ? ['Open release page', 'Close'] : ['OK', 'Open release page'];
+  const openIdx = macManual ? 0 : 1;
   void dialog
     .showMessageBox(win, {
       type: 'info',
-      buttons: ['Open release page', 'Close'],
+      buttons,
       defaultId: 0,
-      cancelId: 1,
+      cancelId: macManual ? 1 : 0,
       title: 'Update available',
       message: `CardMirror ${info.version} is available.`,
       detail: macManual
-        ? "Open the release page to download the new .dmg and reinstall — CardMirror can't install updates automatically on macOS yet."
+        ? "Open the release page to download the new .dmg and reinstall — this install can't update itself automatically."
         : 'Downloading in the background. When it finishes, a chip appears in the status bar — click it to restart into the update.',
     })
     .then((result) => {
-      if (result.response === 0) {
+      if (result.response === openIdx) {
         void shell.openExternal(`${RELEASES_URL}/tag/v${info.version}`);
       }
     });
