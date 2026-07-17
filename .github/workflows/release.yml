@@ -199,6 +199,39 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
         run: npm test
 
+      - name: Import the stable mac signing identity
+        # The self-signed "CardMirror Local Signing" cert (see
+        # apps/desktop/scripts/setup-signing.sh) keeps the app's code
+        # identity — and therefore TCC grants like the microphone —
+        # stable across auto-updates. The afterSign hook
+        # (scripts/sign-mac.js) re-signs with it when the identity is
+        # present and silently no-ops otherwise, so this step is
+        # guarded the same way: without the MAC_SIGNING_CERT_P12
+        # secret the build stays ad-hoc exactly as before.
+        if: matrix.os == 'macos-latest'
+        env:
+          MAC_SIGNING_CERT_P12: ${{ secrets.MAC_SIGNING_CERT_P12 }}
+          MAC_SIGNING_CERT_PASSWORD: ${{ secrets.MAC_SIGNING_CERT_PASSWORD }}
+        run: |
+          if [ -z "$MAC_SIGNING_CERT_P12" ]; then
+            echo "MAC_SIGNING_CERT_P12 not set — mac build will be ad-hoc signed."
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/cardmirror-signing.keychain-db"
+          security create-keychain -p ci "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p ci "$KC"
+          printf '%s' "$MAC_SIGNING_CERT_P12" | base64 -d > "$RUNNER_TEMP/identity.p12"
+          security import "$RUNNER_TEMP/identity.p12" -k "$KC" -f pkcs12 \
+            -P "$MAC_SIGNING_CERT_PASSWORD" -A -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/identity.p12"
+          # Put the keychain on the search list so `security
+          # find-identity` (the hook's probe) and codesign can see it,
+          # and allow codesign to use the key non-interactively.
+          security list-keychains -d user -s "$KC" login.keychain
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$KC" >/dev/null
+          security find-identity -p codesigning "$KC" | grep "CardMirror Local Signing"
+
       - name: Bake relay token into the build
         # Cross-machine card sharing: a packaged app can't read shell env, so
         # the relay bearer token has to be compiled in. This writes it from the
