@@ -1,7 +1,7 @@
 {
   "name": "@cardmirror/desktop",
   "version": "0.1.0-beta.14",
-  "description": "CardMirror — Electron desktop wrapper",
+  "description": "CardMirror \u2014 Electron desktop wrapper",
   "author": "Anthony Trufanov",
   "homepage": "https://github.com/ant981228/cardmirror",
   "private": true,
@@ -83,8 +83,13 @@
         {
           "target": "dmg",
           "arch": [
-            "x64",
-            "arm64"
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
           ]
         }
       ],
@@ -94,7 +99,8 @@
       },
       "hardenedRuntime": true,
       "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "x64ArchFiles": "**/node_modules/@koromix/**"
     },
     "win": {
       "target": [
@@ -146,7 +152,8 @@
       "provider": "github",
       "owner": "ant981228",
       "repo": "cardmirror"
-    }
+    },
+    "afterSign": "scripts/sign-mac.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.3",

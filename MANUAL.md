@@ -1809,10 +1809,15 @@ you launch.
 Auto-check on launch is off by default — turn it on in Settings → General.
 Linux users who installed via the AUR update with `yay -Syu`.
 
-**On macOS, automatic updating doesn't work** — CardMirror can tell you a
-new version is available, but it can't install it for you. Download the
-latest `.dmg` from the releases page and replace the app manually each
-time.
+Automatic updates never interrupt you: when a new version has been
+downloaded in the background, a small **chip appears in the status bar**
+("Update x.y.z ready — restart to install"). Nothing installs until you
+click it — on Windows and Linux, quitting the app normally also applies
+a downloaded update on the way out. On macOS the update is staged the
+same way and clicking the chip restarts straight into the new version;
+if your install can't be updated in place (for example the app isn't in
+a writable location), the chip opens the releases page instead so you
+can grab the new `.dmg`.
 
 ---
 

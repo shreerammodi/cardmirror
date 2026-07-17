@@ -9,6 +9,18 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **A smoother update experience on every platform.** Updates now
+  download silently in the background and never interrupt you with
+  dialogs — when one is ready, a small chip appears in the status bar
+  and nothing installs until you click it (on Windows and Linux,
+  quitting the app normally still applies a downloaded update). macOS
+  gets automatic updates for the first time: click the chip and
+  CardMirror restarts straight into the new version. Mac downloads are
+  also now a single universal app — one .dmg that runs natively on
+  both Apple Silicon and Intel, so there's no wrong version to
+  accidentally install — and updates no longer reset the microphone
+  permission for voice control.
+
 - **Smart paste from Word and haku.cards** (Settings → Editing →
   Paste; on by default). Pasting cards copied from Microsoft Word —
   including Verbatim files — or from haku.cards now recreates real

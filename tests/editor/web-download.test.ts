@@ -44,6 +44,19 @@ describe('pickInstallerAsset', () => {
     expect(pickInstallerAsset(ASSETS, 'mac-x64')?.name).toBe('CardMirror-0.1.0-beta.13.dmg');
   });
 
+  it('a universal dmg wins for BOTH mac targets (post-universal releases)', () => {
+    const universal = [
+      ...ASSETS,
+      { name: 'CardMirror-0.1.0-beta.15-universal.dmg', browser_download_url: 'u://dmg' },
+    ] as typeof ASSETS;
+    expect(pickInstallerAsset(universal, 'mac-arm64')?.name).toBe(
+      'CardMirror-0.1.0-beta.15-universal.dmg',
+    );
+    expect(pickInstallerAsset(universal, 'mac-x64')?.name).toBe(
+      'CardMirror-0.1.0-beta.15-universal.dmg',
+    );
+  });
+
   it('order independence: intel dmg is found even listed after arm64', () => {
     const reversed = [...ASSETS].reverse();
     expect(pickInstallerAsset(reversed, 'mac-x64')?.name).toBe('CardMirror-0.1.0-beta.13.dmg');

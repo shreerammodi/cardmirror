@@ -19,6 +19,7 @@ import { transformForExport, countMarkedCards } from '../export/transform-for-ex
 import type { Thread, Comment } from './comments-plugin.js';
 import type { LocalComment } from './learn-store.js';
 import { NavigationPanel } from './nav-panel.js';
+import { initUpdateChip } from './update-chip.js';
 import { mountTimerUI } from './timer-ui.js';
 import {
   getTimerState as getTimerStateNow,
@@ -730,6 +731,14 @@ function updatePlainPasteIndicator(armed: boolean): void {
     });
   }
 }
+// Update chip (install-on-confirm) — desktop only; the element stays
+// hidden on web / when the packaged shell predates the chip API.
+{
+  const updateChipEl = document.getElementById('update-chip') as HTMLButtonElement | null;
+  const chipHost = getElectronHost();
+  if (updateChipEl && chipHost) initUpdateChip(updateChipEl, chipHost);
+}
+
 const zoomOutBtn = document.getElementById('zoom-out-btn') as HTMLButtonElement;
 const zoomInBtn = document.getElementById('zoom-in-btn') as HTMLButtonElement;
 const zoomResetBtn = document.getElementById('zoom-reset-btn') as HTMLButtonElement;

@@ -325,6 +325,10 @@
       <div id="collab-chip" class="status-segment" hidden
            title="Collaboration session status"></div>
       <div class="status-spacer"></div>
+      <!-- Update chip (install-on-confirm): hidden until the desktop main
+           process reports a staged or available update. Clicking installs
+           (staged) or opens the release page (macOS, not stageable yet). -->
+      <button id="update-chip" class="status-segment" type="button" hidden></button>
       <div class="zoom-controls" title="Zoom">
         <button id="zoom-out-btn" type="button" aria-label="Zoom out"><span class="pmd-icon pmd-icon-minus" aria-hidden="true"></span></button>
         <span id="zoom-pct">100%</span>

@@ -27,6 +27,7 @@ import {
   shell,
 } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import { bundlePathFromExe, launchSwapHelper, macBundleSelfUpdatable } from './mac-swap-update.js';
 import { registerVoiceIpc } from './voice/ipc';
 import { registerFlowIpc } from './flow-bridge.js';
 import { registerPairingIpc } from './pairing-ipc.js';
@@ -544,7 +545,7 @@ ipcMain.handle('host:check-for-updates', async () => {
  *  suppressed; only "Update available" fires a dialog, which is
  *  the same modal the manual flow shows. */
 ipcMain.handle('host:trigger-auto-update-check', async () => {
-  runUpdateCheck({ alertOnLatest: false, alertOnError: false });
+  runUpdateCheck({ alertOnLatest: false, alertOnError: false, alertOnAvailable: false });
 });
 
 /** Open the OS file manager at the crash-dumps folder. Mirrors
@@ -2376,10 +2377,12 @@ let updateCheckInFlight = false;
 function showUpdateAvailableDialog(info: { version: string }): void {
   const win = dialogParentWindow();
   if (!win) return;
-  // macOS can DETECT updates but can't self-install them (unsigned
-  // builds can't use Squirrel.Mac), so don't promise a background
-  // download there — point the user at the .dmg instead.
-  const macManual = process.platform === 'darwin';
+  // macOS installs that can't self-update (Gatekeeper-translocated
+  // copies, unwritable /Applications) get pointed at the .dmg; every
+  // other install — including mac since the swap updater — stages in
+  // the background and installs from the status-bar chip.
+  const macManual =
+    process.platform === 'darwin' && !macBundleSelfUpdatable(app.getPath('exe'));
   void dialog
     .showMessageBox(win, {
       type: 'info',
@@ -2390,7 +2393,7 @@ function showUpdateAvailableDialog(info: { version: string }): void {
       message: `CardMirror ${info.version} is available.`,
       detail: macManual
         ? "Open the release page to download the new .dmg and reinstall — CardMirror can't install updates automatically on macOS yet."
-        : 'Downloading in the background. When the download finishes you can restart to install, or quit normally and it will install on next launch.',
+        : 'Downloading in the background. When it finishes, a chip appears in the status bar — click it to restart into the update.',
     })
     .then((result) => {
       if (result.response === 0) {
@@ -2407,6 +2410,10 @@ function showUpdateAvailableDialog(info: { version: string }): void {
 interface UpdateCheckOpts {
   alertOnLatest: boolean;
   alertOnError: boolean;
+  /** Manual checks dialog on "available"; the auto paths route to the
+   *  status-bar update chip instead (install-on-confirm, 2026-07-16 —
+   *  auto-updates never dialog). */
+  alertOnAvailable: boolean;
 }
 
 /** Core update-check routine. Both the Help menu manual path and
@@ -2457,7 +2464,12 @@ function runUpdateCheck(opts: UpdateCheckOpts): void {
 
   const onAvailable = (info: { version: string }): void => {
     cleanup();
-    showUpdateAvailableDialog(info);
+    if (opts.alertOnAvailable) {
+      showUpdateAvailableDialog(info);
+      return;
+    }
+    // Auto path: silent — the persistent handlers in startAutoUpdate own
+    // staging and the chip on every platform.
   };
 
   const onError = (err: Error): void => {
@@ -2485,17 +2497,69 @@ function runUpdateCheck(opts: UpdateCheckOpts): void {
 /** Manual Help → Check for Updates click handler. Shows feedback
  *  for every possible outcome. */
 function runManualUpdateCheck(): void {
-  runUpdateCheck({ alertOnLatest: true, alertOnError: true });
+  runUpdateCheck({ alertOnLatest: true, alertOnError: true, alertOnAvailable: true });
 }
+
+// ─── Update chip (install-on-confirm) ────────────────────────────────
+// The ebb model (adopted 2026-07-16): auto-updates never dialog. Windows /
+// Linux stage the download silently; the status-bar chip is the only
+// surface, and nothing installs until the user clicks it (install-on-quit
+// stays as the fallback for users who never do). macOS (until the swap
+// updater lands) shows an "available" chip that opens the release page.
+type UpdateChipState = { state: 'available' | 'ready'; version: string } | null;
+let updateChip: UpdateChipState = null;
+/** The verified update zip electron-updater staged (mac swap path). */
+let macStagedUpdateZip: string | null = null;
+
+function setUpdateChip(next: Exclude<UpdateChipState, null>): void {
+  updateChip = next;
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send('update:chip', updateChip);
+  }
+}
+
+/** Late-opened windows pull the current chip state at boot. */
+ipcMain.handle('host:update-chip-state', () => updateChip);
+
+/** Chip click: 'ready' (staged) → quit + install now; 'available'
+ *  (macOS, not stageable yet) → open the release page. */
+ipcMain.handle('host:update-chip-action', () => {
+  if (!updateChip) return;
+  if (updateChip.state === 'ready') {
+    if (process.platform === 'darwin') {
+      // Bundle swap (Squirrel can't install into unsigned builds): hand
+      // the staged zip to the detached helper and quit; it waits for
+      // exit, swaps the bundle (restoring the old one on any failure),
+      // and relaunches.
+      const bundle = bundlePathFromExe(app.getPath('exe'));
+      if (macStagedUpdateZip && bundle) {
+        launchSwapHelper({
+          pid: process.pid,
+          zipPath: macStagedUpdateZip,
+          appBundlePath: bundle,
+        });
+        app.quit();
+        return;
+      }
+      // Staged artifact vanished — degrade to the release page.
+      void shell.openExternal(`${RELEASES_URL}/tag/v${updateChip.version}`);
+      return;
+    }
+    autoUpdater.quitAndInstall();
+  } else {
+    void shell.openExternal(`${RELEASES_URL}/tag/v${updateChip.version}`);
+  }
+});
 
 function startAutoUpdate(): void {
   if (!app.isPackaged) return;
-  // macOS: detection works, but unsigned builds can't self-install via
-  // Squirrel.Mac. Keep the check on (so "Update available" still
-  // fires), but turn off the background download + install-on-quit and
-  // skip the "downloaded — restart to install" dialog, which would
-  // otherwise advertise an auto-update that can't actually happen. Mac
-  // users update by downloading the new .dmg.
+  // macOS: Squirrel.Mac can't INSTALL into unsigned/self-signed builds,
+  // but electron-updater's download path (zip + sha512 verification
+  // against the release metadata) works fine — so we stage manually via
+  // downloadUpdate() and install with the bundle-swap helper
+  // (mac-swap-update.ts) on the chip click. autoDownload stays off on
+  // mac (we trigger the download ourselves after the writability
+  // check); install-on-quit is Windows/Linux-only.
   const isMac = process.platform === 'darwin';
   autoUpdater.autoDownload = !isMac;
   autoUpdater.autoInstallOnAppQuit = !isMac;
@@ -2503,26 +2567,38 @@ function startAutoUpdate(): void {
     console.warn('Auto-update error:', err);
   });
   autoUpdater.on('update-available', (info) => {
-    console.log(`Auto-update: ${info.version} available${isMac ? '' : ', downloading…'}`);
-  });
-  if (!isMac) {
-    autoUpdater.on('update-downloaded', (info) => {
-      console.log(`Auto-update: ${info.version} downloaded; will install on next quit.`);
-      const win = dialogParentWindow();
-      if (!win) return;
-      void dialog.showMessageBox(win, {
-        type: 'info',
-        buttons: ['Restart now', 'Later'],
-        defaultId: 0,
-        cancelId: 1,
-        title: 'Update ready',
-        message: `CardMirror ${info.version} is ready to install.`,
-        detail: 'Restart now to apply the update, or later — it will install when you quit the app.',
-      }).then((result) => {
-        if (result.response === 0) autoUpdater.quitAndInstall();
+    console.log(`Auto-update: ${info.version} available, downloading…`);
+    if (!isMac) return; // autoDownload handles Windows/Linux staging
+    if (macBundleSelfUpdatable(app.getPath('exe'))) {
+      autoUpdater.downloadUpdate().catch((err: unknown) => {
+        // Staging failed (offline blip, or a pre-universal release with
+        // no zip artifact) — fall back to an 'available' chip that opens
+        // the release page, the pre-swap-updater behavior.
+        console.warn('mac update staging failed; chip falls back to release page:', err);
+        setUpdateChip({ state: 'available', version: info.version });
       });
-    });
-  }
+    } else {
+      setUpdateChip({ state: 'available', version: info.version });
+    }
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    if (isMac) {
+      const file = (info as { downloadedFile?: string }).downloadedFile;
+      if (file && file.endsWith('.zip')) {
+        macStagedUpdateZip = file;
+        console.log(`Auto-update: ${info.version} staged (mac swap); chip shown.`);
+        setUpdateChip({ state: 'ready', version: info.version });
+      } else {
+        setUpdateChip({ state: 'available', version: info.version });
+      }
+      return;
+    }
+    console.log(`Auto-update: ${info.version} downloaded; chip shown, installs on quit.`);
+    // No dialog (install-on-confirm): the status-bar chip is the only
+    // surface. autoInstallOnAppQuit stays on, so quitting normally
+    // still applies the update for users who never click the chip.
+    setUpdateChip({ state: 'ready', version: info.version });
+  });
   // The at-launch check fires from the renderer's boot path (gated
   // on the `checkForUpdatesOnLaunch` setting + `host.isFirstWindow()`)
   // via the `host:trigger-auto-update-check` IPC handler; subsequent

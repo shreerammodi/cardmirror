@@ -2118,6 +2118,27 @@ body:not(.pmd-multi-doc) #app {
   color: var(--pmd-c-text-secondary);
 }
 
+/* Update chip (install-on-confirm): accent-outlined, clickable. Hidden
+   ([hidden]) until the desktop main process reports an update. */
+#update-chip {
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--pmd-c-accent);
+  background: transparent;
+  border: 1px solid var(--pmd-c-accent);
+  border-radius: 999px;
+  padding: 0 0.6rem;
+  line-height: 1.4;
+}
+#update-chip:hover {
+  color: #fff;
+  background: var(--pmd-c-accent);
+}
+#update-chip[hidden] {
+  display: none;
+}
+
 .status-segment {
   display: flex;
   align-items: center;

@@ -108,6 +108,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
    *  "you're on the latest" and "couldn't check" dialogs — only
    *  the "Update available" modal fires. No-op in dev builds. */
   triggerAutoUpdateCheck: () => ipcRenderer.invoke('host:trigger-auto-update-check'),
+  getUpdateChipState: () => ipcRenderer.invoke('host:update-chip-state'),
+  updateChipAction: () => ipcRenderer.invoke('host:update-chip-action'),
+  onUpdateChip(handler: (payload: { state: 'available' | 'ready'; version: string } | null) => void): () => void {
+    const listener = (_evt: unknown, payload: { state: 'available' | 'ready'; version: string } | null): void =>
+      handler(payload);
+    ipcRenderer.on('update:chip', listener);
+    return () => ipcRenderer.removeListener('update:chip', listener);
+  },
 
   /** Open the OS file manager at the crash-dumps folder. */
   openCrashDumpsFolder: () => ipcRenderer.invoke('host:open-crash-dumps'),

@@ -384,6 +384,15 @@ interface ElectronAPI {
    *  fires. No-op in dev (non-packaged) builds. Called from the
    *  renderer at boot iff `checkForUpdatesOnLaunch` is enabled. */
   triggerAutoUpdateCheck(): Promise<void>;
+  /** Update chip (install-on-confirm): current staged/available update
+   *  state (null = none), a subscription for changes, and the chip's
+   *  click action (ready → restart-install; available → release page).
+   *  See main.ts "Update chip" for the model. */
+  getUpdateChipState(): Promise<{ state: 'available' | 'ready'; version: string } | null>;
+  updateChipAction(): Promise<void>;
+  onUpdateChip(
+    handler: (payload: { state: 'available' | 'ready'; version: string } | null) => void,
+  ): () => void;
   /** Open the OS file manager at the crash-dumps folder (mirrors
    *  Help → Open Crash Dumps Folder). */
   openCrashDumpsFolder(): Promise<void>;
@@ -1033,6 +1042,23 @@ export class ElectronHost implements Host {
 
   async triggerAutoUpdateCheck(): Promise<void> {
     await api().triggerAutoUpdateCheck();
+  }
+
+  async getUpdateChipState(): Promise<{ state: 'available' | 'ready'; version: string } | null> {
+    return api().getUpdateChipState();
+  }
+
+  async updateChipAction(): Promise<void> {
+    await api().updateChipAction();
+  }
+
+  onUpdateChip(
+    handler: (payload: { state: 'available' | 'ready'; version: string } | null) => void,
+  ): () => void {
+    // Optional-chained: an older packaged shell (preload without the
+    // chip API) just never shows the chip.
+    const fn = api().onUpdateChip;
+    return fn ? fn.call(api(), handler) : () => {};
   }
 
   async openCrashDumpsFolder(): Promise<void> {

@@ -48,10 +48,19 @@ export function pickInstallerAsset(
   switch (target) {
     case 'win-x64':
       return find((n) => n.endsWith('.exe'));
+    // Both mac targets prefer the universal .dmg (single artifact since
+    // the universal build landed — either chip runs it natively); the
+    // per-arch patterns remain as fallback for older releases.
     case 'mac-arm64':
-      return find((n) => n.endsWith('.dmg') && n.includes('arm64'));
+      return (
+        find((n) => n.endsWith('.dmg') && n.includes('universal')) ??
+        find((n) => n.endsWith('.dmg') && n.includes('arm64'))
+      );
     case 'mac-x64':
-      return find((n) => n.endsWith('.dmg') && !n.includes('arm64'));
+      return (
+        find((n) => n.endsWith('.dmg') && n.includes('universal')) ??
+        find((n) => n.endsWith('.dmg') && !n.includes('arm64'))
+      );
     case 'linux-appimage':
       return find((n) => n.endsWith('.appimage'));
   }

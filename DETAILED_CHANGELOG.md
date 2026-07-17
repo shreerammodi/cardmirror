@@ -7,6 +7,54 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Update flow overhaul: install-on-confirm chip, universal mac
+  build, mac self-update, stable signing** (modeled on ebb's update UX
+  after a comparative review, 2026-07-16; verified against a local
+  universal build). Four pieces:
+  1. *Install-on-confirm chip* (`src/editor/update-chip.ts`, wired in
+     the status bar; main-process state + IPC in `main.ts`; tests in
+     `tests/editor/update-chip.test.ts`). Auto-update paths no longer
+     show ANY dialog — Windows/Linux stage silently (autoDownload) and
+     a status-bar chip appears on update-downloaded; clicking it
+     restarts into the update (`quitAndInstall`), and
+     install-on-quit remains the fallback for users who never click.
+     Late-opened windows pull the chip state at boot; the manual Help →
+     Check for Updates flow keeps its dialogs.
+  2. *Universal mac build*: `mac.target` is now dmg+zip at
+     `arch: ["universal"]` (the zip is the updater artifact).
+     `x64ArchFiles: "**/node_modules/@koromix/**"` exempts koffi's
+     per-platform prebuilds from the lipo-merge check (identical in
+     both arch builds by design); our own dylibs were already fat.
+     Verified: merged app's main binary is x86_64+arm64; dmg ~213MB /
+     zip ~206MB (vs ~120MB per-arch). `pickInstallerAsset` prefers a
+     universal dmg for both mac targets, per-arch fallback for old
+     releases.
+  3. *macOS self-update by bundle swap*
+     (`apps/desktop/src/mac-swap-update.ts`; tests in
+     `tests/desktop/mac-swap-update.test.ts`). Squirrel.Mac refuses
+     unsigned installs, but electron-updater's DOWNLOAD path (zip +
+     sha512 against release metadata) works — so mac stages via
+     `downloadUpdate()` after a self-updatability check (real bundle,
+     not Gatekeeper-translocated, writable), and the chip click spawns
+     a detached helper script that waits for exit, extracts, strips
+     quarantine (app-downloaded files never carry it — why Gatekeeper
+     never re-assesses), swaps the bundle with backup-and-restore on
+     any failure, and relaunches. Not-updatable installs and staging
+     failures degrade to an 'available' chip that opens the release
+     page (the old behavior).
+  4. *Stable self-signed release signing*
+     (`apps/desktop/scripts/setup-signing.sh` + `scripts/sign-mac.js`
+     afterSign hook). electron-builder rejects non-Apple identities
+     (CSC_NAME → "falling back to ad-hoc"), so the hook re-signs the
+     packed app with the "CardMirror Local Signing" cert (FDP's proven
+     TCC-stability scheme), preserving per-binary entitlements and the
+     hardened-runtime flag. Ad-hoc identities change every build and
+     wipe TCC grants (microphone) on every update; the stable cert
+     keeps them. No-ops on machines without the cert (CI stays
+     ad-hoc). Existing installs re-prompt for the microphone ONCE at
+     the first signed update, then never again. First-install
+     Gatekeeper friction is unchanged (only notarization removes it).
+
 - **Style font sizes: reset-to-defaults button**
   (`buildDisplaySizesEditor` in `settings-ui.ts`). One-click restore
   of `DEFAULT_DISPLAY_SIZES` (now exported from `settings.ts`), using
