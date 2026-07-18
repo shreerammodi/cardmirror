@@ -20,6 +20,18 @@ see `DETAILED_CHANGELOG.md`.
   instantly with every window. The timer always starts a fresh
   launch inside the app; pop it back out whenever you need it.
 
+- **Audible timer alerts** (Settings → Appearance → Timer display;
+  off by default). An accessibility option that plays a short beep
+  when the running clock crosses each low-countdown point — the same
+  thresholds as the visual flash — and a distinct double beep when
+  time runs out. Exactly one sound plays no matter how many windows
+  are open, the popped-out timer included, and the beeps stay on
+  time even when CardMirror is buried behind other apps. Volume is
+  adjustable — and the alert points themselves are now genuinely
+  configurable (a new "Alert points" field, e.g. "60, 30, 5, 3, 1"),
+  shared by the flash and the beeps. The flash setting had always
+  claimed its thresholds were configurable; now it's true.
+
 ### Changed
 
 - **A tighter compact timer.** The compact layout now shows one prep

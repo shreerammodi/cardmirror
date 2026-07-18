@@ -54,6 +54,35 @@ in each release, see `CHANGELOG.md`.
   and cross-launch pop-out persistence. State semantics tested in
   `tests/editor/timer-state.test.ts`.
 
+- **Audible timer alerts** (`src/editor/timer-audio.ts`;
+  `timerSoundEnabled` / `timerSoundVolume` settings; opt-in). Beeps
+  at the `timerFlashSeconds` thresholds — one "alert points" concept
+  with two outputs, flash and sound — plus a double beep at 0:00
+  (A5 single pulse vs B5 double, distinguishable without looking).
+  Synthesized oscillator tones, no bundled assets. Two structural
+  mechanisms, both consequences of the timer's every-window-ticks
+  architecture: EXACTLY-ONCE ownership via a `cardmirror-timer-audio`
+  Web Lock (one surface plays; the rest queue and fail over
+  automatically; main windows stand down while the pop-out exists —
+  the float is never occluded, hence never throttled, making it the
+  preferred owner), and THROTTLE-PROOF scheduling on the AudioContext
+  timeline (beeps are armed sample-accurately at absolute audio-clock
+  times derived from `runningSince + base`, so Chromium's background
+  timer throttling — the same mechanism that produced this session's
+  false perf reproductions — cannot delay a signal; every state or
+  settings change cancels and re-derives the schedule). Only
+  strictly-future crossings are armed (no retro-fire on
+  reschedule/resume; tested in `tests/editor/timer-audio.test.ts`).
+  Desktop waives Chromium's autoplay policy
+  (`autoplay-policy=no-user-gesture-required`) since the audio owner
+  may be a window the user never clicked; the web edition installs a
+  one-time gesture hook instead. `timerFlashSeconds` also finally got
+  a real editor (kind `timerFlashSeconds`, comma-separated seconds,
+  canonicalized dedupe/sort-desc/cap-12 on commit AND in the load
+  sanitizer) — the flash toggle's description had claimed "configured
+  thresholds" since the feature shipped while no UI existed to
+  configure them.
+
 - **Nav drag scroll-gate cache validated against re-parenting**
   (`findNavScrollGate` in `src/editor/nav-panel.ts`; field report
   2026-07-17, three-pane). The drag hit-test gates pointer positions

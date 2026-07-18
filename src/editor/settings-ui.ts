@@ -877,6 +877,10 @@ class SettingsModal {
       row.appendChild(text);
       row.appendChild(buildTimerPrepLabelEditor());
       return row;
+    } else if (meta.kind === 'timerFlashSeconds') {
+      row.appendChild(text);
+      row.appendChild(buildTimerFlashSecondsEditor());
+      return row;
     } else if (meta.kind === 'timerPosition') {
       row.appendChild(text);
       row.appendChild(buildTimerPositionEditor());
@@ -3497,6 +3501,42 @@ function buildNumberEditor(key: keyof Settings, min = 0): HTMLElement {
     }
     settings.set(key, v as never);
     input.value = String(settings.get(key));
+  });
+  return input;
+}
+
+/** Comma-separated seconds-remaining editor for the timer's alert
+ *  points (shared by the visual flash and the audible alerts).
+ *  Commit on change; junk entries drop, duplicates collapse, and the
+ *  committed value reads back sanitized (sorted descending) so the
+ *  field always shows what will actually fire. An entry that
+ *  parses to nothing reverts rather than wiping the list. */
+function buildTimerFlashSecondsEditor(): HTMLElement {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'pmd-settings-text';
+  input.spellcheck = false;
+  input.placeholder = '5, 3, 1';
+  const current = (): string => settings.get('timerFlashSeconds').join(', ');
+  input.value = current();
+  input.addEventListener('change', () => {
+    const parsed = [
+      ...new Set(
+        input.value
+          .split(/[\s,;]+/)
+          .filter((t) => t.length > 0)
+          .map((t) => Math.floor(Number(t)))
+          .filter((v) => Number.isFinite(v) && v > 0 && v <= 3600),
+      ),
+    ]
+      .sort((a, b) => b - a)
+      .slice(0, 12); // canonicalize here — set() doesn't re-sanitize
+    if (parsed.length === 0) {
+      input.value = current(); // nothing usable — keep the old list
+      return;
+    }
+    settings.set('timerFlashSeconds', parsed);
+    input.value = current(); // read back the canonical list
   });
   return input;
 }

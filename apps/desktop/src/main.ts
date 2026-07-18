@@ -77,6 +77,13 @@ if (process.platform === 'darwin') {
   app.commandLine.appendSwitch('enable-skia-graphite');
 }
 
+// Timer audio alerts schedule beeps on the AudioContext timeline; the
+// scheduling window may not carry a recent user gesture (the alert
+// owner can be a window the user never clicked, e.g. the timer
+// pop-out). Chromium's autoplay policy would keep such a context
+// suspended — waive it; a local editor has no drive-by-audio concern.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
 // Start collecting crash minidumps as early as possible. We do
 // NOT upload them — `uploadToServer: false` keeps everything on
 // disk in `app.getPath('crashDumps')`. Users who hit a crash can

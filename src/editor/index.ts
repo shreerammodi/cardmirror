@@ -21,6 +21,7 @@ import type { LocalComment } from './learn-store.js';
 import { NavigationPanel } from './nav-panel.js';
 import { initUpdateChip } from './update-chip.js';
 import { mountTimerUI } from './timer-ui.js';
+import { initTimerAudio } from './timer-audio.js';
 import {
   getTimerState as getTimerStateNow,
   reconcileTimerPopout,
@@ -3583,6 +3584,10 @@ applyPillVisibility(); // default-off dropzone pill + quick-card cluster, at boo
 // stays hidden in the DOM until the user toggles ⏱ in the
 // ribbon.
 mountTimerUI();
+// Audible timer alerts — this window competes for the shared audio-
+// owner lock (the pop-out wins while it exists). No-op while the
+// setting is off.
+initTimerAudio();
 // Undo / redo ribbon stack (showUndoRedoButtons setting; visibility
 // via html.pmd-undoredo-hidden in applyPillVisibility). Operates on
 // the focused pane's view; mousedown is swallowed so the click keeps

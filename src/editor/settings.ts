@@ -606,6 +606,13 @@ export interface Settings {
    *  configured `timerFlashSeconds`, the display flashes red.
    *  Off → no flashing regardless of remaining. */
   timerFlashEnabled: boolean;
+  /** Audible alert (accessibility): beep when the running clock
+   *  crosses each `timerFlashSeconds` threshold — the same alert
+   *  points as the visual flash — plus a double beep at 0:00. Off
+   *  by default. */
+  timerSoundEnabled: boolean;
+  /** Alert loudness, 0–100. */
+  timerSoundVolume: number;
   /** Remaining-time thresholds (in seconds) at which the display
    *  flashes red when `timerFlashEnabled` is on. Default 5/3/1. */
   timerFlashSeconds: number[];
@@ -1499,6 +1506,8 @@ const DEFAULTS: Settings = {
   timerPrepMinutes: 10,
   timerFlashEnabled: true,
   timerFlashSeconds: [5, 3, 1],
+  timerSoundEnabled: false,
+  timerSoundVolume: 70,
   timerCompact: false,
   timerPrepLabel: 'both',
   timerPosition: 'left',
@@ -1788,6 +1797,7 @@ export interface SettingMeta {
     | 'reduceMotion'
     | 'timerProfile'
     | 'timerProfileDurations'
+    | 'timerFlashSeconds'
     | 'timerPrepLabel'
     | 'timerPosition'
     | 'enterAfterStyle'
@@ -2680,10 +2690,39 @@ export const SETTING_METADATA: SettingMeta[] = [
     key: 'timerFlashEnabled',
     label: 'Flash timer when countdown is low',
     description:
-      "Flash the speech-timer display red when remaining time crosses one of the configured thresholds (5 / 3 / 1 seconds by default).",
+      'Flash the timer display red as remaining time crosses each of the alert points configured below.',
     kind: 'toggle',
     category: 'appearance',
     section: 'Timer display',
+  },
+  {
+    key: 'timerFlashSeconds',
+    label: 'Alert points (seconds remaining)',
+    description:
+      'When the running clock crosses each of these seconds-remaining values, the display flashes (if flashing is on) and a beep plays (if audible alerts are on). Comma-separated, e.g. "60, 30, 5, 3, 1".',
+    kind: 'timerFlashSeconds',
+    category: 'appearance',
+    section: 'Timer display',
+    aliases: ['thresholds', 'alert points', 'time signals', 'countdown warning'],
+  },
+  {
+    key: 'timerSoundEnabled',
+    label: 'Audible timer alerts',
+    description:
+      'Play a short beep when the running clock crosses each alert point configured above (the same points the visual flash uses), and a double beep when time runs out. Works from every window, including the popped-out timer — exactly one sound plays no matter how many windows are open. Off by default.',
+    kind: 'toggle',
+    category: 'appearance',
+    section: 'Timer display',
+    aliases: ['beep', 'sound', 'audio alert', 'timer beep', 'time signal'],
+  },
+  {
+    key: 'timerSoundVolume',
+    label: 'Alert volume',
+    description: 'Loudness of the timer beeps, 0–100.',
+    kind: 'number',
+    category: 'appearance',
+    section: 'Timer display',
+    revealWhen: 'timerSoundEnabled',
   },
 
   // ─── Editing ────────────────────────────────────────────────────
@@ -3850,6 +3889,11 @@ function sanitize(s: Settings): Settings {
         : 10,
     timerFlashEnabled: s.timerFlashEnabled === false ? false : true,
     timerFlashSeconds: sanitizeFlashSeconds(s.timerFlashSeconds),
+    timerSoundEnabled: s.timerSoundEnabled === true,
+    timerSoundVolume:
+      typeof s.timerSoundVolume === 'number' && Number.isFinite(s.timerSoundVolume)
+        ? Math.min(100, Math.max(0, Math.round(s.timerSoundVolume)))
+        : 70,
     timerCompact: !!s.timerCompact,
     timerPrepLabel:
       s.timerPrepLabel === 'text' || s.timerPrepLabel === 'color'
@@ -4505,9 +4549,17 @@ function sanitizeTimerProfiles(
  *  integers ≤ 3600 (1 hour); falls back to [5, 3, 1] if empty. */
 function sanitizeFlashSeconds(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [5, 3, 1];
-  const cleaned = raw
-    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 3600)
-    .map((v) => Math.floor(v));
+  // Dedupe + sort descending (the order alerts will fire) + cap the
+  // count — a hundred alert points is a config mistake, not a wish.
+  const cleaned = [
+    ...new Set(
+      raw
+        .filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 3600)
+        .map((v) => Math.floor(v)),
+    ),
+  ]
+    .sort((a, b) => b - a)
+    .slice(0, 12);
   return cleaned.length > 0 ? cleaned : [5, 3, 1];
 }
 

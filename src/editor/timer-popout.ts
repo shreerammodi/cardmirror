@@ -21,6 +21,7 @@
  */
 
 import { settings } from './settings.js';
+import { initTimerAudio } from './timer-audio.js';
 import { mountTimerUI } from './timer-ui.js';
 import { setTimerPoppedOut, setTimerVisible } from './timer-state.js';
 
@@ -51,6 +52,9 @@ settings.subscribe(applyPopoutTheme);
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyPopoutTheme);
 
 mountTimerUI({ popout: true });
+// The float is the PREFERRED audio owner: always visible, never
+// throttled — the beep can't be late here no matter what's on top.
+initTimerAudio({ popout: true });
 
 // This window existing IS the popped-out state; visible follows per
 // the no-hidden-but-floating rule.
