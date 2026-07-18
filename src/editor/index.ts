@@ -1380,8 +1380,13 @@ const ribbonContext: RibbonContext = {
       shrinkPt: settings.get('createReferenceShrinkPt'),
       highlightMode: settings.get('createReferenceHighlightMode'),
       useGray50: settings.get('forReferenceUseGray50'),
-    }).then((ok) => {
-      if (ok) showToast('Copied!');
+    }).then((result) => {
+      // Every outcome gets surfaced — the silent-failure version of
+      // this taught a user that the button "needs five clicks".
+      if (result === 'copied') showToast('Copied!');
+      else if (result === 'invalid-selection')
+        showToast('Create Reference: select body text inside a single card first.');
+      else showToast("Couldn't copy — the clipboard was busy. Try again.");
     });
   },
   openWordCountDialog: () => {

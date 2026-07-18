@@ -508,6 +508,16 @@ function bytesToBuffer(bytes: unknown): Buffer {
  *  its arm-then-paste flow because navigator.clipboard.readText
  *  needs a per-press permission grant under Chromium's web policy. */
 ipcMain.handle('host:clipboard-read-text', () => clipboard.readText());
+ipcMain.handle(
+  'host:clipboard-write-html',
+  (_evt, payload?: { html?: unknown; text?: unknown }) => {
+    const html = typeof payload?.html === 'string' ? payload.html : '';
+    const text = typeof payload?.text === 'string' ? payload.text : '';
+    if (!html && !text) return false;
+    clipboard.write({ html, text });
+    return true;
+  },
+);
 
 /** Toggle DevTools on the window that asked. Backs the rebindable
  *  "Open Developer Console" ribbon command: the packaged app sets a

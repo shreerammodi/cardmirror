@@ -43,6 +43,17 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Create Reference no longer needs several clicks next to Word.**
+  The clipboard write behind Create Reference could fail transiently —
+  Windows briefly locks the clipboard for whichever app copied last,
+  and the browser engine refuses writes at unlucky focus moments — and
+  the failure was completely silent, so the button just seemed dead
+  until a lucky click. The desktop app now writes through a native
+  clipboard path that doesn't have these problems, retries the rare
+  transient failure automatically, and — if something still goes
+  wrong — says so instead of doing nothing. A cursor outside a card
+  now also gets a clear message instead of silence.
+
 - **Drag-to-reorder in the outline no longer goes dead after
   rearranging panes.** In the three-pane workspace, rearranging panes
   could leave one document's outline unable to offer any drop

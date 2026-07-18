@@ -94,6 +94,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
    *  web clipboard-permission UI that forces the web edition into
    *  a sticky-toggle workaround. */
   clipboardReadText: () => ipcRenderer.invoke('host:clipboard-read-text'),
+  /** Write html+plain to the system clipboard from the MAIN process.
+   *  Unlike navigator.clipboard.write, needs no renderer focus and
+   *  tolerates Win32 clipboard-lock contention (Create Reference's
+   *  one-click-in-five field failure next to Word). */
+  clipboardWriteHtml: (html: string, text: string) =>
+    ipcRenderer.invoke('host:clipboard-write-html', { html, text }),
 
   /** Trigger a manual auto-update check. Resolves with a status
    *  string the UI can use to show a friendly result message
