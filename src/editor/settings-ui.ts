@@ -1021,16 +1021,43 @@ class SettingsModal {
             const pathEl = document.createElement('span');
             pathEl.className = 'pmd-settings-folder-path';
             pathEl.textContent = rootPath;
-            const remove = document.createElement('button');
-            remove.type = 'button';
-            remove.className = 'pmd-pairing-delete';
-            remove.title = 'Remove folder';
-            setIcon(remove, 'close');
-            remove.addEventListener('click', () => {
+            pathEl.title = rootPath;
+            // Same Browse…/Clear pair as the single-folder settings, so a
+            // folder that moved can be repointed instead of removed and re-added.
+            const browseBtn = document.createElement('button');
+            browseBtn.type = 'button';
+            browseBtn.className = 'pmd-settings-btn';
+            browseBtn.textContent = 'Browse…';
+            browseBtn.addEventListener('click', () => {
+              void (async (): Promise<void> => {
+                const electron = getElectronHost();
+                if (!electron) return;
+                const picked = await electron.pickDirectory({
+                  defaultPath: rootPath,
+                  title: meta.label,
+                });
+                if (picked == null || picked === rootPath) return;
+                const roots = getRoots();
+                // Repointing onto a folder already in the list just drops this row.
+                settings.set(
+                  meta.key,
+                  (roots.includes(picked)
+                    ? roots.filter((_, j) => j !== i)
+                    : roots.map((r, j) => (j === i ? picked : r))) as never,
+                );
+                render();
+              })();
+            });
+            const clearBtn = document.createElement('button');
+            clearBtn.type = 'button';
+            clearBtn.className = 'pmd-settings-btn';
+            clearBtn.textContent = 'Clear';
+            clearBtn.title = 'Remove folder';
+            clearBtn.addEventListener('click', () => {
               settings.set(meta.key, getRoots().filter((_, j) => j !== i) as never);
               render();
             });
-            rowEl.append(pathEl, remove);
+            rowEl.append(pathEl, browseBtn, clearBtn);
             wrap.appendChild(rowEl);
           });
         }
