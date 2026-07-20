@@ -13,6 +13,7 @@ import { sanitizeAcronymPattern, type AcronymPattern } from './acronym-patterns.
 import type { RibbonCommandId } from './ribbon-commands.js';
 import type { IconName } from './icons.js';
 import { getHost } from './host/index.js';
+import { DEFAULT_SPEECH_FILENAME_TEMPLATE } from './speech-filename-default.js';
 
 /** Body-text zoom bounds (percent). The live per-window / per-pane zoom AND the
  *  default-open zoom setting all clamp to these — one source of truth so
@@ -370,6 +371,12 @@ export interface Settings {
    *  background save path skips .docx because `toDocx` is too
    *  expensive to run on a debounce). */
   defaultSpeechDocFormat: 'cmir' | 'docx';
+  /** Template for the filename of a doc created by "New Speech
+   *  Document". Fields: `{round}` is the name typed at the prompt,
+   *  `{date:FMT}` is a date in day.js-style tokens (`YYYY-MM-DD`,
+   *  `h-mmA`). The extension is not part of the template -
+   *  `defaultSpeechDocFormat` owns it. */
+  speechDocFilenameTemplate: string;
   /** Format the Save-As dialog defaults to for a doc that doesn't
    *  yet have an on-disk handle (new doc, first save). Existing
    *  on-disk files always Save As in their current format — the
@@ -1463,6 +1470,7 @@ const DEFAULTS: Settings = {
   showOnboardingStarter: true,
   defaultSpeechDocFolder: '',
   defaultSpeechDocFormat: 'docx',
+  speechDocFilenameTemplate: DEFAULT_SPEECH_FILENAME_TEMPLATE,
   defaultSaveFormat: 'docx',
   prefixPresetSaveFilenames: true,
   sendDocPrefix: 'SEND_',
@@ -1784,6 +1792,7 @@ export interface SettingMeta {
     | 'maxTextWidth'
     | 'fileSearchTiebreak'
     | 'speechDocFormat'
+    | 'speechFilenameTemplate'
     | 'saveFormat'
     | 'formattingGapClass'
     | 'sendDocDestination'
@@ -2037,6 +2046,28 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'Docx is the Verbatim-compatible default — best when you\'re sharing speech docs with teammates who use Verbatim. Picking .cmir enables autosave on the new doc (autosave only fires for .cmir files; the Docx serializer is too expensive to run on a debounce).',
     kind: 'speechDocFormat',
+    category: 'files',
+    section: 'New documents',
+  },
+  {
+    key: 'speechDocFilenameTemplate',
+    label: 'Speech document filename',
+    description:
+      // Rendered with white-space: pre-line, so a \n is a line break
+      // but leading indentation collapses. Keep every line flush left.
+      'The name New Speech Document gives a new file.\n' +
+      '{round} is the name you type at the prompt.\n' +
+      '{date:...} is a date. Double a token to zero-pad it:\n' +
+      'year - YYYY 2026, YY 26\n' +
+      'month - M 4, MM 04, MMM Apr, MMMM April\n' +
+      'day - D 12, DD 12, ddd Sun, dddd Sunday\n' +
+      'hour - h 7, hh 07 (12-hour), H 19, HH 19 (24-hour)\n' +
+      'minute - m 5, mm 05. second - s 7, ss 07. A PM, a pm\n' +
+      '\n' +
+      'Anything that is not a token stays as you typed it, so dashes, ' +
+      'slashes and spaces need no escaping. Inside {date:...} the letters ' +
+      'are tokens, so wrap a literal word in brackets: {date:h-mmA [on] MMM D}.\n',
+    kind: 'speechFilenameTemplate',
     category: 'files',
     section: 'New documents',
   },
@@ -3815,6 +3846,14 @@ function sanitize(s: Settings): Settings {
         : '',
     defaultSpeechDocFormat:
       s.defaultSpeechDocFormat === 'cmir' ? 'cmir' : 'docx',
+    // An empty string is a legitimate stored value only by accident
+    // (it renders to the "Speech" fallback), so treat blank as unset
+    // and restore the default.
+    speechDocFilenameTemplate:
+      typeof s.speechDocFilenameTemplate === 'string' &&
+      s.speechDocFilenameTemplate.trim()
+        ? s.speechDocFilenameTemplate
+        : DEFAULT_SPEECH_FILENAME_TEMPLATE,
     defaultSaveFormat:
       s.defaultSaveFormat === 'cmir' ? 'cmir' : 'docx',
     // Default-on: only an explicit `false` disables the preset

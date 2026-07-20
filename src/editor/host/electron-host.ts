@@ -221,7 +221,11 @@ interface ElectronAPI {
       entries: Array<{ path: string; relPath: string; mtimeMs: number; size: number }>;
     }) => void,
   ): () => void;
-  writeFileAtPath(filePath: string, bytes: Uint8Array): Promise<void>;
+  writeFileAtPath(
+    filePath: string,
+    bytes: Uint8Array,
+    opts?: { failIfExists?: boolean },
+  ): Promise<'collision' | void>;
   bulkCompress(
     dir: string,
     onProgress: (p: BulkCompressProgress) => void,
@@ -676,8 +680,12 @@ export class ElectronHost implements Host {
     return typeof fn === 'function' ? fn(handler) : () => {};
   }
 
-  async writeFileAtPath(filePath: string, bytes: Uint8Array): Promise<void> {
-    await api().writeFileAtPath(filePath, bytes);
+  async writeFileAtPath(
+    filePath: string,
+    bytes: Uint8Array,
+    opts?: { failIfExists?: boolean },
+  ): Promise<'collision' | void> {
+    return await api().writeFileAtPath(filePath, bytes, opts);
   }
 
   async bulkCompress(

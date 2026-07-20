@@ -275,6 +275,7 @@ import {
 import { captureCleanToken } from './save-clean-token.js';
 import { wireWebEditionHeaderButtons } from './web-download.js';
 import { computeSelectionChrome, type SelectionChrome } from './selection-chrome.js';
+import { formatSpeechFilename } from './speech-filename.js';
 
 // Install the last-resort error hooks before ANY app wiring — an exception
 // during boot or in a fire-and-forget flow must never be invisible again.
@@ -588,12 +589,12 @@ async function runNewSpeechDocumentSingleDoc(): Promise<void> {
   const trimmed = roundName;
 
   const format = settings.get('defaultSpeechDocFormat');
-  const filename = formatSpeechFilename(trimmed, format);
+  const initialFilename = formatSpeechFilename(trimmed, format);
   // Pocket heading is the filename minus its extension when the
   // user has opted in; otherwise start fully blank. Off case lets
   // users title their speeches inline rather than via the chip.
   const docNode = settings.get('includeSpeechDocPocket')
-    ? makeSpeechBlankDoc(filename.replace(/\.(cmir|docx)$/i, ''))
+    ? makeSpeechBlankDoc(initialFilename.replace(/\.(cmir|docx)$/i, ''))
     : makeBlankNewDoc();
 
   let docBytes: Uint8Array;
@@ -612,16 +613,37 @@ async function runNewSpeechDocumentSingleDoc(): Promise<void> {
   // Skipped silently when the setting is empty (no folder = no
   // automatic save).
   let handle: string | null = null;
+  let filename = initialFilename;
   const defaultFolder = settings.get('defaultSpeechDocFolder').trim();
   const electronForSpeechSave = getElectronHost();
   if (defaultFolder && electronForSpeechSave) {
     const targetPath = joinSpeechDocPath(defaultFolder, filename);
     try {
-      // A brand-new file — use the at-path writer (which also creates
+      // A brand-new file - use the at-path writer (which also creates
       // the folder if needed); `saveExisting` refuses paths that don't
       // exist on disk. Electron-only, like the folder setting itself.
-      await electronForSpeechSave.writeFileAtPath(targetPath, docBytes);
-      handle = targetPath;
+      // failIfExists: a custom filename template can drop the
+      // timestamp, which makes two docs of the same name easy. Hand
+      // the collision to the native dialog rather than clobbering.
+      const result = await electronForSpeechSave.writeFileAtPath(
+        targetPath,
+        docBytes,
+        { failIfExists: true },
+      );
+      if (result === 'collision') {
+        const saved = await host.saveAs(filename, docBytes, {
+          filters: saveFiltersForFormat(format),
+          nearPath: targetPath,
+        });
+        // Cancelled dialog: carry on unsaved rather than losing the
+        // doc. The user still gets the window and can Save As later.
+        if (saved) {
+          handle = typeof saved.handle === 'string' ? saved.handle : null;
+          filename = saved.name;
+        }
+      } else {
+        handle = targetPath;
+      }
     } catch (err) {
       console.warn('Auto-save of new speech doc to default folder failed:', err);
       // Continue without a handle; the user can Save As later.
@@ -644,23 +666,6 @@ async function runNewSpeechDocumentSingleDoc(): Promise<void> {
       `Failed to open new speech window: ${err instanceof Error ? err.message : err}`,
     );
   }
-}
-
-/** Format a Verbatim-style speech filename: "Speech <round> M-D
- *  H-MM(AM|PM).<ext>". Extension comes from the configured
- *  `defaultSpeechDocFormat` setting — `.docx` (Verbatim parity) or
- *  `.cmir` (autosave-eligible). */
-function formatSpeechFilename(round: string, format: 'cmir' | 'docx'): string {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const day = now.getDate();
-  let hour = now.getHours();
-  const minute = now.getMinutes();
-  const ampm = hour < 12 ? 'AM' : 'PM';
-  if (hour === 0) hour = 12;
-  else if (hour > 12) hour -= 12;
-  const m = String(minute).padStart(2, '0');
-  return `Speech ${round} ${month}-${day} ${hour}-${m}${ampm}.${format}`;
 }
 
 /** Speech-doc starter: a Pocket heading carrying the user-supplied

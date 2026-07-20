@@ -75,6 +75,10 @@ import {
   FILE_OBJECT_KIND_LABELS,
   type FileObjectKind,
 } from './file-search.js';
+import {
+  DEFAULT_SPEECH_FILENAME_TEMPLATE,
+  renderSpeechFilename,
+} from './speech-filename.js';
 
 /**
  * Body fonts for the font dropdowns, grouped into `<optgroup>`s.
@@ -792,6 +796,10 @@ class SettingsModal {
     } else if (meta.kind === 'speechDocFormat') {
       row.appendChild(text);
       row.appendChild(buildSpeechDocFormatEditor());
+      return row;
+    } else if (meta.kind === 'speechFilenameTemplate') {
+      row.appendChild(text);
+      row.appendChild(buildSpeechFilenameTemplateEditor());
       return row;
     } else if (meta.kind === 'saveFormat') {
       row.appendChild(text);
@@ -3844,6 +3852,69 @@ function buildSpeechDocFormatEditor(): HTMLElement {
     row.appendChild(labelText);
     wrap.appendChild(row);
   }
+  return wrap;
+}
+
+/** Template text box plus a live preview. The preview matters more
+ *  than usual here: the template has a syntax, and without a preview
+ *  the user only discovers a typo at the moment they create a doc
+ *  mid-round. Input event, not change, so it updates per keystroke. */
+function buildSpeechFilenameTemplateEditor(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'pmd-speech-filename-editor';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'pmd-settings-text';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.value = settings.get('speechDocFilenameTemplate');
+
+  const preview = document.createElement('div');
+  preview.className = 'pmd-speech-filename-preview';
+  // A screen reader should hear the corrected preview, not each
+  // intermediate keystroke.
+  preview.setAttribute('aria-live', 'polite');
+
+  // A fixed sample, not the real clock: the preview must not shift
+  // under the user while they type.
+  const SAMPLE_ROUND = '1NC';
+  const SAMPLE_DATE = new Date(2026, 3, 12, 19, 5, 7);
+
+  const refresh = () => {
+    const template = input.value.trim() || DEFAULT_SPEECH_FILENAME_TEMPLATE;
+    preview.textContent = `Example: ${renderSpeechFilename(
+      template,
+      SAMPLE_ROUND,
+      settings.get('defaultSpeechDocFormat'),
+      SAMPLE_DATE,
+    )}`;
+  };
+  refresh();
+
+  input.addEventListener('input', refresh);
+  input.addEventListener('change', () => {
+    // Blank reverts to the default rather than storing an empty
+    // template. `sanitize` enforces the same rule on load.
+    const next = input.value.trim() || DEFAULT_SPEECH_FILENAME_TEMPLATE;
+    input.value = next;
+    settings.set('speechDocFilenameTemplate', next);
+    refresh();
+  });
+
+  // Keep the preview honest when the format radio above changes,
+  // since the extension comes from that setting.
+  const unsub = settings.subscribe(() => {
+    const cur = settings.get('speechDocFilenameTemplate');
+    if (document.activeElement !== input && input.value !== cur) {
+      input.value = cur;
+    }
+    refresh();
+  });
+  registerRowCleanup(wrap, () => unsub());
+
+  wrap.appendChild(input);
+  wrap.appendChild(preview);
   return wrap;
 }
 

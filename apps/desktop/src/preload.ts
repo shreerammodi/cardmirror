@@ -287,8 +287,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('host:cmir-files-updated', listener);
     return () => ipcRenderer.removeListener('host:cmir-files-updated', listener);
   },
-  writeFileAtPath: (filePath: string, bytes: Uint8Array) =>
-    ipcRenderer.invoke('host:write-file-at-path', filePath, bytes),
+  writeFileAtPath: (
+    filePath: string,
+    bytes: Uint8Array,
+    opts?: { failIfExists?: boolean },
+  ) => ipcRenderer.invoke('host:write-file-at-path', filePath, bytes, opts),
 
   /** Bulk-compress every `.cmir` under `dir` in place (temporary
    *  migration tool). `onProgress` fires (throttled) as files are

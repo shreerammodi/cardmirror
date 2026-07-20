@@ -5861,6 +5861,10 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
   font-size: 0.85rem;
   color: var(--pmd-c-text-muted);
   line-height: 1.4;
+  /* pre-line, not pre-wrap: a description can use \n for a line
+     break, while source-code indentation inside the string still
+     collapses. Descriptions without a \n are unaffected. */
+  white-space: pre-line;
 }
 
 .pmd-settings-toggle {
@@ -5880,6 +5884,22 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
   border-radius: 4px;
   background: var(--pmd-c-bg);
   color: var(--pmd-c-text);
+}
+.pmd-speech-filename-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: flex-start;
+}
+.pmd-speech-filename-editor .pmd-settings-text {
+  flex: 0 0 auto;
+  width: 20rem;
+  max-width: 100%;
+  font-family: var(--pmd-f-mono, ui-monospace, monospace);
+}
+.pmd-speech-filename-preview {
+  font-size: 0.85rem;
+  opacity: 0.7;
 }
 /* Shared scaffolding (input focus ring).
    Diverge by pulling a selector out, not by re-copying. */
