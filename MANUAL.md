@@ -28,7 +28,7 @@ for the parts that aren't.
 6. [Quick Cards](#6-quick-cards)
 7. [The multi-doc workspace](#7-the-multi-doc-workspace)
 8. [Reading and delivering a speech](#8-reading-and-delivering-a-speech)
-9. [Co-editing (real-time collaboration)](#9-co-editing-real-time-collaboration)
+9. [Collaboration](#9-collaboration)
 10. [Live views and linked copies](#10-live-views-and-linked-copies)
 11. [Comments and notes](#11-comments-and-notes)
 12. [Learn: spaced-repetition flashcards](#12-learn-spaced-repetition-flashcards)
@@ -79,7 +79,7 @@ A few capabilities still need the **desktop app**: the background
 file at a time instead),
 **[Send to Verbatim Flow](#13-send-to-verbatim-flow)**,
 **[voice control](#14-voice-control)**, and
-**[card sharing](#card-sharing-send-and-receive-pills)**. And saving in
+**[collaboration](#9-collaboration)** (card sharing and co-editing). And saving in
 place needs a Chromium browser — in **Firefox and Safari** the editor runs
 but **[Save](#saving)** downloads a copy instead.
 
@@ -186,9 +186,9 @@ covered in full in the section linked.
 - **[Send-to-speech with a dropzone](#send-to-speech-and-the-dropzone)** —
   send cards and headings into a speech doc, with a holding shelf for
   staging evidence before you place it.
-- **[Card sharing](#card-sharing-send-and-receive-pills)** — send cards to
-  other people's machines, end-to-end encrypted, with Send and Receive pills
-  beside the dropzone. *(Desktop only.)*
+- **[Collaboration](#9-collaboration)** — send cards to other people's
+  machines, or co-edit a document in real time; end-to-end encrypted.
+  *(Desktop only.)*
 - **[Spaced-repetition flashcards](#11-learn-spaced-repetition-flashcards)**
   — study your own evidence; cards live on your machine and never travel
   with a shared file.
@@ -1073,161 +1073,126 @@ the `MARKED_` filename prefix and your default format — mirroring Save Send Do
 It keeps cards only (analytics and headings are dropped); if nothing is marked,
 it does nothing and tells you so.
 
-### Card sharing (Send and Receive pills)
-
-*Desktop only.* Card sharing sends cards to other people's machines over the
-network. Two pills sit to the right of the dropzone — **Send** and **Receive**.
-
-**Turn it on.** In **Settings → Collaboration**, switch it on. Your machine gets
-a **code**, shown there — share it with anyone you want to be able to send you
-cards. To send to someone, add them under **Recipients**: paste the code they
-gave you and give them a name. You can also bundle several recipients into a
-**group** (say, a partnership) to send to all of them at once. The **↑ / ↓**
-arrows on each recipient and group row reorder the lists — the Send pill shows
-groups and recipients in exactly this order, so put the ones you use most on
-top.
-
-**Send a card.** Drag a card — from the document or the dropzone — onto the
-**Send** pill. It expands to show your recipients and groups; drop on one to
-send. Dropping on a group fans the card out to every member.
-
-**Send to a starred target with one keystroke.** Click the **star** on any
-recipient or group in **Settings → Collaboration** to make it your starred target
-(only one can be starred — starring another moves it). The **Send to Starred**
-command then sends the card under your cursor (or the current selection) straight
-to that target, without opening the Send pill — just like Send to Dropzone, but
-to a person. It ships without a default key; assign one under Settings → Keyboard
-shortcuts (look in the "Dropzone / Send and Receive Cards" group). If nothing is
-starred, the command does nothing.
-
-**Receive cards.** Cards others send you land in the **Receive** pill, which
-flashes when one arrives and shows how many you haven't read. Open it to see
-each card with who sent it and when; from there a received card behaves just
-like a dropzone item — drag it into your document, or click to insert. Two
-keyboard shortcuts drop in the **most recently received** card without opening
-the pill: **Mod-P** inserts it at the cursor, and **Mod-Alt-P** appends it at the
-end of the document. (Inserting leaves the card in the pill, so you can place it
-again; both shortcuts are rebindable in Settings → Keyboard shortcuts.)
-
-**Delivery.** New cards arrive **instantly**: your machine keeps a light
-push connection open to the relay, and every reconnect (including waking
-from sleep) runs a quick catch-up so nothing sent while you were offline is
-missed — cards wait on the relay for up to three hours. Against an older
-relay without push support, the app falls back to checking on the
-**Fallback poll** interval in settings.
-
-**Privacy.** Cards are end-to-end encrypted: only you and the recipient can
-read them. The relay server that passes them along sees only scrambled data —
-never the card, who it's from, or who it's going to — and it forgets every card
-after three hours. Sharing is off until you turn it on.
-
-**Run your own relay.** The relay server ships with CardMirror — the
-`relay/` folder of the repo holds a standalone deployment (one
-`docker compose up`; see its README). To use your own server, set
-**Custom relay URL** (e.g. `https://relay.example.com/relay`) and
-**Custom relay token** (the `RELAY_TOKEN` you configured on it) in
-Settings → Collaboration. Everyone sharing cards with each other must
-point at the same relay. Leave both empty to use the official relay.
-
-**Linking a Debate Decoded account — optional.** Settings → Collaboration
-has a **Debate Decoded account (optional in beta)** row. To be completely
-clear: **while CardMirror is in beta, linking is optional and required for
-nothing** —
-card sharing, co-editing, and everything else work identically whether or
-not this machine is linked. What linking does is future-proof your setup:
-if the hosted relay ever asks for accounts after the beta, machines that
-are already linked will carry on without interruption (self-hosted relays
-never need an account, full stop). To link, click **Open the connect
-page** in the settings row (or visit
-[debate-decoded.ghost.io/cardmirror-connect](https://debate-decoded.ghost.io/cardmirror-connect/)),
-sign in to your membership, and paste the code the page shows you into the
-settings row — codes are single-use and expire after ten minutes, so
-generate a fresh one if it's rejected. Once linked, the link is durable:
-the app quietly re-authorizes itself in the background, and if your
-membership ever shows as inactive the row says so. A membership covers
-**two machines**; linking a third asks before it unlinks the oldest, and
-an unlinked machine finds out the next time it checks in. **Disconnect**
-unlinks this machine; regenerating your pairing code also unlinks it (the
-link is tied to that code).
-
 ---
 
-## 9. Co-editing (real-time collaboration)
+## 9. Collaboration
 
-*Desktop only. Experimental.* Co-editing lets two or more people edit the same
-document together in real time — your typing, comments, and cursors appear on
-everyone's screen as you work. It travels over the same end-to-end-encrypted
-relay as card sharing (§8), so the relay only ever sees scrambled data.
+*Desktop only.* Two features share one setup: **card sharing** (send cards to
+another machine) and **co-editing** (edit a document together in real time).
+Both are off until you enable them, and both are end-to-end encrypted — the
+relay server that passes traffic along sees only scrambled data.
 
-**Think of it as a call, not a shared document.** If you've used Google Docs,
-set that model aside. Co-editing is *not* a document that lives on a server for
-people to open, join, and leave over days. It's closer to a **conference call**:
-a live session that exists only while it's happening, hosted by whoever
-**starts** it. The document being worked on is *theirs* — everyone else edits a
-synced copy of the host's document. People can drop in and out while the call is
-going (rejoin from the **Sessions** list), but when the host **ends** it — or it
-goes idle long enough — the call is over: everyone keeps whatever copy they have,
-and there's no standing room to come back to. A session is an *event*, not a
-place. So the person who cares most about the result should usually be the one
-who starts it, and everyone should keep their own saved copies.
+### Setting up
 
-**It's experimental — keep your own copies.** Co-editing is new and still rough
-in places; it can occasionally hiccup or need a reconnect. Treat a live session
-as a convenience, not as your only copy of a document — **save your own `.cmir`
-files regularly** rather than relying on a session to hold your work.
+1. In **Settings → Collaboration**, turn on **Enable collaboration**. Two
+   pills — **Send** and **Receive** — appear next to the dropzone, and your
+   machine gets a **pairing code**, shown in the same settings section.
+2. Swap codes. Give your code to anyone who should be able to send to you.
+   To send to *them*, paste the code they gave you under **Recipients** and
+   give it a name.
+3. Optional, all in the same settings section:
+   - **Groups** — a named set of recipients; sending to a group sends to
+     every member. The **↑ / ↓** arrows reorder recipients and groups, and
+     the Send pill lists them in that order.
+   - **Star** one recipient or group to make it the target of the
+     one-keystroke commands mentioned below (starring another moves the
+     star).
+   - **Your display name** — stamped on cards you send, so someone who
+     hasn't named your code yet still sees who it's from.
+   - **Blocked senders** — cards and invites from these codes are dropped
+     silently.
 
-**Invite someone (the easy way).** Click the **Send** pill and pick a partner or
-group — the same ones you use for card sharing. CardMirror starts a session on
-the current document (if one isn't already running) and sends them an
-invitation; they see a **SESSION** row in their **Receive** pill and click
-**Join** to hop in. **Invite Starred Partner to Session** does the same for your
-starred partner in one keystroke. This works exactly like card sharing: to
-invite someone you need their card-sharing code added as a recipient, and for
-them to invite *you*, they need *yours* — sharing your code is how you get
-invited, not how you invite.
+**Debate Decoded account (optional in beta).** Linking is required for
+nothing during the beta; machines already linked will keep collaboration
+working without interruption if the hosted relay requires accounts after the
+beta (self-hosted relays never need one). To link: click **Open the connect
+page** in the settings row (or visit
+[debate-decoded.ghost.io/cardmirror-connect](https://debate-decoded.ghost.io/cardmirror-connect/)),
+sign in, and paste the code the page shows into the settings row. Codes are
+single-use and expire after ten minutes. A membership covers **two
+machines**; linking a third asks before it unlinks the oldest.
+**Disconnect** unlinks this machine; regenerating your pairing code also
+unlinks it.
 
-**Start or join with a code.** If you'd rather not go through card sharing, start
-a session yourself with **Start Collaboration Session** (in the ribbon's
-**Collaboration** group, or the command bar). It confirms which document you're
-sharing and copies a one-off **share code** to your clipboard — hand it off
-however you like, and the other person joins with **Join Collaboration Session**
-and pastes it. (**Copy Session Share Code** re-copies it later.) CardMirror opens
-the shared document in a new window — or, in the three-pane workspace, asks which
-pane it should open into — and syncs both of you up.
+### Sending and receiving cards
 
-**Editing together.** Everyone's cursor and selection show in their own color,
-and a presence indicator shows who's in the session. Comments sync too, and
-edits merge automatically — even when two people type in the same place. Anyone
-in the session can invite others (it isn't just the person who started it). A
-session holds **up to 10 people**; if you invite more than that — or invite a
-group that would push it over — the extras simply get a "session is full"
-message when they try to join, until someone leaves.
+**Send:** drag a card — from the document, the dropzone, or the Receive
+pill — onto the **Send** pill. It expands into your recipients and groups;
+drop on a row to send. **Send to Starred** sends the card under the cursor
+(or the current selection) to your starred target without opening the pill —
+it has no default key; assign one in Settings → Keyboard shortcuts.
 
-**Offline and reconnecting.** Keep editing if your connection drops or your
-laptop sleeps: your changes queue up and sync the moment you're back online. You
-can even close the app — the session is saved, and you rejoin it later from the
-**Sessions** list on the home screen with your unsynced changes intact. (In
-three-pane, reach the home screen with the **Home** button; rejoining asks which
-pane the document should open into.) Switching between single-pane and
-three-pane works the same way: your co-edited documents close across the switch
-— the confirmation dialog reminds you — and you reopen them from the Sessions
-list in the new layout.
+**Receive:** incoming cards land in the **Receive** pill, which flashes
+and shows a "total · N new" badge. Click it to open the inbox; each
+row shows the card's label, who sent it, and when. From a row:
 
-**Several documents at once.** Each open document runs its own independent
-session, so you can co-edit more than one at the same time — several documents in
-a three-pane window (§7), or several separate single-document windows. In
-three-pane, each pane shows its own session's collaborators in its footer, and
-starting a session acts on the focused pane's document. Accepting an invitation
-there works the same way as opening a file — you pick which pane the shared
-document opens into.
+- **Click** inserts the card at the cursor; **Alt-click** appends it at the
+  end of the document; or **drag** it in like any dropzone item. Inserting
+  copies — the card stays in the pill until you ✕ it.
+- **Mod-P** inserts the most recently received card at the cursor, and
+  **Mod-Alt-P** appends it, without opening the pill (both rebindable).
 
-**Ending or leaving.** **End or Leave Collaboration Session** stops your session:
-as the host you can end it for everyone, or as a guest leave it (each person
-keeps their current copy either way). Closing a co-edited document asks whether
-to keep the session — so you can rejoin and sync later — or to end/leave it now.
-The ✕ on a session in the home screen's **Sessions** list works the same way:
-as the host it asks whether to **end the session for everyone** or just forget
-your copy; as a guest it simply forgets your copy (the others are unaffected).
+The flash is configurable — **Flash the Receive pill on a new card**: once,
+every 10 seconds until you open the pill, or off.
+
+**Delivery:** cards arrive instantly over a live push connection, with a
+catch-up on every reconnect (waking from sleep included). Unretrieved cards
+are deleted from the relay after **three hours**. 
+
+### Co-editing
+
+*Experimental.* Up to **10 people** edit one document live — typing,
+cursors, and comments all sync, and simultaneous edits merge automatically. 
+The document belongs to the **host**; everyone else edits a synced copy, 
+and everyone keeps their copy when the session ends. A session is not a 
+permanent shared document: when the host ends it — or after about a week 
+idle — it's gone and participants retain local copies. It's also still 
+rough in places, so keep saving your own `.cmir` copies.
+
+**Invite from your recipients:** click the **Send** pill and press the
+invite button on a recipient or group row. That starts a session on the
+current document and sends the invite; the recipient
+gets a **SESSION** row in their Receive pill and clicks **Join**.
+**Invite Starred Partner to Session** does the same for your starred target
+in one keystroke. Anyone in a session can invite others, not just the host.
+Inviting requires the person's code in *your* Recipients list.
+
+**Or use a share code:** run **Start Collaboration Session** (ribbon
+**Collaboration** group, or the command bar). It confirms which document
+you're sharing, then copies a **share code** to the clipboard — send it
+however you like (**Copy Session Share Code** re-copies it). The other
+person runs **Join Collaboration Session** and pastes it. The shared
+document opens in a new window — in three-pane, you pick which pane.
+
+**Interruptions:** joiners past the 10-person cap get a "session is full"
+message until someone leaves. Offline edits queue and sync on reconnect.
+You can close the app entirely — the session is saved under **Sessions** on
+the home screen, and rejoining syncs your offline changes. Switching
+between single-pane and three-pane closes co-edited documents (the dialog
+warns you); reopen them from the Sessions list. Each open document runs its
+own independent session, so several can be live at once; in three-pane,
+each pane's footer shows its own session's collaborators.
+
+**Ending or leaving:** run **End or Leave Collaboration Session** — the
+host ends it for everyone, a guest just leaves; either way each person
+keeps their current copy. Closing a co-edited document asks whether to keep
+the session (rejoin later from the Sessions list) or end/leave it now. The
+✕ on a home-screen Sessions row: as host, asks whether to end for everyone
+or just forget your copy; as guest, forgets your copy.
+
+### Privacy and self-hosting
+
+Cards and sessions are end-to-end encrypted — the relay never sees content,
+sender, or recipient, forgets card mailboxes after three hours, and deletes
+idle session rooms after about a week. Sender codes are self-declared, so
+**Blocked senders** is a convenience filter, not a security guarantee.
+
+To run your own relay: the `relay/` folder of the repo deploys standalone
+(one `docker compose up`; see its README). Set **Custom relay URL** (e.g.
+`https://relay.example.com/relay`) and **Custom relay token** (the
+`RELAY_TOKEN` you configured on it) in Settings → Collaboration. Everyone
+collaborating must point at the same relay; leave both fields empty to use
+the official relay.
 
 ---
 
