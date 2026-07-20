@@ -1102,11 +1102,7 @@ relay server that passes traffic along sees only scrambled data.
    - **Blocked senders** — cards and invites from these codes are dropped
      silently.
 
-**Debate Decoded account (optional in beta).** Linking is required for
-nothing during the beta; machines already linked will keep collaboration
-working without interruption if the hosted relay requires accounts after the
-beta (self-hosted relays never need one). To link: click **Open the connect
-page** in the settings row (or visit
+**Debate Decoded account (optional in beta).** Linking an account is required for nothing during the beta, but will be required for collaboration after the beta; machines already linked to an account will be able to keep collaborating without interruption. Self-hosted relays will never require an account. To link: click **Open the connect page** in the settings row (or visit
 [debate-decoded.ghost.io/cardmirror-connect](https://debate-decoded.ghost.io/cardmirror-connect/)),
 sign in, and paste the code the page shows into the settings row. Codes are
 single-use and expire after ten minutes. A membership covers **two
