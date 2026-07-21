@@ -39,8 +39,8 @@ You can find a video walkthrough of CardMirror's basic functions [here](https://
 
 ## Support
 
-CardMirror is free, and built and maintained by one person. If it's
-useful to you, two ways to help keep it going:
+The core CardMirror editor is free, and built and maintained by one
+person. If it's useful to you, two ways to help keep it going:
 
 - **Subscribe at [Debate Decoded](https://debate-decoded.ghost.io/)** —
   recurring support that funds ongoing development, and the best way to
