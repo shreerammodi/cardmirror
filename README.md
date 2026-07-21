@@ -436,7 +436,9 @@ third-party attributions and license terms.
 
 This project was funded by the subscribers at
 [Debate Decoded](https://debate-decoded.ghost.io/) — subscribing is the
-best way to support my work.
+best way to support my work. For a one-time contribution, you can also
+tip the jar at [Ko-fi](https://ko-fi.com/anthonytrufanov) (or use the
+**Sponsor** button at the top of this repo).
 
 ## License
 
