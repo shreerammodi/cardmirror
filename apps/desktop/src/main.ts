@@ -41,6 +41,7 @@ import { resolveCmirCandidates, isWithin } from './transclusion-path.js';
 import {
   saveExistingDoc,
   saveNewDoc,
+  DocExistsError,
   recordDiskStateFromDisk,
   nearestExistingDir,
 } from './doc-writes.js';
@@ -1216,21 +1217,23 @@ ipcMain.handle(
     if (typeof filePath !== 'string' || !filePath) {
       throw new Error('write-file-at-path: no path');
     }
-    // Opt-in existence check. Only the new-speech-doc auto-save asks
-    // for it; bulk convert still overwrites by design. Returns the
-    // 'collision' sentinel so the renderer can defer to Save As -
-    // same contract as host:save-send-doc below.
-    if (opts?.failIfExists) {
-      try {
-        await fs.access(filePath);
-        return 'collision';
-      } catch {
-        /* not there - fall through and write */
-      }
-    }
     // mkdir: bulk convert writes into a destination folder, preserving
-    // the input's subfolder structure.
-    await saveNewDoc(filePath, bytesToBuffer(bytes), { mkdir: true });
+    // the input's subfolder structure. failIfExists is opt-in — only
+    // the new-speech-doc auto-save asks for it; bulk convert still
+    // overwrites by design. The check lives inside saveNewDoc's write
+    // chain (not here) so it can't race a concurrent create.
+    try {
+      await saveNewDoc(filePath, bytesToBuffer(bytes), {
+        mkdir: true,
+        failIfExists: opts?.failIfExists,
+      });
+    } catch (err) {
+      // The 'collision' sentinel lets the renderer defer to Save As —
+      // same contract as host:save-send-doc below. Real write
+      // failures keep throwing.
+      if (err instanceof DocExistsError) return 'collision';
+      throw err;
+    }
     return undefined;
   },
 );

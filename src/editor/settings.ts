@@ -374,7 +374,7 @@ export interface Settings {
   /** Template for the filename of a doc created by "New Speech
    *  Document". Fields: `{round}` is the name typed at the prompt,
    *  `{date:FMT}` is a date in day.js-style tokens (`YYYY-MM-DD`,
-   *  `h-mmA`). The extension is not part of the template -
+   *  `h-mmA`). The extension is not part of the template —
    *  `defaultSpeechDocFormat` owns it. */
   speechDocFilenameTemplate: string;
   /** Format the Save-As dialog defaults to for a doc that doesn't

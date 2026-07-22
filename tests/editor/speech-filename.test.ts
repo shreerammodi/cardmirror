@@ -111,6 +111,17 @@ describe('sanitizeFilename', () => {
   it('defuses an absolute path into one segment', () => {
     expect(sanitizeFilename('C:\\Windows\\evil')).toBe('C--Windows-evil');
   });
+
+  it('defuses Windows-reserved device names (Con is PF’s negative side)', () => {
+    // CON.docx is as unwritable on Windows as CON — the extension
+    // doesn't lift the reservation, so the basename must change.
+    expect(sanitizeFilename('Con')).toBe('_Con');
+    expect(sanitizeFilename('NUL')).toBe('_NUL');
+    expect(sanitizeFilename('com3')).toBe('_com3');
+    // Whole-name match only — names merely starting with one are fine.
+    expect(sanitizeFilename('Console')).toBe('Console');
+    expect(sanitizeFilename('Contention 1')).toBe('Contention 1');
+  });
 });
 
 describe('renderSpeechFilename', () => {

@@ -197,17 +197,43 @@ export function saveExistingDoc(
   });
 }
 
+/** `saveNewDoc({failIfExists})` found the path already occupied. A
+ *  class (not a sentinel string) so the IPC layer can distinguish it
+ *  from real write failures with instanceof. */
+export class DocExistsError extends Error {
+  constructor(filePath: string) {
+    super(`refusing to overwrite existing file: ${filePath}`);
+    this.name = 'DocExistsError';
+  }
+}
+
 /** Write a document to a path that need not exist yet (Save As, the
  *  silent send-doc/marked-cards exports, bulk convert). No freshness
  *  guard — the user just picked the destination — but the write is
  *  still atomic, serialized, and recorded so a follow-up in-place save
- *  to the same path starts with a fresh baseline. */
+ *  to the same path starts with a fresh baseline.
+ *
+ *  `failIfExists` (the new-speech-doc auto-save): rejects with
+ *  DocExistsError instead of overwriting. The check runs INSIDE the
+ *  per-path write chain — every window's writes funnel through this
+ *  one serialization, so two rapid create-at-same-path calls cannot
+ *  interleave between check and rename. (An unrelated external
+ *  process racing the same instant can still win the rename;
+ *  writeAtomic has no exclusive mode, and that's outside the guard's
+ *  threat model.) */
 export function saveNewDoc(
   filePath: string,
   buf: Buffer,
-  opts?: { mkdir?: boolean },
+  opts?: { mkdir?: boolean; failIfExists?: boolean },
 ): Promise<void> {
   return chainDocWrite(filePath, async () => {
+    if (opts?.failIfExists) {
+      const occupied = await fs.access(filePath).then(
+        () => true,
+        () => false,
+      );
+      if (occupied) throw new DocExistsError(filePath);
+    }
     if (opts?.mkdir) await fs.mkdir(path.dirname(filePath), { recursive: true });
     await writeAtomic(filePath, buf);
     await recordDiskStateFromDisk(filePath);

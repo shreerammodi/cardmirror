@@ -23,6 +23,7 @@ import * as path from 'node:path';
 import {
   saveExistingDoc,
   saveNewDoc,
+  DocExistsError,
   chainDocWrite,
   recordDiskStateFromDisk,
   resetDocWritesForTests,
@@ -160,6 +161,33 @@ describe('atomic writes', () => {
     const p = path.join(caseDir, 'sub', 'deeper', 'out.cmir');
     await saveNewDoc(p, Buffer.from('exported'), { mkdir: true });
     expect(await read(p)).toBe('exported');
+  });
+
+  it('saveNewDoc failIfExists rejects with DocExistsError and leaves the occupant untouched', async () => {
+    const p = docPath('speech.docx');
+    await fs.writeFile(p, 'the earlier speech doc');
+    await expect(
+      saveNewDoc(p, Buffer.from('clobber?'), { failIfExists: true }),
+    ).rejects.toBeInstanceOf(DocExistsError);
+    expect(await read(p)).toBe('the earlier speech doc');
+    // And without the flag the path still writes normally.
+    const free = docPath('speech-2.docx');
+    await saveNewDoc(free, Buffer.from('fresh'), { failIfExists: true });
+    expect(await read(free)).toBe('fresh');
+  });
+
+  it('two concurrent failIfExists creates at one path: exactly one wins', async () => {
+    // The reason the check lives INSIDE the write chain: fired
+    // together, the loser must see the winner's file. With the old
+    // access-then-write in the IPC handler, both could pass the
+    // check and the second would silently clobber the first.
+    const p = docPath('speech.docx');
+    const results = await Promise.allSettled([
+      saveNewDoc(p, Buffer.from('first'), { failIfExists: true }),
+      saveNewDoc(p, Buffer.from('second'), { failIfExists: true }),
+    ]);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect(['first', 'second']).toContain(await read(p));
   });
 
   it('preserves the existing file mode across the tmp+rename', async () => {

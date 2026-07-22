@@ -42,7 +42,7 @@ const DATE_TOKEN_RE =
  *
  *  Letters ARE tokens, so a literal word inside a date format needs
  *  brackets: `{date:h-mmA [on] MMM D}`. Text outside the `{date:...}`
- *  block never needs them - that is the point of scoping tokens to
+ *  block never needs them — that is the point of scoping tokens to
  *  the block instead of the whole template. */
 export function formatDate(fmt: string, d: Date): string {
   const p2 = (n: number) => String(n).padStart(2, '0');
@@ -117,6 +117,14 @@ export function sanitizeFilename(name: string): string {
     // Trim again: the slice can expose new trailing junk, and a
     // trailing dot or space is silently dropped by Windows.
     .replace(/[\s.]+$/, '');
+  // Windows refuses the DOS device names as a basename regardless of
+  // extension (CON.docx is as unwritable as CON). Not hypothetical
+  // here: "Con" is the negative side's name in Public Forum, so a
+  // template of just {round} produces exactly this. Prefix rather
+  // than drop, so the name stays recognizable.
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(cleaned)) {
+    return `_${cleaned}`;
+  }
   return cleaned || 'Speech';
 }
 

@@ -619,7 +619,7 @@ async function runNewSpeechDocumentSingleDoc(): Promise<void> {
   if (defaultFolder && electronForSpeechSave) {
     const targetPath = joinSpeechDocPath(defaultFolder, filename);
     try {
-      // A brand-new file - use the at-path writer (which also creates
+      // A brand-new file — use the at-path writer (which also creates
       // the folder if needed); `saveExisting` refuses paths that don't
       // exist on disk. Electron-only, like the folder setting itself.
       // failIfExists: a custom filename template can drop the
