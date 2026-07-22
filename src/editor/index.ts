@@ -8039,7 +8039,12 @@ async function initPlugins(): Promise<void> {
   const installed = (await host.pluginList()) as { id: string; name: string }[];
   for (const p of installed) {
     if (!isPluginEnabled(p.id)) continue;
-    const r = await host.pluginLoad(p.id);
+    // A rejecting IPC call must not skip the remaining plugins (or escape
+    // the un-awaited initPlugins() as an unhandled rejection).
+    const r = await host.pluginLoad(p.id).catch((err: unknown) => ({
+      ok: false as const,
+      error: err instanceof Error ? err.message : String(err),
+    }));
     if (!r.ok) {
       console.warn(`[plugins] ${p.id} failed to load:`, r.error);
       showToast(`Plugin ${p.name} failed to load.`);
