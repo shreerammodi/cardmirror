@@ -36,4 +36,18 @@ describe('source token', () => {
     const bare = 'cmsrc1.' + Buffer.from(JSON.stringify({ docTitle: 'x' })).toString('base64url');
     expect(parseSourceToken(bare)).toBeNull();
   });
+  it('drops a malformed anchor but keeps the rest of the payload', () => {
+    const mint = (anchor: unknown): string =>
+      'cmsrc1.' +
+      Buffer.from(
+        JSON.stringify({ docId: 'doc-123', docTitle: 't', headingId: null, anchor }),
+      ).toString('base64url');
+    const expected = { docId: 'doc-123', docTitle: 't', headingId: null, anchor: null };
+    // Inner fields are validated, not cast: a null quote fails the check.
+    expect(
+      parseSourceToken(mint({ quote: null, prefix: 'a', suffix: 'b', approxPos: 1 })),
+    ).toEqual(expected);
+    // A valid-JSON scalar is not an object at all.
+    expect(parseSourceToken(mint(42))).toEqual(expected);
+  });
 });

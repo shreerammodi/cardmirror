@@ -53,12 +53,23 @@ export function parseSourceToken(token: string): SourcePayload | null {
       docTitle: typeof obj.docTitle === 'string' ? obj.docTitle : '',
       headingId:
         typeof obj.headingId === 'string' && obj.headingId ? obj.headingId : null,
-      anchor:
-        obj.anchor && typeof obj.anchor === 'object'
-          ? (obj.anchor as AnchorDescriptor)
-          : null,
+      anchor: isAnchorDescriptor(obj.anchor) ? obj.anchor : null,
     };
   } catch {
     return null;
   }
+}
+
+/** Field-level check mirroring `AnchorDescriptor` — a token is
+ *  outside input handed back by other apps, so the inner shape is
+ *  validated, never cast. Anything malformed degrades to no anchor. */
+function isAnchorDescriptor(v: unknown): v is AnchorDescriptor {
+  if (typeof v !== 'object' || v === null) return false;
+  const a = v as Record<string, unknown>;
+  return (
+    typeof a['quote'] === 'string' &&
+    typeof a['prefix'] === 'string' &&
+    typeof a['suffix'] === 'string' &&
+    typeof a['approxPos'] === 'number'
+  );
 }
