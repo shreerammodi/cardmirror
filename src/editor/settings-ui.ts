@@ -496,6 +496,17 @@ class SettingsModal {
         panel.appendChild(this.buildSettingsBackupSection());
         panel.appendChild(buildDocLinksSection());
       }
+      // Installed-plugins manager under the Plugins tab — install field,
+      // plugin rows, and the dev load-from-file row. Not settings rows, so
+      // it lives outside SETTING_METADATA (like General's info sections
+      // above), and loads lazily so the panel code stays off the settings
+      // open path — same style as the other heavy, on-demand panels.
+      if (id === 'plugins') {
+        const section = document.createElement('section');
+        section.className = 'pmd-plugins-panel';
+        panel.appendChild(section);
+        void import('./plugins-settings-ui.js').then((m) => m.renderPluginsPanel(section));
+      }
       this.dialog.appendChild(panel);
       panels[id] = panel;
     }

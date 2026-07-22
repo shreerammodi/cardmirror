@@ -31,6 +31,9 @@ export const CATEGORY_TABS: {
   // its settings are all electronOnly. Hide the whole tab on web rather than
   // show it empty. (Kept `id: 'pairing'` so stored settings/routes don't churn.)
   { id: 'pairing', label: 'Collaboration', electronOnly: true },
+  // Plugins are installed/loaded by the Electron main process, so the whole
+  // tab is desktop-only (hidden on web rather than shown empty).
+  { id: 'plugins', label: 'Plugins', electronOnly: true },
   // Accessibility intentionally lives at the far right — its
   // override-anything panel is a "last-resort" customization
   // surface, separated from the everyday tabs.

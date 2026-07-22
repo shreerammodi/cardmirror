@@ -1736,7 +1736,8 @@ export type SettingsCategory =
   | 'editing'
   | 'shortcuts'
   | 'comments-ai'
-  | 'pairing';
+  | 'pairing'
+  | 'plugins';
 
 export type SettingCondition =
   | keyof Settings
@@ -3505,6 +3506,15 @@ export const SETTING_METADATA: SettingMeta[] = [
     electronOnly: true,
     dependsOn: 'pairingEnabled',
     aliases: ['relay token', 'relay password'],
+  },
+  {
+    key: 'pluginsEnabled',
+    label: 'Enable plugins',
+    description:
+      'Load installed third-party plugins at startup. Plugins run with full access to CardMirror and your documents - install only plugins whose author you trust. Takes effect on the next launch.',
+    kind: 'toggle',
+    category: 'plugins',
+    electronOnly: true,
   },
 ];
 
