@@ -45,6 +45,13 @@ import {
   recordDiskStateFromDisk,
   nearestExistingDir,
 } from './doc-writes.js';
+import {
+  installFromGithub,
+  listInstalled,
+  readPluginSource,
+  uninstallPlugin,
+  checkPluginUpdate,
+} from './plugin-manager.js';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { gzip as zlibGzip, gunzip as zlibGunzip } from 'node:zlib';
@@ -708,6 +715,40 @@ ipcMain.handle('host:cardcutter-read', async (_event, explicit: string | null) =
   } catch (err) {
     return { error: (err as Error).message, path: target };
   }
+});
+
+// ── Plugin manager (GitHub install; Obsidian model). Installed plugins
+// live in userData/plugins/<id>/ next to the legacy cardcutter file.
+// The renderer asks for a bundle's source and runs it in its main
+// world, same as the card-cutter path above. ──
+ipcMain.handle('host:plugin-install', async (_e, ref: string) => installFromGithub(String(ref)));
+ipcMain.handle('host:plugin-list', async () => listInstalled());
+ipcMain.handle('host:plugin-read', async (_e, id: string) => {
+  const source = await readPluginSource(String(id));
+  return source === null ? { error: 'not found' } : { source };
+});
+ipcMain.handle('host:plugin-read-file', async (_e, filePath: string) => {
+  // Dev path — load an arbitrary local bundle the user picked.
+  if (typeof filePath !== 'string' || !filePath) return { error: 'bad path' };
+  try {
+    return { source: await fs.readFile(filePath, 'utf8') };
+  } catch (err) {
+    return { error: (err as Error).message };
+  }
+});
+ipcMain.handle('host:plugin-uninstall', async (_e, id: string) => uninstallPlugin(String(id)));
+ipcMain.handle('host:plugin-check-update', async (_e, id: string, repoRef: string) =>
+  checkPluginUpdate(String(id), String(repoRef)),
+);
+ipcMain.handle('host:plugin-pick-file', async (event) => {
+  const win = ownerWindow(event.sender);
+  const result = await dialog.showOpenDialog(win ?? new BrowserWindow({ show: false }), {
+    title: 'Select a plugin bundle',
+    properties: ['openFile'],
+    filters: [{ name: 'JavaScript', extensions: ['js', 'mjs', 'cjs'] }],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0]!;
 });
 
 // Read a file at a known absolute path — used by the home

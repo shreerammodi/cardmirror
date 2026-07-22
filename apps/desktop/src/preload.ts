@@ -905,4 +905,44 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return { ok: false, error: String(e), path: res.path };
     }
   },
+  /** Plugin manager (GitHub install; Obsidian model). Install/list/
+   *  uninstall/update-check round-trip to main; `pluginLoad` /
+   *  `pluginLoadFile` fetch a bundle's source from main and run it in
+   *  the renderer's MAIN world (same mechanism as cardCutterLoad),
+   *  where it self-registers via window.__registerCardMirrorPlugin. */
+  pluginInstall: (ref: string): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke('host:plugin-install', ref),
+  pluginList: (): Promise<unknown[]> => ipcRenderer.invoke('host:plugin-list'),
+  pluginUninstall: (id: string): Promise<void> => ipcRenderer.invoke('host:plugin-uninstall', id),
+  pluginCheckUpdate: (id: string, repoRef: string): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke('host:plugin-check-update', id, repoRef),
+  pluginPickFile: (): Promise<string | null> => ipcRenderer.invoke('host:plugin-pick-file'),
+  pluginLoad: async (id: string): Promise<{ ok: boolean; error?: string }> => {
+    const res = (await ipcRenderer.invoke('host:plugin-read', id)) as
+      | { source: string }
+      | { error: string };
+    if (!('source' in res) || !res.source) {
+      return { ok: false, error: 'error' in res ? res.error : 'not found' };
+    }
+    try {
+      await webFrame.executeJavaScript(res.source);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  },
+  pluginLoadFile: async (filePath: string): Promise<{ ok: boolean; error?: string }> => {
+    const res = (await ipcRenderer.invoke('host:plugin-read-file', filePath)) as
+      | { source: string }
+      | { error: string };
+    if (!('source' in res) || !res.source) {
+      return { ok: false, error: 'error' in res ? res.error : 'not found' };
+    }
+    try {
+      await webFrame.executeJavaScript(res.source);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  },
 });

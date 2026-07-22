@@ -169,6 +169,15 @@ interface ElectronAPI {
   cardCutterLoad?(
     enginePath?: string | null,
   ): Promise<{ ok: boolean; path?: string; error?: string }>;
+  /** Plugin manager (GitHub install; optional so an older preload
+   *  tolerates its absence). */
+  pluginInstall?(ref: string): Promise<Record<string, unknown>>;
+  pluginList?(): Promise<unknown[]>;
+  pluginUninstall?(id: string): Promise<void>;
+  pluginCheckUpdate?(id: string, repoRef: string): Promise<Record<string, unknown>>;
+  pluginPickFile?(): Promise<string | null>;
+  pluginLoad?(id: string): Promise<{ ok: boolean; error?: string }>;
+  pluginLoadFile?(filePath: string): Promise<{ ok: boolean; error?: string }>;
   getPathForFile(file: File): string;
   readFileAtPath(filePath: string): Promise<{
     name: string;
@@ -534,6 +543,40 @@ export class ElectronHost implements Host {
       (await api().cardCutterLoad?.(enginePath ?? null)) ?? {
         ok: false,
         error: 'card-cutter loading unsupported by this build',
+      }
+    );
+  }
+
+  /** Plugin manager (GitHub install). No-ops gracefully on an older
+   *  preload that predates the plugin surface. */
+  async pluginInstall(ref: string): Promise<Record<string, unknown>> {
+    return (await api().pluginInstall?.(ref)) ?? { ok: false, error: 'unsupported' };
+  }
+  async pluginList(): Promise<unknown[]> {
+    return (await api().pluginList?.()) ?? [];
+  }
+  async pluginUninstall(id: string): Promise<void> {
+    await api().pluginUninstall?.(id);
+  }
+  async pluginCheckUpdate(id: string, repoRef: string): Promise<Record<string, unknown>> {
+    return (await api().pluginCheckUpdate?.(id, repoRef)) ?? { ok: false, error: 'unsupported' };
+  }
+  async pluginPickFile(): Promise<string | null> {
+    return (await api().pluginPickFile?.()) ?? null;
+  }
+  async pluginLoad(id: string): Promise<{ ok: boolean; error?: string }> {
+    return (
+      (await api().pluginLoad?.(id)) ?? {
+        ok: false,
+        error: 'plugin loading unsupported by this build',
+      }
+    );
+  }
+  async pluginLoadFile(filePath: string): Promise<{ ok: boolean; error?: string }> {
+    return (
+      (await api().pluginLoadFile?.(filePath)) ?? {
+        ok: false,
+        error: 'plugin loading unsupported by this build',
       }
     );
   }
