@@ -19,7 +19,8 @@
  * this filtered one, so a hidden command's binding still blocks reuse.
  */
 
-import { RIBBON_COMMAND_IDS, type RibbonCommandId } from './ribbon-commands.js';
+import { RIBBON_COMMAND_IDS, type AnyCommandId, type RibbonCommandId } from './ribbon-commands.js';
+import { pluginCommandIds } from './plugin-registry.js';
 import { settings } from './settings.js';
 import { collabEnabled } from './collab/collab-gate.js';
 import { getElectronHost, isWindowsHost } from './host/index.js';
@@ -75,7 +76,8 @@ export function isRibbonCommandAvailable(id: RibbonCommandId): boolean {
   return true;
 }
 
-/** The currently-available command ids, in registry order. */
-export function availableRibbonCommandIds(): RibbonCommandId[] {
-  return RIBBON_COMMAND_IDS.filter(isRibbonCommandAvailable);
+/** The currently-available command ids, in registry order. Plugin
+ *  commands (registered = enabled) append after the static set. */
+export function availableRibbonCommandIds(): AnyCommandId[] {
+  return [...RIBBON_COMMAND_IDS.filter(isRibbonCommandAvailable), ...pluginCommandIds()];
 }

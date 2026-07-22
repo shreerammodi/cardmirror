@@ -102,12 +102,13 @@ interface WarmEntry {
 }
 const warmCache = new Map<string, WarmEntry>();
 import {
-  RIBBON_COMMAND_LABELS,
-  RIBBON_COMMAND_ALIASES,
   DEFAULT_RIBBON_KEYS,
   formatKeyForDisplay,
-  type RibbonCommandId,
+  commandLabelFor,
+  commandAliasesFor,
+  type AnyCommandId,
 } from './ribbon-commands.js';
+import { pluginDefaultKey } from './plugin-registry.js';
 import { availableRibbonCommandIds } from './ribbon-availability.js';
 
 // ── Warm-cache machinery (module-level, shared by the open palette and
@@ -266,7 +267,7 @@ export interface QuickCardSearchOptions {
   view: EditorView | null;
   paneEl: HTMLElement | null;
   /** Trigger a ribbon command by id (the palette's command source). */
-  runCommand: (id: RibbonCommandId) => void;
+  runCommand: (id: AnyCommandId) => void;
   /** Open a `.cmir` file by absolute path (the file source's Enter). */
   openFilePath: (path: string, name: string) => void;
   /** When true, selecting a header inside a file inserts a live zone
@@ -302,7 +303,7 @@ interface PaletteResult {
   /** Insert payload (quickcard / dropzone / fileobject). */
   sliceJson?: unknown;
   /** Command to run (command source). */
-  commandId?: RibbonCommandId;
+  commandId?: AnyCommandId;
   /** Boolean setting to flip in place (settingtoggle source). */
   toggleSettingKey?: keyof Settings;
   /** Enum/mode setting to advance to its next value (settingcycle source). */
@@ -379,8 +380,12 @@ function searchDropzoneSource(query: string): PaletteResult[] {
 }
 
 /** The current display keybinding for a command (first binding), or ''. */
-function commandKeyDisplay(id: RibbonCommandId): string {
-  const spec = settings.get('ribbonKeyOverrides')[id] ?? DEFAULT_RIBBON_KEYS[id];
+function commandKeyDisplay(id: AnyCommandId): string {
+  const spec =
+    settings.get('ribbonKeyOverrides')[id] ??
+    (DEFAULT_RIBBON_KEYS as Record<string, string | string[] | undefined>)[id] ??
+    pluginDefaultKey(id) ??
+    '';
   const first = Array.isArray(spec) ? spec[0] : spec;
   return first ? formatKeyForDisplay(first) : '';
 }
@@ -404,9 +409,9 @@ function searchCommandSource(query: string): PaletteResult[] {
   // hit (not in the label) sorts after label hits via the Infinity below.
   // Expand each label by the other words in any synonym group it touches (see
   // SYNONYM_GROUPS), so a query phrased with an equivalent word still matches.
-  const haystack = (id: RibbonCommandId): string => {
-    const aliases = RIBBON_COMMAND_ALIASES[id];
-    const label = RIBBON_COMMAND_LABELS[id].toLowerCase();
+  const haystack = (id: AnyCommandId): string => {
+    const aliases = commandAliasesFor(id);
+    const label = commandLabelFor(id).toLowerCase();
     const synonyms: string[] = [];
     for (const group of SYNONYM_GROUPS) {
       if (group.some((w) => label.includes(w))) {
@@ -427,19 +432,19 @@ function searchCommandSource(query: string): PaletteResult[] {
   const t0 = tokens[0];
   // First-token position within the *label* (not aliases) for ranking;
   // a label miss yields -1, which we treat as last so label hits win.
-  const rank = (id: RibbonCommandId): number => {
+  const rank = (id: AnyCommandId): number => {
     if (!t0) return 0;
-    const i = RIBBON_COMMAND_LABELS[id].toLowerCase().indexOf(t0);
+    const i = commandLabelFor(id).toLowerCase().indexOf(t0);
     return i === -1 ? Infinity : i;
   };
   matched.sort((a, b) => {
     const d = rank(a) - rank(b);
     if (d !== 0) return d;
-    return RIBBON_COMMAND_LABELS[a].toLowerCase().localeCompare(RIBBON_COMMAND_LABELS[b].toLowerCase());
+    return commandLabelFor(a).toLowerCase().localeCompare(commandLabelFor(b).toLowerCase());
   });
   return matched.map((id) => ({
     source: 'command' as const,
-    name: RIBBON_COMMAND_LABELS[id],
+    name: commandLabelFor(id),
     meta: commandKeyDisplay(id),
     matchedName: true,
     snippet: null,
@@ -762,7 +767,7 @@ class QuickCardSearchUI {
   private unsubscribe: (() => void) | null = null;
   private view: EditorView | null = null;
   private paneEl: HTMLElement | null = null;
-  private runCommand: (id: RibbonCommandId) => void = () => {};
+  private runCommand: (id: AnyCommandId) => void = () => {};
   private openFilePath: (path: string, name: string) => void = () => {};
   private transcludeMode = false;
   private docPath: string | null = null;

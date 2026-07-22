@@ -269,6 +269,7 @@ import {
   RIBBON_COMMAND_IDS,
   type StructuralRibbonCommandId,
   type RibbonContext,
+  type AnyCommandId,
   type RibbonCommandId,
 } from './ribbon-commands.js';
 import { openWordCount } from './word-count-ui.js';
@@ -2003,7 +2004,7 @@ settingsBtn.addEventListener('click', () => {
  * as clicking the UI — and so binding/unbinding a command never leaves
  * the UI orphaned.
  */
-export function runRibbon(id: RibbonCommandId): void {
+export function runRibbon(id: AnyCommandId): void {
   if (!view) return;
   getRibbonCommand(id, ribbonContext)(view.state, view.dispatch.bind(view), view);
 }
@@ -3807,7 +3808,7 @@ document.addEventListener('keydown', suppressGuiSelectAll, true);
  *  invoke them without a live view — single-doc startup is
  *  view-ful by the time this fires, but multi-doc with no panes
  *  open hits this path. */
-const VIEWLESS_RIBBON_COMMANDS = new Set<RibbonCommandId>([
+const VIEWLESS_RIBBON_COMMANDS = new Set<AnyCommandId>([
   'newDocument',
   'openFile',
   'saveAs',
@@ -3863,7 +3864,7 @@ const VIEWLESS_RIBBON_COMMANDS = new Set<RibbonCommandId>([
   'openDevConsole',
 ]);
 
-function runViewlessRibbon(id: RibbonCommandId): void {
+function runViewlessRibbon(id: AnyCommandId): void {
   switch (id) {
     case 'newDocument': ribbonContext.newDocument(); return;
     case 'openFile': ribbonContext.openFile(); return;
@@ -3920,7 +3921,7 @@ function runViewlessRibbon(id: RibbonCommandId): void {
  *  view-less commands run regardless of focus; the rest go through
  *  `runRibbon` (which no-ops when there's no active view). Used by the
  *  search palette's command source. */
-function runRibbonCommandById(id: RibbonCommandId): void {
+function runRibbonCommandById(id: AnyCommandId): void {
   if (VIEWLESS_RIBBON_COMMANDS.has(id)) {
     runViewlessRibbon(id);
     return;

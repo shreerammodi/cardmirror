@@ -10,7 +10,6 @@
 
 import { isWordHighlightName, isHex6 } from './color-palette.js';
 import { sanitizeAcronymPattern, type AcronymPattern } from './acronym-patterns.js';
-import type { RibbonCommandId } from './ribbon-commands.js';
 import type { IconName } from './icons.js';
 import { getHost } from './host/index.js';
 import { DEFAULT_SPEECH_FILENAME_TEMPLATE } from './speech-filename-default.js';
@@ -1182,15 +1181,16 @@ export interface Settings {
    *  Editing → Acronym marking. */
   acronymPatterns: AcronymPattern[];
   /**
-   * User-supplied overrides for ribbon-command key bindings. Each
-   * entry maps a `RibbonCommandId` to its custom key spec — either a
+   * User-supplied overrides for command key bindings. Each entry maps
+   * a command id (a `RibbonCommandId` or a plugin command id) to its
+   * custom key spec - either a
    * single key string (e.g. `'F8'`, `'Mod-Shift-7'`) or an array for
    * multi-binding commands (e.g. `['F9', 'Mod-u']`). An empty string
    * or empty array means "explicitly unbound" (the command exists in
    * the menu / ribbon but has no key). Commands not present in this
    * map fall back to `DEFAULT_RIBBON_KEYS`.
    */
-  ribbonKeyOverrides: Partial<Record<RibbonCommandId, string | string[]>>;
+  ribbonKeyOverrides: Partial<Record<string, string | string[]>>;
   /** Up to 6 user-configured custom buttons, shown to the right of the
    *  comments buttons on the ribbon (empty = the section is hidden). */
   ribbonCustomButtons: RibbonCustomButton[];
@@ -4765,7 +4765,7 @@ function sanitizeShrinkProtections(raw: unknown): ShrinkProtection[] {
  *  lookup time. */
 function sanitizeRibbonKeyOverrides(
   raw: unknown,
-): Partial<Record<RibbonCommandId, string | string[]>> {
+): Partial<Record<string, string | string[]>> {
   if (!raw || typeof raw !== 'object') return {};
   const out: Partial<Record<string, string | string[]>> = {};
   for (const [k, v] of Object.entries(raw)) {
@@ -4776,7 +4776,7 @@ function sanitizeRibbonKeyOverrides(
       out[k] = cleaned;
     }
   }
-  return out as Partial<Record<RibbonCommandId, string | string[]>>;
+  return out;
 }
 
 /** Keep well-formed `{ command, icon }` custom-button entries, capped at

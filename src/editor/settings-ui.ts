@@ -69,7 +69,7 @@ import { applyTimerProfile } from './timer-profile.js';
 import { showToast } from './toast.js';
 import { setIcon, CUSTOM_BUTTON_ICONS, type IconName } from './icons';
 import { availableRibbonCommandIds } from './ribbon-availability.js';
-import { RIBBON_COMMAND_LABELS } from './ribbon-commands.js';
+import { RIBBON_COMMAND_LABELS, type RibbonCommandId } from './ribbon-commands.js';
 import { settingCommandOptions } from './setting-commands.js';
 import {
   FILE_OBJECT_KINDS,
@@ -2690,7 +2690,9 @@ function buildRibbonCustomButtonsEditor(): HTMLElement {
   const options: { value: string; label: string }[] = [
     ...settingCommandOptions().map((o) => ({ value: o.command, label: o.label })),
     ...availableRibbonCommandIds()
-      .filter((id) => RIBBON_COMMAND_LABELS[id])
+      // Static ribbon commands only: plugin ids (also returned by
+      // availableRibbonCommandIds now) aren't offered as custom buttons.
+      .filter((id): id is RibbonCommandId => id in RIBBON_COMMAND_LABELS)
       .map((id) => ({ value: id as string, label: RIBBON_COMMAND_LABELS[id] })),
   ].sort((a, b) => a.label.localeCompare(b.label));
 
