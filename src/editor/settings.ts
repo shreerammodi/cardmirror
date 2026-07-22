@@ -2487,6 +2487,15 @@ export const SETTING_METADATA: SettingMeta[] = [
     aliases: ['undo button', 'redo button', 'undo redo'],
   },
   {
+    key: 'ribbonTooltipMode',
+    label: 'Ribbon tooltips',
+    description:
+      'What hovering a ribbon button reveals. "Both" shows the action label and its current keyboard shortcut. "Label only" hides the shortcut. "Shortcut only" hides the label and is recommended for users who already know what each button does but still want a key reminder. "None" disables ribbon tooltips entirely. Dropdown menu items (Doc / Card / Table menus, etc.) always show shortcut-only — the menu label already says what the action does.',
+    kind: 'ribbonTooltipMode',
+    category: 'appearance',
+    section: 'Theme & chrome',
+  },
+  {
     key: 'ribbonCustomButtons',
     label: 'Custom ribbon buttons',
     description:
@@ -2495,15 +2504,6 @@ export const SETTING_METADATA: SettingMeta[] = [
     category: 'appearance',
     section: 'Custom ribbon buttons',
     aliases: ['custom buttons', 'ribbon buttons', 'toolbar buttons', 'custom toolbar'],
-  },
-  {
-    key: 'ribbonTooltipMode',
-    label: 'Ribbon tooltips',
-    description:
-      'What hovering a ribbon button reveals. "Both" shows the action label and its current keyboard shortcut. "Label only" hides the shortcut. "Shortcut only" hides the label and is recommended for users who already know what each button does but still want a key reminder. "None" disables ribbon tooltips entirely. Dropdown menu items (Doc / Card / Table menus, etc.) always show shortcut-only — the menu label already says what the action does.',
-    kind: 'ribbonTooltipMode',
-    category: 'appearance',
-    section: 'Theme & chrome',
   },
   {
     key: 'displaySizes',
@@ -2629,6 +2629,16 @@ export const SETTING_METADATA: SettingMeta[] = [
     aliases: ['hover preview'],
   },
   {
+    key: 'flashcardDueDot',
+    label: 'Flashcards-due dot',
+    description:
+      "Show a red dot on the ribbon's Manage Flashcards button when one or more flashcards are due for review today. On by default; turn off if you'd rather not be nudged.",
+    kind: 'toggle',
+    category: 'appearance',
+    section: 'Nav pane & indicators',
+    aliases: ['flashcard due', 'review reminder', 'due indicator', 'red dot'],
+  },
+  {
     key: 'showCardNumbering',
     label: 'Show card numbering',
     description:
@@ -2719,16 +2729,6 @@ export const SETTING_METADATA: SettingMeta[] = [
     category: 'appearance',
     section: 'Card numbering',
     aliases: ['substructure indent', 'sub indent'],
-  },
-  {
-    key: 'flashcardDueDot',
-    label: 'Flashcards-due dot',
-    description:
-      "Show a red dot on the ribbon's Manage Flashcards button when one or more flashcards are due for review today. On by default; turn off if you'd rather not be nudged.",
-    kind: 'toggle',
-    category: 'appearance',
-    section: 'Nav pane & indicators',
-    aliases: ['flashcard due', 'review reminder', 'due indicator', 'red dot'],
   },
   {
     key: 'timerPosition',
