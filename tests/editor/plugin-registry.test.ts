@@ -55,6 +55,13 @@ describe('plugin registry', () => {
     expect(registerPluginDefinition(def()).ok).toBe(true);
     expect(registerPluginDefinition(def()).ok).toBe(false);
   });
+  it('rejects duplicate command ids within one definition', () => {
+    installPluginRegistry(() => stubApi);
+    const d = def();
+    d.commands.push({ ...d.commands[0]! });
+    expect(registerPluginDefinition(d).ok).toBe(false);
+    expect(pluginCommandIds()).toEqual([]);
+  });
   it('runs a command with the per-plugin api and survives a throwing run', () => {
     installPluginRegistry(() => stubApi);
     const run = vi.fn(() => {

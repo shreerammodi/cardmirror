@@ -56,6 +56,7 @@ export function registerPluginDefinition(
   }
   if (plugins.has(def.id)) return { ok: false, error: `plugin "${def.id}" already registered` };
   if (!Array.isArray(def.commands)) return { ok: false, error: 'commands must be an array' };
+  const seen = new Set<string>();
   for (const c of def.commands) {
     if (typeof c.id !== 'string' || !c.id.startsWith(`${def.id}.`)) {
       return { ok: false, error: `command id "${String(c.id)}" must start with "${def.id}."` };
@@ -66,7 +67,10 @@ export function registerPluginDefinition(
     if (typeof c.run !== 'function') {
       return { ok: false, error: `command "${c.id}" has no run function` };
     }
-    if (commands.has(c.id)) return { ok: false, error: `command id "${c.id}" already registered` };
+    if (commands.has(c.id) || seen.has(c.id)) {
+      return { ok: false, error: `command id "${c.id}" already registered` };
+    }
+    seen.add(c.id);
   }
   const api = makeApi(def.id);
   plugins.set(def.id, { def, api });
@@ -116,7 +120,8 @@ export function runPluginCommand(id: string): boolean {
   if (!plugin) return false;
   const report = (err: unknown): void => {
     console.error(`[plugins] ${id} failed:`, err);
-    showToast(`${plugin.def.name}: command failed — ${(err as Error).message}`);
+    const message = err instanceof Error ? err.message : String(err);
+    showToast(`${plugin.def.name}: command failed — ${message}`);
   };
   try {
     const r = entry.cmd.run(plugin.api);
