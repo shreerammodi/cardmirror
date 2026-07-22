@@ -1022,8 +1022,10 @@ class SettingsModal {
             pathEl.className = 'pmd-settings-folder-path';
             pathEl.textContent = rootPath;
             pathEl.title = rootPath;
-            // Same Browse…/Clear pair as the single-folder settings, so a
-            // folder that moved can be repointed instead of removed and re-added.
+            // Same Browse… affordance as the single-folder settings, so a
+            // folder that moved can be repointed instead of removed and
+            // re-added. (The delete button says "Remove", not "Clear" —
+            // on a list row it deletes the entry, it doesn't empty a value.)
             const browseBtn = document.createElement('button');
             browseBtn.type = 'button';
             browseBtn.className = 'pmd-settings-btn';
@@ -1037,27 +1039,34 @@ class SettingsModal {
                   title: meta.label,
                 });
                 if (picked == null || picked === rootPath) return;
+                // The picker can sit open indefinitely while another window
+                // edits this list (settings sync across windows via the
+                // `storage` event), so the render-time index may be stale —
+                // re-find the row by value. Add and repoint both dedup, so
+                // the list never holds duplicates and indexOf is unambiguous.
                 const roots = getRoots();
+                const idx = roots.indexOf(rootPath);
+                if (idx === -1) return; // row vanished while the picker was open
                 // Repointing onto a folder already in the list just drops this row.
                 settings.set(
                   meta.key,
                   (roots.includes(picked)
-                    ? roots.filter((_, j) => j !== i)
-                    : roots.map((r, j) => (j === i ? picked : r))) as never,
+                    ? roots.filter((_, j) => j !== idx)
+                    : roots.map((r, j) => (j === idx ? picked : r))) as never,
                 );
                 render();
               })();
             });
-            const clearBtn = document.createElement('button');
-            clearBtn.type = 'button';
-            clearBtn.className = 'pmd-settings-btn';
-            clearBtn.textContent = 'Clear';
-            clearBtn.title = 'Remove folder';
-            clearBtn.addEventListener('click', () => {
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'pmd-settings-btn';
+            removeBtn.textContent = 'Remove';
+            removeBtn.title = 'Remove folder';
+            removeBtn.addEventListener('click', () => {
               settings.set(meta.key, getRoots().filter((_, j) => j !== i) as never);
               render();
             });
-            rowEl.append(pathEl, browseBtn, clearBtn);
+            rowEl.append(pathEl, browseBtn, removeBtn);
             wrap.appendChild(rowEl);
           });
         }
