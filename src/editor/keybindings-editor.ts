@@ -1,5 +1,7 @@
 /**
- * Keybindings editor — one row per `RibbonCommandId`. Each row shows
+ * Keybindings editor — one row per command: every static
+ * `RibbonCommandId` (grouped per `RIBBON_GROUPS`), plus a "Plugins"
+ * section for registered plugin commands. Each row shows
  * the command label, its current bindings (overrides win over
  * defaults) as removable chips, a "+" button to capture a new
  * binding, and a "↺" reset that drops any override for that command
@@ -31,7 +33,6 @@ import {
   formatKeyForDisplay,
   commandLabelFor,
   type AnyCommandId,
-  type RibbonCommandId,
 } from './ribbon-commands.js';
 import { pluginCommandIds, pluginDefaultKey } from './plugin-registry.js';
 import { RIBBON_GROUPS } from './ribbon-groups.js';
@@ -237,7 +238,7 @@ export function buildKeybindingsEditor(): HTMLElement {
     }, 2400);
   }
 
-  function startCapture(id: RibbonCommandId, row: HTMLElement): void {
+  function startCapture(id: AnyCommandId, row: HTMLElement): void {
     if (activeCapture) exitCapture();
     const addBtn = row.querySelector<HTMLButtonElement>('.pmd-keybinding-add');
     const capturePill =
@@ -297,7 +298,7 @@ export function buildKeybindingsEditor(): HTMLElement {
     };
   }
 
-  function renderRow(id: RibbonCommandId): HTMLElement {
+  function renderRow(id: AnyCommandId): HTMLElement {
     const row = document.createElement('div');
     row.className = 'pmd-keybinding-row';
 
@@ -588,6 +589,22 @@ export function buildKeybindingsEditor(): HTMLElement {
       heading.textContent = group.title;
       section.appendChild(heading);
       for (const id of ids) section.appendChild(renderRow(id));
+      list.appendChild(section);
+    }
+    // Registered plugin commands get their own rebind section (spec 3),
+    // reusing the exact same row machinery — the override helpers and
+    // conflict handling above already speak `AnyCommandId`. Skipped
+    // entirely while no plugin has registered commands, so the static
+    // list never grows a stranded empty heading.
+    const pluginIds = pluginCommandIds();
+    if (pluginIds.length > 0) {
+      const section = document.createElement('section');
+      section.className = 'pmd-keybindings-group';
+      const heading = document.createElement('h3');
+      heading.className = 'pmd-keybindings-group-title';
+      heading.textContent = 'Plugins';
+      section.appendChild(heading);
+      for (const id of pluginIds) section.appendChild(renderRow(id));
       list.appendChild(section);
     }
     wrap.appendChild(list);
