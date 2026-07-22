@@ -53,7 +53,14 @@ export function parseSourceToken(token: string): SourcePayload | null {
       docTitle: typeof obj.docTitle === 'string' ? obj.docTitle : '',
       headingId:
         typeof obj.headingId === 'string' && obj.headingId ? obj.headingId : null,
-      anchor: isAnchorDescriptor(obj.anchor) ? obj.anchor : null,
+      anchor: isAnchorDescriptor(obj.anchor)
+        ? {
+            quote: obj.anchor.quote,
+            prefix: obj.anchor.prefix,
+            suffix: obj.anchor.suffix,
+            approxPos: obj.anchor.approxPos,
+          }
+        : null,
     };
   } catch {
     return null;
@@ -70,6 +77,6 @@ function isAnchorDescriptor(v: unknown): v is AnchorDescriptor {
     typeof a['quote'] === 'string' &&
     typeof a['prefix'] === 'string' &&
     typeof a['suffix'] === 'string' &&
-    typeof a['approxPos'] === 'number'
+    Number.isFinite(a['approxPos'])
   );
 }

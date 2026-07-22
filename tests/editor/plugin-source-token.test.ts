@@ -50,4 +50,28 @@ describe('source token', () => {
     // A valid-JSON scalar is not an object at all.
     expect(parseSourceToken(mint(42))).toEqual(expected);
   });
+  it('round-trips astral-plane text', () => {
+    const p: SourcePayload = {
+      docId: 'd',
+      docTitle: 'Fire 🔥 doc',
+      headingId: null,
+      anchor: { quote: '🧊❤️‍🔥 quote', prefix: '𝔭', suffix: '𐐷', approxPos: 1 },
+    };
+    expect(parseSourceToken(mintSourceToken(p))).toEqual(p);
+  });
+  it('rejects a non-finite approxPos and strips unknown anchor fields', () => {
+    const mk = (anchor: unknown) =>
+      'cmsrc1.' +
+      Buffer.from(JSON.stringify({ docId: 'd', docTitle: 't', anchor })).toString('base64url');
+    const bad = parseSourceToken(mk({ quote: 'q', prefix: '', suffix: '', approxPos: NaN }));
+    expect(bad!.anchor).toBeNull();
+    const inf = parseSourceToken(mk({ quote: 'q', prefix: '', suffix: '', approxPos: 1e999 }));
+    expect(inf!.anchor).toBeNull();
+    const junk = parseSourceToken(
+      mk({ quote: 'q', prefix: '', suffix: '', approxPos: 2, extra: 'x'.repeat(64) }),
+    );
+    expect(junk!.anchor).toEqual({ quote: 'q', prefix: '', suffix: '', approxPos: 2 });
+    const missing = parseSourceToken(mk({ quote: 'q', prefix: '', approxPos: 2 }));
+    expect(missing!.anchor).toBeNull();
+  });
 });
