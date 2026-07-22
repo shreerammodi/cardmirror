@@ -51,6 +51,7 @@ import { generateGroupId, normalizePairingCode } from './pairing/pairing-ids.js'
 import { inboxStore, recentSenders } from './pairing/inbox-store.js';
 import { regenerateOwnCode } from './pairing/pairing-wiring.js';
 import { isFontAvailable } from './font-detect.js';
+import { repointFolderRoot } from './folder-list-repoint.js';
 import {
   WORD_HIGHLIGHT_COLORS,
   WORD_SHADING_COLORS,
@@ -1038,22 +1039,12 @@ class SettingsModal {
                   defaultPath: rootPath,
                   title: meta.label,
                 });
-                if (picked == null || picked === rootPath) return;
-                // The picker can sit open indefinitely while another window
-                // edits this list (settings sync across windows via the
-                // `storage` event), so the render-time index may be stale —
-                // re-find the row by value. Add and repoint both dedup, so
-                // the list never holds duplicates and indexOf is unambiguous.
-                const roots = getRoots();
-                const idx = roots.indexOf(rootPath);
-                if (idx === -1) return; // row vanished while the picker was open
-                // Repointing onto a folder already in the list just drops this row.
-                settings.set(
-                  meta.key,
-                  (roots.includes(picked)
-                    ? roots.filter((_, j) => j !== idx)
-                    : roots.map((r, j) => (j === idx ? picked : r))) as never,
-                );
+                if (picked == null) return;
+                // Resolved by VALUE, not the render-time index — the list
+                // can change under an open picker (see folder-list-repoint).
+                const next = repointFolderRoot(getRoots(), rootPath, picked);
+                if (next === null) return;
+                settings.set(meta.key, next as never);
                 render();
               })();
             });
