@@ -61,7 +61,10 @@ import { isBenchmarkActive } from './benchmark-state.js';
 import { countReadAloudWords, formatReadTime, formatNumber } from './word-count.js';
 import { openWordCount } from './word-count-ui.js';
 import { isAutosaveOnForPath, setAutosaveForPath } from './autosave-prefs-store.js';
-import { autosaveBlockedForRecoveredDraft } from './journal-staleness.js';
+import {
+  autosaveBlockedForRecoveredDraft,
+  recoveredDraftJournalSavedAt,
+} from './journal-staleness.js';
 import { captureCleanToken } from './save-clean-token.js';
 import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
 import { getSpeechDocResolver } from './speech-doc-registry.js';
@@ -180,6 +183,10 @@ async function runJournalForRecord(record: DocRecord): Promise<void> {
       threads: Array.from(getCommentsState(state).threads.values()),
       ...(record.docId ? { docId: record.docId } : {}),
     });
+    // A recovered-but-not-yet-saved draft carries its ORIGINAL journal
+    // savedAt forward, so the stale-overwrite guard survives relaunches and
+    // mode switches even though this write stamps savedAt = now.
+    const recoveredFrom = recoveredDraftJournalSavedAt(record.uid);
     await host.writeJournal({
       uid: record.uid,
       filename: record.filename,
@@ -188,6 +195,7 @@ async function runJournalForRecord(record: DocRecord): Promise<void> {
       handle: record.handle,
       format: record.format,
       savedAt: new Date().toISOString(),
+      ...(recoveredFrom ? { recoveredFromSavedAt: recoveredFrom } : {}),
       bytes,
     });
   } catch (err) {

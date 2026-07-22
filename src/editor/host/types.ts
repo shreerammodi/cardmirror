@@ -118,6 +118,13 @@ export interface JournalEntry {
   format: 'cmir' | 'docx' | null;
   /** ISO 8601 timestamp of when this journal entry was written. */
   savedAt: string;
+  /** Set while the doc descends from a RECOVERED draft that hasn't been
+   *  manually saved yet: the `savedAt` of the journal it was recovered from.
+   *  Edits re-journal with `savedAt` = now, which would otherwise launder the
+   *  stale-overwrite check — this carries the original provenance forward
+   *  across relaunches and mode switches until the first manual save lands.
+   *  Absent for normal journals. */
+  recoveredFromSavedAt?: string;
   /** Doc content as CardMirror native (`.cmir`) bytes — the editor
    *  passes this to `parseNative` on recovery. */
   bytes: Uint8Array;
@@ -262,6 +269,11 @@ export interface SpawnWindowPayload {
    *  that had unsaved changes — the payload bytes hold edits that
    *  exist nowhere on disk, so the close prompt must keep firing. */
   markDirty?: boolean;
+  /** Mode-switch respawn of a doc recovered from a journal and not yet
+   *  manually saved: the ORIGINAL journal `savedAt`, so the spawned window
+   *  re-marks the doc and the stale-overwrite guard (plus its autosave
+   *  hold-off) survives the move between windows. */
+  recoveredFromSavedAt?: string;
   /** When set, the spawned window resolves this anchor against the
    *  mounted doc and scrolls + selects it. Used by the flashcard
    *  review's "Show in context" to open a card's source in its own

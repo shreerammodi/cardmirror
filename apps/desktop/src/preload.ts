@@ -25,6 +25,9 @@ interface JournalEntry {
   handle: string | null;
   format: 'cmir' | 'docx' | null;
   savedAt: string;
+  /** Stale-overwrite guard baseline for a recovered, not-yet-manually-saved
+   *  draft. Passed through opaquely. */
+  recoveredFromSavedAt?: string;
   bytes: Uint8Array;
 }
 

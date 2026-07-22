@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   journalPredatesFile,
+  journalStalenessBaseline,
   STALE_JOURNAL_TOLERANCE_MS,
   markRecoveredDraft,
   recoveredDraftJournalSavedAt,
@@ -48,6 +49,30 @@ describe('journalPredatesFile', () => {
   it('respects a custom tolerance', () => {
     expect(journalPredatesFile(iso(T), T + 1000, 2000)).toBe(false);
     expect(journalPredatesFile(iso(T), T + 3000, 2000)).toBe(true);
+  });
+});
+
+/** Editing a recovered draft re-journals it with `savedAt` = now, which would
+ *  make a stale draft look fresh after a crash-relaunch or mode switch. The
+ *  baseline keeps the ORIGINAL recovered-from timestamp in play. */
+describe('journalStalenessBaseline', () => {
+  it('keeps a laundered journal stale via its recovered-from provenance', () => {
+    // Stale draft (T) recovered + edited; the re-journal stamps savedAt ten
+    // days later. The file was saved in between — newer than the draft,
+    // older than the re-journal.
+    const entry = {
+      savedAt: iso(T + 10 * 24 * 3600 * 1000),
+      recoveredFromSavedAt: iso(T),
+    };
+    const fileMtime = T + 5 * 24 * 3600 * 1000;
+    // Judged on savedAt alone the staleness is invisible…
+    expect(journalPredatesFile(entry.savedAt, fileMtime)).toBe(false);
+    // …but the provenance baseline still flags it.
+    expect(journalPredatesFile(journalStalenessBaseline(entry), fileMtime)).toBe(true);
+  });
+
+  it('falls back to savedAt for a normal journal', () => {
+    expect(journalStalenessBaseline({ savedAt: iso(T) })).toBe(iso(T));
   });
 });
 

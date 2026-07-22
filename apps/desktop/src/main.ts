@@ -148,6 +148,10 @@ interface InitialDocPayload {
    *  window mounts it dirty instead of the default clean. Passed
    *  through opaquely. */
   markDirty?: boolean;
+  /** Mode-switch respawn of a recovered, not-yet-manually-saved draft:
+   *  the original journal savedAt for the stale-overwrite guard. Passed
+   *  through opaquely. */
+  recoveredFromSavedAt?: string;
   /** "Show in context": spawned window scrolls + selects this anchor
    *  after mounting. Passed through opaquely (stored + returned via
    *  get-initial-doc); the renderer resolves it. */
@@ -1339,6 +1343,10 @@ interface JournalEntryIpc {
   handle: string | null;
   format: 'cmir' | 'docx' | null;
   savedAt: string;
+  /** Original journal savedAt when the doc descends from a recovered,
+   *  not-yet-manually-saved draft — the stale-overwrite guard's baseline.
+   *  Passed through opaquely. */
+  recoveredFromSavedAt?: string;
   bytes: unknown;
 }
 
@@ -1387,6 +1395,9 @@ ipcMain.handle('host:write-journal', (_event, entry: JournalEntryIpc) => {
       handle: entry.handle,
       format: entry.format,
       savedAt: entry.savedAt,
+      ...(typeof entry.recoveredFromSavedAt === 'string'
+        ? { recoveredFromSavedAt: entry.recoveredFromSavedAt }
+        : {}),
       bytesB64: buf.toString('base64'),
     };
     // Atomic write: stage into a sibling .tmp file then rename
@@ -1435,6 +1446,9 @@ ipcMain.handle('host:read-journals', async () => {
         handle: typeof parsed.handle === 'string' ? parsed.handle : null,
         format: parsed.format === 'cmir' || parsed.format === 'docx' ? parsed.format : null,
         savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : new Date(0).toISOString(),
+        ...(typeof parsed.recoveredFromSavedAt === 'string'
+          ? { recoveredFromSavedAt: parsed.recoveredFromSavedAt }
+          : {}),
         bytes: new Uint8Array(Buffer.from(parsed.bytesB64, 'base64')),
       });
     } catch (err) {

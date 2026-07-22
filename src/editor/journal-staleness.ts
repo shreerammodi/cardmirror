@@ -34,6 +34,18 @@ export function journalPredatesFile(
   return fileMtimeMs > journalMs + toleranceMs;
 }
 
+/** The timestamp the staleness check must compare against the file's mtime:
+ *  the ORIGINAL recovered-from `savedAt` when the journal descends from a
+ *  recovered draft (edits re-journal with `savedAt` = now, which would launder
+ *  the staleness across a crash or mode switch), else the journal's own
+ *  `savedAt`. */
+export function journalStalenessBaseline(entry: {
+  savedAt: string;
+  recoveredFromSavedAt?: string;
+}): string {
+  return entry.recoveredFromSavedAt ?? entry.savedAt;
+}
+
 /** Journal `savedAt` (ISO) for each recovered-but-not-yet-saved doc, keyed by
  *  session uid. A doc opened from the recovery sidebar is marked here so that
  *  (a) its FIRST normal in-place save runs the stale-overwrite guard, and

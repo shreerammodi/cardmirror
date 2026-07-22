@@ -240,6 +240,7 @@ import { enterWithConfiguredStyle } from './enter-style.js';
 import { keepCursorInLeadingBlockOnBlockedMerge, blockBackspaceNodeSelect, blockDeleteNodeSelect } from './boundary-cursor-keymap.js';
 import {
   journalPredatesFile,
+  journalStalenessBaseline,
   markRecoveredDraft,
   recoveredDraftJournalSavedAt,
   clearRecoveredDraftMark,
@@ -7269,6 +7270,10 @@ async function runJournalWrite(): Promise<void> {
       threads: Array.from(getCommentsState(view.state).threads.values()),
       ...(currentDocId ? { docId: currentDocId } : {}),
     });
+    // A recovered-but-not-yet-saved draft carries its ORIGINAL journal
+    // savedAt forward, so the stale-overwrite guard survives relaunches and
+    // mode switches even though this write stamps savedAt = now.
+    const recoveredFrom = recoveredDraftJournalSavedAt(currentDocUid);
     await host.writeJournal({
       uid: currentDocUid,
       filename: currentDocFilename ?? 'Untitled',
@@ -7277,6 +7282,7 @@ async function runJournalWrite(): Promise<void> {
       handle: currentDocHandle,
       format: currentDocFormat,
       savedAt: new Date().toISOString(),
+      ...(recoveredFrom ? { recoveredFromSavedAt: recoveredFrom } : {}),
       bytes,
     });
   } catch (err) {
@@ -8345,6 +8351,12 @@ async function mountFromSpawnPayload(
     setCurrentDocHandle(payload.handle);
     currentDocFormat = format;
     currentDocUid = payload.uid ?? newSessionDocUid();
+    // A mode-switch respawn of a recovered, not-yet-saved draft re-marks it
+    // here so the stale-overwrite guard + autosave hold-off survive the move
+    // into this window.
+    if (payload.uid && payload.recoveredFromSavedAt) {
+      markRecoveredDraft(payload.uid, payload.recoveredFromSavedAt);
+    }
     adoptDocId(docId, payload.filename, payload.handle, format);
     // Newly spawned window starts clean — even though it has
     // pre-loaded content from the originating window, it hasn't
@@ -8680,8 +8692,10 @@ async function runStartupRecoveryInner(): Promise<void> {
       // Remember this is a recovered draft so its FIRST normal Ctrl-S runs the
       // same stale-overwrite guard as the sidebar's Save (the open-then-save
       // path has no on-disk baseline to catch it otherwise), and so autosave
-      // holds off until that guarded save lands.
-      markRecoveredDraft(entry.uid, entry.savedAt);
+      // holds off until that guarded save lands. The baseline is the entry's
+      // recovered-from provenance when it has one — a draft recovered, edited,
+      // and re-crashed keeps its original timestamp.
+      markRecoveredDraft(entry.uid, journalStalenessBaseline(entry));
       // Multi-doc opens into a slot; single-doc replaces the
       // current view.
       if (multiDocActive && multiDocOnRecoveredDoc) {
@@ -8780,11 +8794,14 @@ async function saveRecoveryEntry(entry: JournalEntry): Promise<boolean> {
     // journal behind. Writing the journal would overwrite that newer work,
     // so require an explicit confirmation first. (A real recovery journal is
     // newer than the last save, so it never trips this.) "Save elsewhere"
-    // keeps both versions via the Save-As modal below.
+    // keeps both versions via the Save-As modal below. The baseline is the
+    // recovered-from provenance when the journal has one — re-journaling
+    // stamps savedAt = now, which must not launder the check.
     let inPlace = true;
+    const baseSavedAt = journalStalenessBaseline(entry);
     const disk = await host.statFile(entry.handle).catch(() => null);
-    if (disk && journalPredatesFile(entry.savedAt, disk.mtimeMs)) {
-      const choice = await promptStaleRecoveryOverwrite(entry.filename, entry.savedAt, disk.mtimeMs);
+    if (disk && journalPredatesFile(baseSavedAt, disk.mtimeMs)) {
+      const choice = await promptStaleRecoveryOverwrite(entry.filename, baseSavedAt, disk.mtimeMs);
       if (choice === 'keep') return false;
       if (choice === 'saveAs') inPlace = false;
     }
@@ -8905,6 +8922,13 @@ async function autoRecoverAll(
   if (multiDocActive && multiDocOnRecoveredDoc) {
     for (const entry of entries) {
       try {
+        // A recovered-draft mark rides the journal across the mode-switch
+        // reload (the in-memory registry died with the old window) — without
+        // this, toggling the workspace would strip the stale-overwrite guard
+        // and unblock autosave for a draft that never had its guarded save.
+        if (entry.recoveredFromSavedAt) {
+          markRecoveredDraft(entry.uid, entry.recoveredFromSavedAt);
+        }
         const parsed = parseNative(entry.bytes);
         await multiDocOnRecoveredDoc({
           uid: entry.uid,
@@ -8933,6 +8957,10 @@ async function autoRecoverAll(
   const winner = sorted[0];
   if (!winner) return;
   try {
+    // Same mark carry-over as the pane path above.
+    if (winner.recoveredFromSavedAt) {
+      markRecoveredDraft(winner.uid, winner.recoveredFromSavedAt);
+    }
     await applyRecovery(winner, { markDirty: wasDirty(winner.uid) });
     await dropIfClean(winner.uid);
     console.log(`[cardmirror] modeswitch: reopened "${winner.filename}" in this window`);
@@ -8957,6 +8985,11 @@ async function autoRecoverAll(
         // journal continues to track the same logical doc.
         uid: entry.uid,
         markDirty: wasDirty(entry.uid),
+        // The recovered-draft mark rides along so the stale-overwrite
+        // guard survives the move to the new window.
+        ...(entry.recoveredFromSavedAt
+          ? { recoveredFromSavedAt: entry.recoveredFromSavedAt }
+          : {}),
       });
       await dropIfClean(entry.uid);
       console.log(`[cardmirror] modeswitch: spawned a window for "${entry.filename}"`);
