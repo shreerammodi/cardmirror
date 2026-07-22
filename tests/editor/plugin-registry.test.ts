@@ -103,6 +103,16 @@ describe('plugin registry', () => {
     registerPluginDefinition(d);
     expect(pluginCommandIds().includes('other.hijack')).toBe(false);
   });
+  it('is immune to a stateful per-field getter swapping id after validation', () => {
+    installPluginRegistry(() => stubApi);
+    let reads = 0;
+    const c: any = { label: 'Ok', run: () => {} };
+    Object.defineProperty(c, 'id', { get: () => (reads++ === 0 ? 'demo.ok' : 'other.hijack') });
+    const d: any = { id: 'demo', name: 'Demo', apiVersion: 1, commands: [c] };
+    registerPluginDefinition(d);
+    expect(pluginCommandIds().includes('other.hijack')).toBe(false);
+    expect(pluginCommandIds().includes('demo.ok')).toBe(true);
+  });
   it('toasts when an async run rejects', async () => {
     installPluginRegistry(() => stubApi);
     const d = def();

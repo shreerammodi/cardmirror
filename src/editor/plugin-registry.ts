@@ -63,43 +63,41 @@ export function registerPluginDefinition(
     };
   }
   if (plugins.has(def.id)) return { ok: false, error: `plugin "${def.id}" already registered` };
-  const cmds = Array.isArray(def.commands) ? [...def.commands] : null;
+  const raw = def.commands;
+  const cmds = Array.isArray(raw) ? [...raw] : null;
   if (!cmds) return { ok: false, error: 'commands must be an array' };
   const seen = new Set<string>();
   const snapshots: PluginCommandDef[] = [];
   const prefix = `${def.id}.`;
   for (const c of cmds) {
-    if (typeof c.id !== 'string' || !c.id.startsWith(prefix) || c.id.length === prefix.length) {
-      return { ok: false, error: `command id "${String(c.id)}" must start with "${prefix}"` };
+    // Read every field exactly once — a stateful getter must not be able
+    // to pass validation with one value and register a different one.
+    const { id, label, keywords, defaultKey, run } = c;
+    if (typeof id !== 'string' || !id.startsWith(prefix) || id.length === prefix.length) {
+      return { ok: false, error: `command id "${String(id)}" must start with "${prefix}"` };
     }
-    if (typeof c.label !== 'string' || !c.label) {
-      return { ok: false, error: `command "${c.id}" has no label` };
+    if (typeof label !== 'string' || !label) {
+      return { ok: false, error: `command "${id}" has no label` };
     }
-    if (typeof c.run !== 'function') {
-      return { ok: false, error: `command "${c.id}" has no run function` };
+    if (typeof run !== 'function') {
+      return { ok: false, error: `command "${id}" has no run function` };
     }
-    if (c.keywords !== undefined && !isStringArray(c.keywords)) {
-      return { ok: false, error: `command "${c.id}" has invalid keywords` };
+    if (keywords !== undefined && !isStringArray(keywords)) {
+      return { ok: false, error: `command "${id}" has invalid keywords` };
     }
     if (
-      c.defaultKey !== undefined &&
-      c.defaultKey !== null &&
-      typeof c.defaultKey !== 'string' &&
-      !isStringArray(c.defaultKey)
+      defaultKey !== undefined &&
+      defaultKey !== null &&
+      typeof defaultKey !== 'string' &&
+      !isStringArray(defaultKey)
     ) {
-      return { ok: false, error: `command "${c.id}" has invalid defaultKey` };
+      return { ok: false, error: `command "${id}" has invalid defaultKey` };
     }
-    if (commands.has(c.id) || seen.has(c.id)) {
-      return { ok: false, error: `command id "${c.id}" already registered` };
+    if (commands.has(id) || seen.has(id)) {
+      return { ok: false, error: `command id "${id}" already registered` };
     }
-    seen.add(c.id);
-    snapshots.push({
-      id: c.id,
-      label: c.label,
-      keywords: c.keywords,
-      defaultKey: c.defaultKey,
-      run: c.run,
-    });
+    seen.add(id);
+    snapshots.push({ id, label, keywords, defaultKey, run });
   }
   const api = makeApi(def.id);
   plugins.set(def.id, { def, api });
