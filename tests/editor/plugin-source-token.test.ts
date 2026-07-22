@@ -63,10 +63,14 @@ describe('source token', () => {
     const mk = (anchor: unknown) =>
       'cmsrc1.' +
       Buffer.from(JSON.stringify({ docId: 'd', docTitle: 't', anchor })).toString('base64url');
-    const bad = parseSourceToken(mk({ quote: 'q', prefix: '', suffix: '', approxPos: NaN }));
-    expect(bad!.anchor).toBeNull();
-    const inf = parseSourceToken(mk({ quote: 'q', prefix: '', suffix: '', approxPos: 1e999 }));
-    expect(inf!.anchor).toBeNull();
+    // Infinity: JSON.stringify would convert to null, so use raw JSON with literal exponent.
+    // JSON.parse('{"x":1e999}').x === Infinity is the real attack vector.
+    const rawInf =
+      'cmsrc1.' +
+      Buffer.from('{"docId":"d","docTitle":"t","anchor":{"quote":"q","prefix":"","suffix":"","approxPos":1e999}}').toString(
+        'base64url',
+      );
+    expect(parseSourceToken(rawInf)!.anchor).toBeNull();
     const junk = parseSourceToken(
       mk({ quote: 'q', prefix: '', suffix: '', approxPos: 2, extra: 'x'.repeat(64) }),
     );
