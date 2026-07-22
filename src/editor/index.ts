@@ -8033,7 +8033,19 @@ async function initPlugins(): Promise<void> {
       },
       ensureDocId: () => {
         try {
-          return ensureActiveDocId();
+          // Same three-step path the Learn flows use: mint the id, register
+          // the doc (even unsaved) with the store, and stamp it into the file
+          // so a plugin's extracted tokens re-associate on reload.
+          const docId = ensureActiveDocId();
+          const f = activeFile();
+          learnStore.registerDoc({
+            docId,
+            path: typeof f.handle === 'string' ? f.handle : null,
+            name: f.filename ?? 'Untitled',
+            format: f.format,
+          });
+          void stampActiveFileDocId(docId);
+          return docId;
         } catch {
           return null;
         }

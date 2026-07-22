@@ -114,19 +114,31 @@ function endPos(flat: Flat, idx: number): number {
   return (flat.pos[flat.pos.length - 1] ?? 0) + 1;
 }
 
+/** Flatten `doc` once and return a builder that maps any `[from, to)` to a
+ *  descriptor. Callers building many descriptors against the same doc (e.g.
+ *  extraction over a selection) MUST use this so the O(doc) flatten happens
+ *  once, not per descriptor. */
+export function createDescriptorBuilder(
+  doc: PMNode,
+): (from: number, to: number) => AnchorDescriptor {
+  const flat = flatten(doc);
+  return (from, to) => {
+    let start = flat.pos.findIndex((p) => p >= from);
+    if (start < 0) start = flat.text.length;
+    let end = flat.pos.findIndex((p) => p >= to);
+    if (end < 0) end = flat.text.length;
+    return {
+      quote: flat.text.slice(start, end),
+      prefix: flat.text.slice(Math.max(0, start - CONTEXT), start),
+      suffix: flat.text.slice(end, end + CONTEXT),
+      approxPos: start,
+    };
+  };
+}
+
 /** Build a descriptor for the selection `[from, to)` in `doc`. */
 export function buildDescriptor(doc: PMNode, from: number, to: number): AnchorDescriptor {
-  const flat = flatten(doc);
-  let start = flat.pos.findIndex((p) => p >= from);
-  if (start < 0) start = flat.text.length;
-  let end = flat.pos.findIndex((p) => p >= to);
-  if (end < 0) end = flat.text.length;
-  return {
-    quote: flat.text.slice(start, end),
-    prefix: flat.text.slice(Math.max(0, start - CONTEXT), start),
-    suffix: flat.text.slice(end, end + CONTEXT),
-    approxPos: start,
-  };
+  return createDescriptorBuilder(doc)(from, to);
 }
 
 /** Length of the common suffix of `a` and the trailing of `b` (how well a

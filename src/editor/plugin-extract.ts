@@ -14,7 +14,7 @@ import {
   TYPE_TO_LEVEL,
   type HeadingEntry,
 } from './headings.js';
-import { buildDescriptor } from './learn-anchor.js';
+import { createDescriptorBuilder } from './learn-anchor.js';
 import { mintSourceToken } from './plugin-source-token.js';
 import type {
   ExtractResult,
@@ -85,7 +85,15 @@ function collectItems(
 ): ExtractedItem[] {
   const items: ExtractedItem[] = [];
   let lastHeadingId = governingHeadingId(doc, from);
+  const buildDescriptor = createDescriptorBuilder(doc); // flatten once, not per item
   doc.nodesBetween(from, to, (node, pos) => {
+    // Live-view / linked-copy containers hold DERIVED, id-less mirror content
+    // (a duplicate of a section that lives elsewhere in this doc, or in
+    // another file). Emitting it would double up items with wrong
+    // attribution, so skip the whole subtree - same guard collectHeadings
+    // uses for self_ref.
+    if (node.type.name === 'self_ref' || node.type.name === 'transclusion_ref') return false;
+    // ponytail: item-granularity emission; a grazed heading emits in full
     if (!node.isTextblock) return true; // descend into card / analytic_unit / etc.
     const type = node.type.name;
     let kind: ExtractedKind | null = null;
@@ -107,7 +115,7 @@ function collectItems(
     if (!clean) return false;
     const contentFrom = pos + 1;
     const contentTo = pos + node.nodeSize - 1;
-    const anchor = contentTo > contentFrom ? buildDescriptor(doc, contentFrom, contentTo) : null;
+    const anchor = contentTo > contentFrom ? buildDescriptor(contentFrom, contentTo) : null;
     items.push({
       kind,
       text: clean,

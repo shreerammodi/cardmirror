@@ -7,6 +7,7 @@ import type { EditorView } from 'prosemirror-view';
 import { schema, newHeadingId } from '../../src/schema/index.js';
 import { extractSelection } from '../../src/editor/plugin-extract.js';
 import { parseSourceToken } from '../../src/editor/plugin-source-token.js';
+import { resolveDescriptor } from '../../src/editor/learn-anchor.js';
 
 const IDENT = { docId: 'doc-1', docTitle: 'Test.docx' };
 
@@ -29,6 +30,23 @@ function paragraph(text: string): PMNode {
 }
 function card(...children: PMNode[]): PMNode {
   return schema.nodes['card']!.createChecked(null, children);
+}
+function analyticUnit(...children: PMNode[]): PMNode {
+  return schema.nodes['analytic_unit']!.createChecked(null, children);
+}
+function selfRef(sourceHeadingId: string, children: PMNode[]): PMNode {
+  return schema.nodes['self_ref']!.create(
+    { source_heading_id: sourceHeadingId, source_label: '↳ Mirror' },
+    children,
+  );
+}
+/** First document position of the first node of `type`, or -1. */
+function posOf(doc: PMNode, type: string): number {
+  let found = -1;
+  doc.descendants((n, p) => {
+    if (found < 0 && n.type.name === type) found = p;
+  });
+  return found;
 }
 function makeDoc(children: PMNode[]): PMNode {
   return schema.nodes['doc']!.createChecked(null, children);
@@ -99,5 +117,95 @@ describe('extractSelection', () => {
     const paraStart = doc.content.size - doc.child(2).nodeSize;
     const res = extractSelection(fakeView(doc, paraStart + 1, paraStart + 6), IDENT);
     expect(res).toEqual({ ok: false, error: 'empty-selection' });
+  });
+
+  it('never emits self_ref mirrored content', () => {
+    const srcId = newHeadingId();
+    // A live view mirrors the block above it; its child is a derived copy of
+    // the same text. Without the guard the mirror emits 'AT: Framework' twice.
+    const doc = makeDoc([
+      heading('block', 'AT: Framework', srcId),
+      card(heading('tag', 'Perm solves')),
+      selfRef(srcId, [heading('block', 'AT: Framework')]),
+    ]);
+    const res = extractSelection(fakeView(doc, 1, doc.content.size - 1), IDENT);
+    if (!res.ok) throw new Error(res.error);
+    const framework = res.items.filter((i) => i.text === 'AT: Framework');
+    expect(framework.length).toBe(1);
+  });
+
+  it('emits analytic nodes with their own heading id', () => {
+    const anId = newHeadingId();
+    const doc = makeDoc([analyticUnit(heading('analytic', 'A1', anId), undertag('detail'))]);
+    const res = extractSelection(fakeView(doc, 1, doc.content.size - 1), IDENT);
+    if (!res.ok) throw new Error(res.error);
+    expect(res.items.map((i) => i.kind)).toEqual(['analytic', 'undertag']);
+    const ut = res.items.find((i) => i.kind === 'undertag')!;
+    expect(parseSourceToken(ut.source)!.headingId).toBe(anId);
+  });
+
+  it('attributes a top-level undertag to the nearest preceding heading', () => {
+    const bId = newHeadingId();
+    const doc = makeDoc([heading('block', 'Section', bId), undertag('loose note')]);
+    const res = extractSelection(fakeView(doc, 1, doc.content.size - 1), IDENT);
+    if (!res.ok) throw new Error(res.error);
+    const ut = res.items.find((i) => i.kind === 'undertag')!;
+    expect(parseSourceToken(ut.source)!.headingId).toBe(bId);
+  });
+
+  it('attributes a mid-card selection with the tag outside the range', () => {
+    const tId = newHeadingId();
+    const doc = makeDoc([card(heading('tag', 'Tag here', tId), undertag('mid detail'))]);
+    const utPos = posOf(doc, 'undertag');
+    // Select only inside the undertag text — the tag sits before sel.from.
+    const res = extractSelection(fakeView(doc, utPos + 2, utPos + 6), IDENT);
+    if (!res.ok) throw new Error(res.error);
+    expect(res.items.map((i) => i.kind)).toEqual(['undertag']);
+    expect(parseSourceToken(res.items[0]!.source)!.headingId).toBe(tId);
+  });
+
+  it('anchors resolve back to the item text', () => {
+    const doc = sampleDoc();
+    const res = extractSelection(fakeView(doc, 1, doc.content.size - 1), IDENT);
+    if (!res.ok) throw new Error(res.error);
+    const block = res.items.find((i) => i.kind === 'block')!;
+    const anchor = parseSourceToken(block.source)!.anchor;
+    expect(anchor).not.toBeNull();
+    const resolved = resolveDescriptor(doc, anchor!);
+    expect(resolved).not.toBeNull();
+    const text = doc.textBetween(resolved!.from, resolved!.to, ' ');
+    expect(text).toContain('AT: Framework');
+  });
+
+  it('collapsed cursor in a block section stops at the next same-level heading', () => {
+    const aId = newHeadingId();
+    const bId = newHeadingId();
+    const doc = makeDoc([
+      heading('block', 'Block A', aId),
+      card(heading('tag', 'A tag')),
+      heading('block', 'Block B', bId),
+      card(heading('tag', 'B tag')),
+    ]);
+    // Cursor inside the 'Block A' heading.
+    const res = extractSelection(fakeView(doc, 2), IDENT);
+    if (!res.ok) throw new Error(res.error);
+    const texts = res.items.map((i) => i.text);
+    expect(texts).toContain('Block A');
+    expect(texts).toContain('A tag');
+    expect(texts).not.toContain('Block B');
+    expect(texts).not.toContain('B tag');
+  });
+
+  it('a one-character graze emits the whole item', () => {
+    const doc = makeDoc([
+      card(heading('tag', 'First tag')),
+      heading('block', 'Grazed heading'),
+    ]);
+    const blockPos = posOf(doc, 'block');
+    // Selection ends one char into the block heading; it emits in full.
+    const res = extractSelection(fakeView(doc, 1, blockPos + 2), IDENT);
+    if (!res.ok) throw new Error(res.error);
+    const grazed = res.items.find((i) => i.kind === 'block');
+    expect(grazed?.text).toBe('Grazed heading');
   });
 });

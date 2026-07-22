@@ -94,9 +94,18 @@ export function createPluginApi(pluginId: string, deps: PluginApiDeps): CardMirr
     extractSelection() {
       const view = deps.getView();
       if (!view) return { ok: false, error: 'no-active-doc' };
-      const docId = deps.ensureDocId();
       const ident = deps.getDocIdentity();
-      if (!docId || !ident) return { ok: false, error: 'no-active-doc' };
+      if (!ident) return { ok: false, error: 'no-active-doc' };
+      // Extract against the doc's current identity FIRST, so a failed
+      // extraction never mints/stamps a docId onto a pristine file.
+      const res = extractSelection(view, { docId: ident.docId ?? '', docTitle: ident.docTitle });
+      if (!res.ok) return res;
+      if (ident.docId) return res;
+      // First-ever successful extraction on an unstamped doc: mint + stamp,
+      // then re-walk so the emitted tokens carry the real docId.
+      // ponytail: double extraction on first-ever run; cache if it ever shows up in profiles
+      const docId = deps.ensureDocId();
+      if (!docId) return { ok: false, error: 'no-active-doc' };
       return extractSelection(view, { docId, docTitle: ident.docTitle });
     },
     async jumpToSource(token) {
