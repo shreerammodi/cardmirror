@@ -12010,6 +12010,20 @@ html.pmd-timer-right #timer-panel {
   animation: pmd-timer-flash-pulse 600ms ease-in-out infinite;
 }
 
+/* Ran-out state: steady alert red (the flash pulse's peak color)
+   until the clock is re-armed. Selector carries [data-mode] plus the
+   panel prefix so it out-ranks the aff/neg prep color rules above —
+   an expired prep clock must read as expired, not as its side's
+   color. Suppressed while the display is being edited: typing IS the
+   re-arm gesture, so the red yielding immediately reads as
+   responsive. */
+:is(#ribbon, body.pmd-timer-popout-page)
+  .pmd-timer-panel
+  #timer-display.pmd-timer-expired[data-mode]:not([contenteditable="true"]) {
+  background: var(--pmd-c-neg);
+  color: white;
+}
+
 /* Compact mode: drop the 3 preset buttons; reset moves under
    Start/Pause (small button instead of the full-height column);
    display + prep shift left to fill the gap.

@@ -29,6 +29,7 @@ import {
   getTimerState,
   getVisibleRemainingMs,
   loadSpeechPreset,
+  markTimerExpired,
   pauseTimer,
   resetTimer,
   selectMode,
@@ -307,6 +308,18 @@ export function mountTimerUI(opts?: { popout?: boolean }): void {
         return visibleMs <= threshMs && visibleMs > threshMs - 1000;
       });
     display.classList.toggle('pmd-timer-flash', inFlashWindow);
+    // Ran-out latch: a running clock reading 0:00 marks its mode
+    // expired in SHARED state, so every window and the pop-out go
+    // red together (markTimerExpired's guards absorb the concurrent
+    // per-window ticks).
+    if (s.running && visibleMs <= 0) markTimerExpired();
+    // Steady alert red until this clock is re-armed (preset / Reset /
+    // typed time). Mode-scoped: another clock's display shows its own
+    // colors; switching back to the ran-out one is red again.
+    display.classList.toggle(
+      'pmd-timer-expired',
+      s.expiredMode !== null && s.mode === s.expiredMode,
+    );
   }
 
   function ensureTick(): void {

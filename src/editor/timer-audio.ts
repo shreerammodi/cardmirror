@@ -130,14 +130,21 @@ function updateOwnershipPursuit(): void {
 // ─── Beep synthesis on the audio clock ────────────────────────────
 
 let ctx: AudioContext | null = null;
-let scheduled: OscillatorNode[] = [];
+let scheduled: Array<{ osc: OscillatorNode; startAt: number }> = [];
 let gestureHookInstalled = false;
 
 function cancelScheduled(): void {
-  for (const osc of scheduled) {
+  // Cancel FUTURE beeps only. One already sounding plays out — every
+  // oscillator gets its stop() scheduled at creation, so it's bounded
+  // — because state writes land exactly when beeps fire: the expiry
+  // latch broadcasts at 0:00 as the end beep starts, and a pause can
+  // land mid-threshold-beep. Stopping those here clips them audibly.
+  const now = ctx?.currentTime ?? 0;
+  for (const s of scheduled) {
+    if (s.startAt <= now) continue;
     try {
-      osc.stop();
-      osc.disconnect();
+      s.osc.stop();
+      s.osc.disconnect();
     } catch {
       // Already ended — fine.
     }
@@ -183,7 +190,7 @@ function beepAt(c: AudioContext, when: number, kind: 'threshold' | 'end', volume
     osc.connect(gain).connect(c.destination);
     osc.start(t0);
     osc.stop(t0 + 0.2);
-    scheduled.push(osc);
+    scheduled.push({ osc, startAt: t0 });
   }
 }
 

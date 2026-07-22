@@ -62,6 +62,13 @@ export interface TimerState {
    *  always wins — see `shownPrepSide`). Shared state so every
    *  compact surface (windows + the pop-out) shows the same side. */
   prepShownSide: 'aff' | 'neg';
+  /** The mode whose clock RAN OUT (vs merely sitting at 0:00 — a
+   *  reset speech timer is zero but not expired). Drives the steady
+   *  ran-out red on the display while that mode is active. Cleared
+   *  only by re-arming: a preset load, Reset, or a typed time —
+   *  deliberately NOT by pause or a mode switch, so the alert
+   *  can't be dismissed by accident. */
+  expiredMode: TimerMode | null;
 }
 
 const DEFAULT_PREP_MS = 10 * 60 * 1000;
@@ -78,6 +85,7 @@ function makeInitialState(): TimerState {
     visible: false,
     poppedOut: false,
     prepShownSide: 'aff',
+    expiredMode: null,
   };
 }
 
@@ -122,6 +130,10 @@ function sanitize(raw: Partial<TimerState>): TimerState {
     visible: raw.visible === true,
     poppedOut: raw.poppedOut === true,
     prepShownSide: raw.prepShownSide === 'neg' ? 'neg' : 'aff',
+    expiredMode:
+      raw.expiredMode === 'speech' || raw.expiredMode === 'affPrep' || raw.expiredMode === 'negPrep'
+        ? raw.expiredMode
+        : null,
   };
 }
 
@@ -213,6 +225,17 @@ export function startTimer(): void {
   setState({ running: true, runningSince: Date.now() });
 }
 
+/** Latch the ran-out state for the active mode. Called from each
+ *  window's render tick when a running clock reads 0:00; the guards
+ *  make the concurrent per-window calls converge on one idempotent
+ *  write instead of a broadcast storm. */
+export function markTimerExpired(): void {
+  if (state.expiredMode === state.mode) return;
+  if (!state.running) return;
+  if (getVisibleRemainingMs(state) > 0) return;
+  setState({ expiredMode: state.mode });
+}
+
 /** Pause: snapshot the live remaining back into the base for the
  *  current mode so resuming continues from where we left off. */
 export function pauseTimer(): void {
@@ -241,6 +264,7 @@ export function resetTimer(prepTotalMs: number = state.prepTotalMs): void {
     affPrepBaseRemainingMs: prepTotalMs,
     negPrepBaseRemainingMs: prepTotalMs,
     prepTotalMs,
+    expiredMode: null,
   });
 }
 
@@ -255,6 +279,7 @@ export function loadSpeechPreset(minutes: number): void {
     running: false,
     runningSince: null,
     speechBaseRemainingMs: ms,
+    expiredMode: null,
   });
 }
 
@@ -312,9 +337,9 @@ export function togglePrepShownSide(): void {
 export function setActiveRemainingMs(ms: number): void {
   if (state.running) return;
   const v = Math.max(0, Math.floor(ms));
-  if (state.mode === 'affPrep') setState({ affPrepBaseRemainingMs: v });
-  else if (state.mode === 'negPrep') setState({ negPrepBaseRemainingMs: v });
-  else setState({ speechBaseRemainingMs: v });
+  if (state.mode === 'affPrep') setState({ affPrepBaseRemainingMs: v, expiredMode: null });
+  else if (state.mode === 'negPrep') setState({ negPrepBaseRemainingMs: v, expiredMode: null });
+  else setState({ speechBaseRemainingMs: v, expiredMode: null });
 }
 
 /** Push the configured prep total into state. Called when settings

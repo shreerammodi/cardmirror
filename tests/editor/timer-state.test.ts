@@ -3,8 +3,9 @@
  * the edit persists across mode switches (only Reset zeroes prep). Covers
  * `setActiveRemainingMs` — the state half of editable prep time.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
+  markTimerExpired,
   resetTimer,
   selectMode,
   setActiveRemainingMs,
@@ -155,5 +156,96 @@ describe('shownPrepSide / togglePrepShownSide', () => {
     expect(shownPrepSide(s)).toBe('neg');
     // Aff's balance survived the pause snapshot (still ≈ 10:00).
     expect(getPrepRemainingMs(s, 'aff')).toBeGreaterThan(9 * MIN);
+  });
+});
+
+describe('expiry latch (ran-out red)', () => {
+  /** Run the speech clock past its end under fake time. */
+  function expireSpeech(minutes = 1): void {
+    loadSpeechPreset(minutes);
+    startTimer();
+    vi.setSystemTime(Date.now() + minutes * MIN + 1000);
+    markTimerExpired(); // what each window's render tick does at 0:00
+  }
+
+  it('latches the active mode at 0:00 — and pause does NOT clear it', () => {
+    vi.useFakeTimers();
+    try {
+      resetTimer(10 * MIN);
+      expireSpeech();
+      expect(getTimerState().expiredMode).toBe('speech');
+      // Pause is not a re-arm: the alert must survive it.
+      pauseTimer();
+      expect(getTimerState().expiredMode).toBe('speech');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('no-ops while time remains, and on duplicate ticks', () => {
+    vi.useFakeTimers();
+    try {
+      resetTimer(10 * MIN);
+      loadSpeechPreset(1);
+      startTimer();
+      markTimerExpired(); // clock just started — must not latch
+      expect(getTimerState().expiredMode).toBeNull();
+      vi.setSystemTime(Date.now() + 2 * MIN);
+      markTimerExpired();
+      markTimerExpired(); // concurrent-window duplicate converges
+      expect(getTimerState().expiredMode).toBe('speech');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a mode switch hides but does not clear — the latch survives coming back', () => {
+    vi.useFakeTimers();
+    try {
+      resetTimer(10 * MIN);
+      expireSpeech();
+      selectMode('affPrep');
+      // Still latched for speech: the UI keys red on mode === expiredMode.
+      expect(getTimerState().expiredMode).toBe('speech');
+      selectMode('speech');
+      expect(getTimerState().expiredMode).toBe('speech');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('each re-arm gesture clears it: preset, Reset, typed time', () => {
+    vi.useFakeTimers();
+    try {
+      resetTimer(10 * MIN);
+      expireSpeech();
+      loadSpeechPreset(6);
+      expect(getTimerState().expiredMode).toBeNull();
+
+      expireSpeech();
+      resetTimer(10 * MIN);
+      expect(getTimerState().expiredMode).toBeNull();
+
+      expireSpeech();
+      pauseTimer(); // typing requires a paused display
+      setActiveRemainingMs(3 * MIN);
+      expect(getTimerState().expiredMode).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('latches a prep clock too', () => {
+    vi.useFakeTimers();
+    try {
+      resetTimer(10 * MIN);
+      selectMode('affPrep');
+      startTimer();
+      vi.setSystemTime(Date.now() + 11 * MIN);
+      markTimerExpired();
+      expect(getTimerState().expiredMode).toBe('affPrep');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

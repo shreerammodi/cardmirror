@@ -988,7 +988,10 @@ display**, **Start / Pause** (▶), three **speech preset** buttons, and the
   Pause to run it down. As the clock crosses each configured **alert point**
   (Settings → Appearance → Timer display; e.g. "60, 30, 5, 3, 1" seconds
   remaining) it can flash red, play a short beep, or both — see the Audible
-  alerts bullet below.
+  alerts bullet below. When time runs out, the display turns solid red and
+  stays red until you re-arm that clock — load a preset, hit Reset, or type
+  a new time. (Pausing or switching clocks doesn't dismiss it; the sound,
+  if on, is a single double beep, never repeated.)
 
 - **Pop the timer out** *(desktop)*. The **⇱** button moves the timer into a
   small floating window that stays on top of every app — handy for keeping
