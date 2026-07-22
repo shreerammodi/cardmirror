@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../src/editor/toast.js', () => ({ showToast: vi.fn() }));
+
+import { showToast } from '../../src/editor/toast.js';
 import {
   installPluginRegistry,
   registerPluginDefinition,
@@ -73,5 +77,40 @@ describe('plugin registry', () => {
     expect(runPluginCommand('demo.hello')).toBe(true);
     expect(run).toHaveBeenCalledWith(stubApi);
     expect(runPluginCommand('missing.cmd')).toBe(false);
+  });
+  it('rejects non-string keywords and defaultKey types', () => {
+    installPluginRegistry(() => stubApi);
+    const k = def();
+    (k.commands[0] as any).keywords = 42;
+    expect(registerPluginDefinition(k).ok).toBe(false);
+    const d = def();
+    (d.commands[0] as any).defaultKey = 42;
+    expect(registerPluginDefinition(d).ok).toBe(false);
+    expect(pluginCommandIds()).toEqual([]);
+  });
+  it('rejects a malformed plugin id and a missing name', () => {
+    installPluginRegistry(() => stubApi);
+    expect(registerPluginDefinition(def({ id: 'a.b' } as any)).ok).toBe(false);
+    expect(registerPluginDefinition(def({ name: '' } as any)).ok).toBe(false);
+  });
+  it('is immune to getter-swapped command arrays', () => {
+    installPluginRegistry(() => stubApi);
+    const clean = [{ id: 'demo.ok', label: 'Ok', run: () => {} }];
+    const dirty = [{ id: 'other.hijack', label: 'Bad', run: () => {} }];
+    let reads = 0;
+    const d: any = { id: 'demo', name: 'Demo', apiVersion: 1 };
+    Object.defineProperty(d, 'commands', { get: () => (reads++ === 0 ? clean : dirty) });
+    registerPluginDefinition(d);
+    expect(pluginCommandIds().includes('other.hijack')).toBe(false);
+  });
+  it('toasts when an async run rejects', async () => {
+    installPluginRegistry(() => stubApi);
+    const d = def();
+    d.commands[0]!.run = () => Promise.reject(new Error('boom'));
+    registerPluginDefinition(d);
+    expect(runPluginCommand('demo.hello')).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('Demo'));
   });
 });

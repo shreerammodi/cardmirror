@@ -42,12 +42,20 @@ const plugins = new Map<string, RegisteredPlugin>();
 const commands = new Map<string, { pluginId: string; cmd: PluginCommandDef }>();
 let makeApi: ((pluginId: string) => CardMirrorPluginApi) | null = null;
 
+const PLUGIN_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string');
+}
+
 export function registerPluginDefinition(
   def: PluginDefinition,
 ): { ok: true } | { ok: false; error: string } {
   if (!makeApi) return { ok: false, error: 'plugin system not initialized' };
   if (!def || typeof def !== 'object') return { ok: false, error: 'bad definition' };
   if (typeof def.id !== 'string' || !def.id) return { ok: false, error: 'missing plugin id' };
+  if (!PLUGIN_ID_RE.test(def.id)) return { ok: false, error: `invalid plugin id "${def.id}"` };
+  if (typeof def.name !== 'string' || !def.name) return { ok: false, error: 'missing plugin name' };
   if (def.apiVersion !== PLUGIN_API_VERSION) {
     return {
       ok: false,
@@ -55,11 +63,14 @@ export function registerPluginDefinition(
     };
   }
   if (plugins.has(def.id)) return { ok: false, error: `plugin "${def.id}" already registered` };
-  if (!Array.isArray(def.commands)) return { ok: false, error: 'commands must be an array' };
+  const cmds = Array.isArray(def.commands) ? [...def.commands] : null;
+  if (!cmds) return { ok: false, error: 'commands must be an array' };
   const seen = new Set<string>();
-  for (const c of def.commands) {
-    if (typeof c.id !== 'string' || !c.id.startsWith(`${def.id}.`)) {
-      return { ok: false, error: `command id "${String(c.id)}" must start with "${def.id}."` };
+  const snapshots: PluginCommandDef[] = [];
+  const prefix = `${def.id}.`;
+  for (const c of cmds) {
+    if (typeof c.id !== 'string' || !c.id.startsWith(prefix) || c.id.length === prefix.length) {
+      return { ok: false, error: `command id "${String(c.id)}" must start with "${prefix}"` };
     }
     if (typeof c.label !== 'string' || !c.label) {
       return { ok: false, error: `command "${c.id}" has no label` };
@@ -67,14 +78,32 @@ export function registerPluginDefinition(
     if (typeof c.run !== 'function') {
       return { ok: false, error: `command "${c.id}" has no run function` };
     }
+    if (c.keywords !== undefined && !isStringArray(c.keywords)) {
+      return { ok: false, error: `command "${c.id}" has invalid keywords` };
+    }
+    if (
+      c.defaultKey !== undefined &&
+      c.defaultKey !== null &&
+      typeof c.defaultKey !== 'string' &&
+      !isStringArray(c.defaultKey)
+    ) {
+      return { ok: false, error: `command "${c.id}" has invalid defaultKey` };
+    }
     if (commands.has(c.id) || seen.has(c.id)) {
       return { ok: false, error: `command id "${c.id}" already registered` };
     }
     seen.add(c.id);
+    snapshots.push({
+      id: c.id,
+      label: c.label,
+      keywords: c.keywords,
+      defaultKey: c.defaultKey,
+      run: c.run,
+    });
   }
   const api = makeApi(def.id);
   plugins.set(def.id, { def, api });
-  for (const c of def.commands) commands.set(c.id, { pluginId: def.id, cmd: c });
+  for (const c of snapshots) commands.set(c.id, { pluginId: def.id, cmd: c });
   return { ok: true };
 }
 
@@ -87,7 +116,8 @@ export function installPluginRegistry(
   window.__registerCardMirrorPlugin = (def) => {
     const res = registerPluginDefinition(def);
     if (res.ok) {
-      console.log(`[plugins] registered ${def.id} (${def.commands.length} commands)`);
+      const count = [...commands.values()].filter((c) => c.pluginId === def.id).length;
+      console.log(`[plugins] registered ${def.id} (${count} commands)`);
     } else {
       console.warn(`[plugins] registration rejected: ${res.error}`);
       showToast(`Plugin failed to load: ${res.error}`);
