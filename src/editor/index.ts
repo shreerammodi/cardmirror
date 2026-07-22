@@ -8008,9 +8008,17 @@ installExternalInsertHost({
   getFocusedView: () => getActiveView(),
   getFocusedDocTitle: () => activeFile().filename,
 });
-// Plugin system boot: install the window registry + jump host, then
-// load the user-enabled plugins. Gated on the `pluginsEnabled` setting
-// and on a plugin-capable desktop host (no-op on web / old shells).
+// Inbound /jump handler — core-owned surface (spec 6): the fast-paste
+// bridge advertises schema 2 unconditionally, so a window must always
+// answer `external:jump`, regardless of the `pluginsEnabled` switch.
+// No-ops when the preload bridge is absent (web / old shells).
+installPluginJumpHost({
+  getFocusedView: () => getActiveView(),
+  getFocusedDocId: () => activeDocIdentity().docId,
+});
+// Plugin system boot: install the window registry, then load the
+// user-enabled plugins. Gated on the `pluginsEnabled` setting and on
+// a plugin-capable desktop host (no-op on web / old shells).
 async function initPlugins(): Promise<void> {
   if (!settings.get('pluginsEnabled')) return;
   const host = getElectronHost();
@@ -8032,10 +8040,6 @@ async function initPlugins(): Promise<void> {
       },
     }),
   );
-  installPluginJumpHost({
-    getFocusedView: () => getActiveView(),
-    getFocusedDocId: () => activeDocIdentity().docId,
-  });
   const installed = (await host.pluginList()) as { id: string; name: string }[];
   for (const p of installed) {
     if (!isPluginEnabled(p.id)) continue;
