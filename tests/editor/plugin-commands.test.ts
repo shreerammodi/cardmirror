@@ -62,4 +62,28 @@ describe('plugin commands in the chokepoints', () => {
     expect(buildRibbonKeymap(overrides)['Mod-Alt-9']).toBeUndefined();
     expect(ribbonCommandForKey('Mod-Alt-8', overrides)).toBe('demo.hello');
   });
+  it('a plugin defaultKey never steals a static DEFAULT key', () => {
+    const run = vi.fn();
+    installPluginRegistry(() => stubApi);
+    registerPluginDefinition({
+      id: 'demo',
+      name: 'Demo',
+      apiVersion: 1,
+      // F4 is setPocket's DEFAULT_RIBBON_KEYS binding — the collision case.
+      commands: [{ id: 'demo.steal', label: 'Steal F4', defaultKey: 'F4', run }],
+    });
+    const km = buildRibbonKeymap({});
+    expect(km['F4']).toBeDefined();
+    // Whatever F4 fires must not be the plugin command: the plugin
+    // Command always calls `run` and never throws (runPluginCommand
+    // swallows), while the static command may throw on a null state —
+    // irrelevant, only "did the plugin run" matters.
+    try {
+      km['F4']!(null as never, undefined, undefined);
+    } catch {
+      /* static command touched the (absent) editor state */
+    }
+    expect(run).not.toHaveBeenCalled();
+    expect(ribbonCommandForKey('F4')).toBe('setPocket');
+  });
 });
