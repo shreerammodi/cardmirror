@@ -119,6 +119,49 @@ function unwrapZonesIn(frag: Fragment): Fragment {
   return changed ? Fragment.fromArray(out) : frag;
 }
 
+/**
+ * Marks an inline image may carry. Everything else is visual
+ * typography that cannot render on a replaced element without
+ * artifacts — an inline mark span's height comes from font metrics,
+ * not from its image child, so e.g. the emphasis box borders a
+ * text-height band straight through the image — and is meaningless
+ * beyond the editor: `emitImageRun` writes no run styling, so Word
+ * shows nothing either way. `comment_range` stays because comment
+ * spans must be continuous across an inline image (the exporter's
+ * range reconciliation depends on it); `link` is functional, not
+ * visual.
+ *
+ * The named-style normalizer enforces the same set on live
+ * transactions; this module enforces it at load.
+ */
+export const IMAGE_ALLOWED_MARKS: ReadonlySet<string> = new Set([
+  'comment_range',
+  'link',
+]);
+
+/** Strip disallowed marks (see `IMAGE_ALLOWED_MARKS`) from every
+ *  inline image. Same-node return when nothing changed. */
+export function stripImageVisualMarks(doc: PMNode): PMNode {
+  function walk(node: PMNode): PMNode {
+    if (node.type.name === 'image') {
+      const kept = node.marks.filter((m) => IMAGE_ALLOWED_MARKS.has(m.type.name));
+      return kept.length === node.marks.length ? node : node.mark(kept);
+    }
+    if (node.isText || node.childCount === 0) return node;
+    let changed = false;
+    const out: PMNode[] = [];
+    node.forEach((child) => {
+      const w = walk(child);
+      if (w !== child) changed = true;
+      out.push(w);
+    });
+    return changed
+      ? node.type.create(node.attrs, Fragment.fromArray(out), node.marks)
+      : node;
+  }
+  return walk(doc);
+}
+
 function cardHasAnalytic(card: PMNode): boolean {
   let found = false;
   card.forEach((c) => {

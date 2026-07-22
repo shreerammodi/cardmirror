@@ -23,12 +23,23 @@
  *    really a safety net for passive coexistence (legacy imports,
  *    pastes, and any future code path that doesn't go through a
  *    policy command).
+ *
+ * 3. **Images carry only functional marks** (`IMAGE_ALLOWED_MARKS`:
+ *    `comment_range`, `link`). Visual marks cannot render on a
+ *    replaced element without artifacts — a mark span's height comes
+ *    from font metrics, not its image child, so a box/band decoration
+ *    cuts through the image — and the exporter writes no run styling
+ *    on image runs, so they mean nothing in Word either. Range-mark
+ *    commands (`tr.addMark`) cover every inline node in the selection,
+ *    images included; this strips what they deposit. Load-time
+ *    counterpart: `stripImageVisualMarks` in `schema/migrate.ts`.
  */
 
 import { Plugin } from 'prosemirror-state';
 import type { Transaction } from 'prosemirror-state';
 import { Fragment, type Node as PMNode } from 'prosemirror-model';
 import { schema } from '../schema/index.js';
+import { IMAGE_ALLOWED_MARKS } from '../schema/migrate.js';
 import { changedRange } from './transaction-utils.js';
 import { guardNormalizerTr } from './normalizer-guard.js';
 
@@ -51,6 +62,15 @@ export const namedStyleNormalizerPlugin: Plugin = new Plugin({
     let tr: Transaction | null = null;
 
     newState.doc.nodesBetween(range.from, range.to, (node, pos, parent) => {
+      if (node.type.name === 'image') {
+        for (const m of node.marks) {
+          if (!IMAGE_ALLOWED_MARKS.has(m.type.name)) {
+            if (!tr) tr = newState.tr;
+            tr.removeNodeMark(pos, m);
+          }
+        }
+        return false;
+      }
       if (!node.isText || !parent) return true;
       const parentName = parent.type.name;
       const hasDirect = node.marks.some((m) => m.type === directMark);
