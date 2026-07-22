@@ -18,6 +18,13 @@ interface InstalledPlugin {
   repo?: string;
 }
 
+/** Surface an IPC rejection as a toast instead of an unhandled rejection. */
+function guarded(work: () => Promise<void>): void {
+  void work().catch((err: unknown) => {
+    showToast(`Plugin operation failed: ${err instanceof Error ? err.message : String(err)}`);
+  });
+}
+
 export function renderPluginsPanel(container: HTMLElement): void {
   const host = getElectronHost();
   if (!host) {
@@ -64,7 +71,8 @@ export function renderPluginsPanel(container: HTMLElement): void {
       enable.addEventListener('change', () => {
         setPluginEnabled(p.id, enable.checked);
         if (enable.checked) {
-          void host!.pluginLoad(p.id).then((r) => {
+          guarded(async () => {
+            const r = await host!.pluginLoad(p.id);
             if (!r.ok) showToast(`${p.name} failed to load: ${r.error ?? 'unknown error'}`);
           });
         } else {
@@ -74,7 +82,7 @@ export function renderPluginsPanel(container: HTMLElement): void {
       const update = document.createElement('button');
       update.textContent = 'Check for updates';
       update.addEventListener('click', () => {
-        void (async () => {
+        guarded(async () => {
           const res = (await host!.pluginCheckUpdate(p.id, p.repo ?? '')) as
             | { ok: true; latest: string; hasUpdate: boolean }
             | { ok: false; error: string }
@@ -91,18 +99,18 @@ export function renderPluginsPanel(container: HTMLElement): void {
             const r = (await host!.pluginInstall(p.repo ?? '')) as { ok?: boolean } | undefined;
             showToast(r?.ok ? `${p.name} updated. Restart to apply.` : 'Update failed.');
           }
-        })();
+        });
       });
       const remove = document.createElement('button');
       remove.textContent = 'Uninstall';
       remove.addEventListener('click', () => {
-        void (async () => {
+        guarded(async () => {
           if (!(await confirmDialog(`Uninstall ${p.name}?`))) return;
           await host!.pluginUninstall(p.id);
           setPluginEnabled(p.id, false);
           showToast(`${p.name} uninstalled. Restart to fully unload it.`);
-          void refresh();
-        })();
+          guarded(refresh);
+        });
       });
       row.append(enable, label, update, remove);
       list.append(row);
@@ -110,7 +118,7 @@ export function renderPluginsPanel(container: HTMLElement): void {
   }
 
   installBtn.addEventListener('click', () => {
-    void (async () => {
+    guarded(async () => {
       const ref = input.value.trim();
       if (!ref) return;
       installBtn.disabled = true;
@@ -136,21 +144,21 @@ export function renderPluginsPanel(container: HTMLElement): void {
         const r = await host.pluginLoad(p.id);
         showToast(r.ok ? `${p.name} installed and loaded.` : `${p.name} installed; loads on next launch.`);
         input.value = '';
-        void refresh();
+        guarded(refresh);
       } finally {
         installBtn.disabled = false;
       }
-    })();
+    });
   });
 
   devBtn.addEventListener('click', () => {
-    void (async () => {
+    guarded(async () => {
       const path = await host.pluginPickFile();
       if (!path) return;
       const r = await host.pluginLoadFile(path);
       showToast(r.ok ? 'Plugin bundle loaded for this session.' : `Load failed: ${r.error ?? 'unknown'}`);
-    })();
+    });
   });
 
-  void refresh();
+  guarded(refresh);
 }
