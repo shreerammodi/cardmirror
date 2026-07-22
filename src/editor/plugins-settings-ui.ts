@@ -6,6 +6,7 @@
  */
 import { getElectronHost } from './host/index.js';
 import { isPluginEnabled, setPluginEnabled } from './plugins-store.js';
+import { settings } from './settings.js';
 import { confirmDialog } from './text-prompt.js';
 import { showToast } from './toast.js';
 
@@ -29,6 +30,19 @@ export function renderPluginsPanel(container: HTMLElement): void {
   const host = getElectronHost();
   if (!host) {
     container.textContent = 'Plugins are available on the desktop app only.';
+    return;
+  }
+  // The panel's install / dev-load actions execute third-party bundles
+  // (webFrame.executeJavaScript), so they must be unreachable while the
+  // master switch that promises to gate plugins is off.
+  if (!settings.get('pluginsEnabled')) {
+    container.textContent = 'Enable plugins above, then restart CardMirror.';
+    return;
+  }
+  // Switch is on but boot ran with it off — the window registry was never
+  // installed, so a loaded bundle's registration would silently no-op.
+  if (typeof window.__registerCardMirrorPlugin !== 'function') {
+    container.textContent = 'Restart CardMirror to activate plugins.';
     return;
   }
 
