@@ -96,6 +96,15 @@ describe('flowPost', () => {
   it('maps a missing app and a dead app to typed errors', async () => {
     expect(await flowPost('nope', '/x', {})).toEqual({ ok: false, error: 'no-such-app' });
     await writeFlowHandshake('dead', 1);
-    expect((await flowPost('dead', '/x', {})).ok).toBe(false);
+    expect(await flowPost('dead', '/x', {})).toEqual({ ok: false, error: 'app-not-running' });
+  });
+  it('maps a stalled body to timeout, not a hang', { timeout: 10_000 }, async () => {
+    const live = await listen((_req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.write('{"ok":'); // headers + partial body, then stall
+    });
+    await writeFlowHandshake('stall', live.port);
+    expect(await flowPost('stall', '/x', {})).toEqual({ ok: false, error: 'timeout' });
+    live.close();
   });
 });

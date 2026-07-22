@@ -97,6 +97,7 @@ async function readHandshake(appId: string): Promise<HandshakeFile | null> {
   }
 }
 
+/** Headers-only deadline — fine for ping, which never reads a body. */
 function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), ms);
@@ -146,24 +147,29 @@ export async function flowPost(
   const hs = await readHandshake(appId);
   if (!hs || hs.kind !== 'flow') return { ok: false, error: 'no-such-app' };
   const routePath = route.startsWith('/') ? route : `/${route}`;
+  // One deadline covers connect, headers, AND the body read: a peer that
+  // sends headers then stalls the body must still map to 'timeout'.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), POST_TIMEOUT_MS);
   let res: Response;
   try {
-    res = await fetchWithTimeout(
-      `http://127.0.0.1:${hs.port}${routePath}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', [BRIDGE_TOKEN_HEADER]: hs.token },
-        body: JSON.stringify(body ?? {}),
-      },
-      POST_TIMEOUT_MS,
-    );
+    res = await fetch(`http://127.0.0.1:${hs.port}${routePath}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', [BRIDGE_TOKEN_HEADER]: hs.token },
+      body: JSON.stringify(body ?? {}),
+      signal: ctl.signal,
+    });
   } catch (err) {
+    clearTimeout(timer);
     if ((err as Error).name === 'AbortError') return { ok: false, error: 'timeout' };
     return { ok: false, error: 'app-not-running' };
   }
   try {
     return { ok: true, status: res.status, body: await res.json() };
-  } catch {
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') return { ok: false, error: 'timeout' };
     return { ok: false, error: 'bad-response' };
+  } finally {
+    clearTimeout(timer);
   }
 }
