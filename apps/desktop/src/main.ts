@@ -1205,12 +1205,35 @@ ipcMain.handle('host:list-cmir-files', async (_event, root: string): Promise<Cmi
   return fresh;
 });
 
-ipcMain.handle('host:write-file-at-path', async (_event, filePath: string, bytes: unknown) => {
-  if (typeof filePath !== 'string' || !filePath) throw new Error('write-file-at-path: no path');
-  // mkdir: bulk convert writes into a destination folder, preserving
-  // the input's subfolder structure.
-  await saveNewDoc(filePath, bytesToBuffer(bytes), { mkdir: true });
-});
+ipcMain.handle(
+  'host:write-file-at-path',
+  async (
+    _event,
+    filePath: string,
+    bytes: unknown,
+    opts?: { failIfExists?: boolean },
+  ) => {
+    if (typeof filePath !== 'string' || !filePath) {
+      throw new Error('write-file-at-path: no path');
+    }
+    // Opt-in existence check. Only the new-speech-doc auto-save asks
+    // for it; bulk convert still overwrites by design. Returns the
+    // 'collision' sentinel so the renderer can defer to Save As -
+    // same contract as host:save-send-doc below.
+    if (opts?.failIfExists) {
+      try {
+        await fs.access(filePath);
+        return 'collision';
+      } catch {
+        /* not there - fall through and write */
+      }
+    }
+    // mkdir: bulk convert writes into a destination folder, preserving
+    // the input's subfolder structure.
+    await saveNewDoc(filePath, bytesToBuffer(bytes), { mkdir: true });
+    return undefined;
+  },
+);
 
 ipcMain.handle(
   'host:save-as',

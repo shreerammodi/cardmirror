@@ -104,6 +104,7 @@ import {
   onCollabCopresenceChange,
 } from './collab/collab-hooks.js';
 import { icon, setIcon } from './icons';
+import { formatSpeechFilename } from './speech-filename.js';
 
 type SlotId = 'slot1' | 'slot2' | 'slot3';
 const SLOT_IDS: SlotId[] = ['slot1', 'slot2', 'slot3'];
@@ -2685,23 +2686,6 @@ class MultiPaneShell {
       slot.paneEl.classList.toggle('pmd-pane-speech', isSpeech);
     }
   }
-}
-
-/** Format a Verbatim-style speech filename: "Speech <round> M-D
- *  H-MMam/pm.<ext>". Extension follows the `defaultSpeechDocFormat`
- *  setting — `.docx` (Verbatim parity) or `.cmir` (autosave-
- *  eligible). */
-function formatSpeechFilename(round: string, format: 'cmir' | 'docx'): string {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const day = now.getDate();
-  let hour = now.getHours();
-  const minute = now.getMinutes();
-  const ampm = hour < 12 ? 'AM' : 'PM';
-  if (hour === 0) hour = 12;
-  else if (hour > 12) hour -= 12;
-  const m = String(minute).padStart(2, '0');
-  return `Speech ${round} ${month}-${day} ${hour}-${m}${ampm}.${format}`;
 }
 
 /** Minimal valid doc — one empty paragraph. Used by `createNewDoc`
