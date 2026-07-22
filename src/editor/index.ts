@@ -57,6 +57,11 @@ import { mountPairingPills, initPairingWiring } from './pairing/pairing-wiring.j
 import { insertMostRecentReceived } from './pairing/inbox-insert.js';
 import { sendViewToStarred } from './pairing/send-to-starred.js';
 import { installExternalInsertHost } from './external-insert-host.js';
+import { installPluginRegistry } from './plugin-registry.js';
+import { createPluginApi } from './plugin-api.js';
+import { installPluginJumpHost } from './plugin-jump-host.js';
+import { isPluginEnabled } from './plugins-store.js';
+import { appVersion } from './install-info.js';
 import {
   decodeModeSwitchMarker,
   encodeModeSwitchMarker,
@@ -8003,6 +8008,45 @@ installExternalInsertHost({
   getFocusedView: () => getActiveView(),
   getFocusedDocTitle: () => activeFile().filename,
 });
+// Plugin system boot: install the window registry + jump host, then
+// load the user-enabled plugins. Gated on the `pluginsEnabled` setting
+// and on a plugin-capable desktop host (no-op on web / old shells).
+async function initPlugins(): Promise<void> {
+  if (!settings.get('pluginsEnabled')) return;
+  const host = getElectronHost();
+  if (!host?.pluginList || !host.pluginLoad) return; // desktop only
+  installPluginRegistry((pluginId) =>
+    createPluginApi(pluginId, {
+      appVersion,
+      getView: () => getActiveView(),
+      getDocIdentity: () => {
+        const a = activeDocIdentity();
+        return { docId: a.docId, docTitle: activeFile().filename || 'Untitled' };
+      },
+      ensureDocId: () => {
+        try {
+          return ensureActiveDocId();
+        } catch {
+          return null;
+        }
+      },
+    }),
+  );
+  installPluginJumpHost({
+    getFocusedView: () => getActiveView(),
+    getFocusedDocId: () => activeDocIdentity().docId,
+  });
+  const installed = (await host.pluginList()) as { id: string; name: string }[];
+  for (const p of installed) {
+    if (!isPluginEnabled(p.id)) continue;
+    const r = await host.pluginLoad(p.id);
+    if (!r.ok) {
+      console.warn(`[plugins] ${p.id} failed to load:`, r.error);
+      showToast(`Plugin ${p.name} failed to load.`);
+    }
+  }
+}
+void initPlugins();
 // Experimental, console-gated AI card cutter. Installs the
 // `__cardcutter('on')` console entry point; does nothing visible
 // until enabled.

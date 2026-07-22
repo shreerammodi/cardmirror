@@ -581,6 +581,14 @@ export class ElectronHost implements Host {
     );
   }
 
+  /** Plugin bridge (v1) — bound only when the preload exposes it, so a
+   *  capability check (`host.pluginJump`) reflects the running shell:
+   *  callers pick their own renderer-side fallback (e.g. jumpToSource's
+   *  doc-not-open-with-title), which a stub wrapper couldn't produce. */
+  readonly pluginJump? = api().pluginJump?.bind(api());
+  readonly flowApps? = api().flowApps?.bind(api());
+  readonly flowPost? = api().flowPost?.bind(api());
+
   async openFile(opts: OpenFileOptions = {}): Promise<OpenedFile | null> {
     const result = await api().openFile({ filters: opts.filters ?? [] });
     if (!result) return null;

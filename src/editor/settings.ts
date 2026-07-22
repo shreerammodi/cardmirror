@@ -1353,6 +1353,10 @@ export interface Settings {
   cardCutterMorphologyShaving: boolean;
   /** Card-cutter: when the model may pose a clarifying question. */
   cardCutterClarifyingQuestions: 'when-ambiguous' | 'always' | 'never';
+  /** Plugins: master switch for the plugin system (the registry, boot
+   *  loading of enabled plugins, and the manage-plugins UI). Off by
+   *  default. Desktop only for v1. */
+  pluginsEnabled: boolean;
   /** Pairing: master switch for cross-machine card sharing (the send /
    *  receive pills + the background poller). Off by default. Desktop only
    *  for v1. */
@@ -1698,6 +1702,7 @@ const DEFAULTS: Settings = {
   cardCutterAcronymSplitting: 'off',
   cardCutterMorphologyShaving: false,
   cardCutterClarifyingQuestions: 'when-ambiguous',
+  pluginsEnabled: false,
   pairingEnabled: false,
   pairingPollSeconds: 30,
   pairingRelayUrl: '',
@@ -4319,6 +4324,7 @@ function sanitize(s: Settings): Settings {
       s.cardCutterClarifyingQuestions === 'always' || s.cardCutterClarifyingQuestions === 'never'
         ? s.cardCutterClarifyingQuestions
         : 'when-ambiguous',
+    pluginsEnabled: s.pluginsEnabled === true,
     pairingEnabled: s.pairingEnabled === true,
     pairingConnectedUntil: Number.isFinite(Number(s.pairingConnectedUntil))
       ? Math.max(0, Number(s.pairingConnectedUntil))
