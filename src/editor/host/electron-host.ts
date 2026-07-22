@@ -454,6 +454,21 @@ interface ElectronAPI {
     error?: string;
     docTitle?: string;
   }): void;
+  /** Plugin bridge (plugin API v1). Optional so an older preload
+   *  tolerates their absence — callers fall back gracefully. The
+   *  jump request/result pair mirrors the external-insert pair
+   *  above (`external:jump` / `external:jump-result`). */
+  pluginJump?(source: string): Promise<Record<string, unknown>>;
+  flowApps?(): Promise<unknown[]>;
+  flowPost?(appId: string, route: string, body: unknown): Promise<Record<string, unknown>>;
+  onExternalJumpRequest?(
+    handler: (req: { requestId: string; source: string }) => void,
+  ): () => void;
+  sendExternalJumpResult?(result: {
+    requestId: string;
+    ok: boolean;
+    error?: string;
+  }): void;
 }
 
 function api(): ElectronAPI {

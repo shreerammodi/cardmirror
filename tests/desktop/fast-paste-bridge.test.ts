@@ -85,7 +85,7 @@ describe('fast-paste-bridge', () => {
     );
     expect(data).toMatchObject({
       app: 'cardmirror',
-      schema: 1,
+      schema: 2,
       appVersion: 'TEST-1.2.3',
       port: ep!.port,
       token: ep!.token,
@@ -101,7 +101,7 @@ describe('fast-paste-bridge', () => {
       ok: true,
       app: 'cardmirror',
       appVersion: 'TEST-1.2.3',
-      schema: 1,
+      schema: 2,
       hasActiveDoc: true,
     });
   });
@@ -259,5 +259,51 @@ describe('fast-paste-bridge', () => {
     await expect(fs.access(file)).rejects.toBeTruthy();
     // Restart so afterEach can stop a server cleanly.
     await bridge.startFastPasteBridge();
+  });
+  describe('POST /jump', () => {
+    it('rejects a missing token', async () => {
+      const ep = bridge.getRunningEndpoint()!;
+      const r = await fetchJson({
+        method: 'POST', path: '/jump', port: ep.port,
+        body: { source: 'x' },
+      });
+      expect(r.status).toBe(403);
+    });
+
+    it('accepts the token in X-Bridge-Token', async () => {
+      const ep = bridge.getRunningEndpoint()!;
+      const r = await fetchJson({
+        method: 'GET', path: '/ping', port: ep.port,
+        headers: { 'x-bridge-token': ep.token },
+      });
+      expect(r.status).toBe(200);
+      expect((r.json as { schema: number }).schema).toBe(2);
+    });
+
+    it('400s on a body without a source string', async () => {
+      const ep = bridge.getRunningEndpoint()!;
+      const r = await fetchJson({
+        method: 'POST', path: '/jump', port: ep.port, token: ep.token,
+        body: {},
+      });
+      expect(r.status).toBe(400);
+    });
+
+    it('reports doc-not-open with the docTitle when no window matches', async () => {
+      // The stub's default window would swallow the jump broadcast
+      // and run out the ack timeout; clear it so getAllWindows()
+      // returns [] and the no-window path resolves immediately.
+      setMockFocusedWindow(null);
+      const ep = bridge.getRunningEndpoint()!;
+      const source =
+        'cmsrc1.' +
+        Buffer.from(JSON.stringify({ docId: 'd', docTitle: 'AT Cap K.docx' })).toString('base64url');
+      const r = await fetchJson({
+        method: 'POST', path: '/jump', port: ep.port, token: ep.token,
+        body: { source },
+      });
+      expect(r.status).toBe(200);
+      expect(r.json).toEqual({ ok: false, error: 'doc-not-open', docTitle: 'AT Cap K.docx' });
+    });
   });
 });

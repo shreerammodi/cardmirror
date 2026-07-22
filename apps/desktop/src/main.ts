@@ -49,7 +49,18 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { gzip as zlibGzip, gunzip as zlibGunzip } from 'node:zlib';
 import { promisify } from 'node:util';
-import { startFastPasteBridge, stopFastPasteBridge } from './fast-paste-bridge.js';
+import {
+  startFastPasteBridge,
+  stopFastPasteBridge,
+  broadcastJump,
+  getRunningEndpoint,
+} from './fast-paste-bridge.js';
+import {
+  writeCardmirrorHandshake,
+  deleteCardmirrorHandshake,
+  scanFlowApps,
+  flowPost,
+} from './bridge-handshake.js';
 
 const DEV_SERVER_URL = 'http://localhost:5173';
 
@@ -2056,6 +2067,21 @@ registerVoiceIpc();
 // Verbatim Flow bridge (Windows COM → Excel). No-ops off Windows.
 registerFlowIpc();
 
+// cardmirror-bridge plugin surface (plugin API v1): jump broadcast via
+// the fast-paste bridge, plus flow-app discovery / POST relay from the
+// shared handshake directory. Tokens never reach the renderer.
+ipcMain.handle('host:plugin-jump', async (_event, source: string) => {
+  if (typeof source !== 'string') return { ok: false, error: 'bad-request' };
+  return broadcastJump(source);
+});
+ipcMain.handle('host:flow-apps', async () => scanFlowApps());
+ipcMain.handle('host:flow-post', async (_event, appId: string, route: string, body: unknown) => {
+  if (typeof appId !== 'string' || typeof route !== 'string') {
+    return { ok: false, error: 'no-such-app' };
+  }
+  return flowPost(appId, route, body);
+});
+
 // Cross-machine card sharing — receive poller + send + inbox. Idle until
 // the renderer sends `host:pairing-configure` with sharing enabled.
 registerPairingIpc();
@@ -2984,11 +3010,22 @@ void app.whenReady().then(() => {
   }
   startAutoUpdate();
   // Fast Debate Paste integration — 127.0.0.1-only HTTP server
-  // exposing `/ping` and `/insert` for the external client. If the
-  // port is taken or the discovery file can't be written, the
+  // exposing `/ping`, `/insert`, and `/jump` for external clients. If
+  // the port is taken or the discovery file can't be written, the
   // bridge silently bails and the client falls back to its
   // keystroke path (the integration is never a hard dependency).
-  void startFastPasteBridge();
+  // Once up, mirror the endpoint into the shared cardmirror-bridge
+  // handshake directory so flow apps can discover us (plugin API v1).
+  void startFastPasteBridge().then(async () => {
+    const ep = getRunningEndpoint();
+    if (ep) {
+      try {
+        await writeCardmirrorHandshake(ep.port, ep.token);
+      } catch {
+        /* non-fatal — flow apps just won't discover us this session */
+      }
+    }
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -3016,4 +3053,5 @@ app.on('before-quit', () => {
   // `host:close-cancelled` if the user backs out.
   quitInitiated = true;
   void stopFastPasteBridge();
+  void deleteCardmirrorHandshake();
 });

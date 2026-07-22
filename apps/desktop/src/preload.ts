@@ -853,6 +853,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('host:flow-create', templatePath),
   /** Pre-warm the persistent PowerShell host (no Excel interaction). */
   flowStartHost: (): Promise<Record<string, unknown>> => ipcRenderer.invoke('host:flow-start'),
+  /** Plugin bridge (plugin API v1 — see the plugin API spec). Jump
+   *  broadcast + flow-app discovery/POST relay resolve through main;
+   *  the jump request/result pair mirrors the external-insert pair
+   *  above (`external:jump` / `external:jump-result`). */
+  pluginJump: (source: string): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke('host:plugin-jump', source),
+  flowApps: (): Promise<unknown[]> => ipcRenderer.invoke('host:flow-apps'),
+  flowPost: (appId: string, route: string, body: unknown): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke('host:flow-post', appId, route, body),
+  onExternalJumpRequest(handler: (req: {
+    requestId: string;
+    source: string;
+  }) => void): () => void {
+    const listener = (
+      _evt: unknown,
+      req: { requestId: string; source: string },
+    ): void => handler(req);
+    ipcRenderer.on('external:jump', listener);
+    return () => ipcRenderer.removeListener('external:jump', listener);
+  },
+  sendExternalJumpResult: (result: {
+    requestId: string;
+    ok: boolean;
+    error?: string;
+  }): void => {
+    ipcRenderer.send('external:jump-result', result);
+  },
 
   /** Card-cutter local plugin (experimental). `pick` opens the native
    *  file dialog and returns the chosen path. `load` asks main for the
