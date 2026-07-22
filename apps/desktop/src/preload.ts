@@ -178,6 +178,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       format: 'cmir' | 'docx';
     } | null>,
 
+  /** stat a file (mtime + size) for the recovery-save staleness check.
+   *  Null when the path is gone / unreadable. */
+  statFile: (filePath: string) =>
+    ipcRenderer.invoke('host:stat-file', filePath) as Promise<{
+      mtimeMs: number;
+      size: number;
+    } | null>,
+
   /** Resolve a doc-relative `.cmir` ref and read it, for a transclusion
    *  refresh. Path resolution + library-root scoping + traversal rejection
    *  happen in main. Resolves null when the source can't be safely read. */

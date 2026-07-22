@@ -719,6 +719,18 @@ ipcMain.handle('host:read-file-at-path', async (_event, filePath: string) => {
   }
 });
 
+// stat a file (mtime + size) for the recovery-save staleness check. Null
+// when the path is gone / unreadable.
+ipcMain.handle('host:stat-file', async (_event, filePath: string) => {
+  if (typeof filePath !== 'string' || !filePath) return null;
+  try {
+    const st = await fs.stat(filePath);
+    return { mtimeMs: st.mtimeMs, size: st.size };
+  } catch {
+    return null;
+  }
+});
+
 // Resolve + read a source .cmir for a transclusion refresh. Given the
 // transcluding doc's own absolute path and a RELATIVE ref, resolve against the
 // doc's directory, then HARD-SCOPE the result to the configured library roots

@@ -176,6 +176,7 @@ interface ElectronAPI {
     handle: string;
     format: 'cmir' | 'docx';
   } | null>;
+  statFile(filePath: string): Promise<{ mtimeMs: number; size: number } | null>;
   readCmirFile(
     docPath: string,
     sourceRef: string,
@@ -564,6 +565,13 @@ export class ElectronHost implements Host {
       handle: result.handle,
       format: result.format,
     };
+  }
+
+  /** Stat a file for the recovery-save staleness check. `handle` is an
+   *  Electron absolute-path string; anything else resolves to null. */
+  async statFile(handle: unknown): Promise<{ mtimeMs: number; size: number } | null> {
+    if (typeof handle !== 'string' || !handle) return null;
+    return api().statFile(handle);
   }
 
   /** Resolve a doc-relative `.cmir` ref and read it (for a transclusion

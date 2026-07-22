@@ -238,6 +238,7 @@ import {
 } from './tag-keymap.js';
 import { enterWithConfiguredStyle } from './enter-style.js';
 import { keepCursorInLeadingBlockOnBlockedMerge, blockBackspaceNodeSelect, blockDeleteNodeSelect } from './boundary-cursor-keymap.js';
+import { journalPredatesFile } from './journal-staleness.js';
 import { indentParagraph, outdentParagraph } from './indent-keymap.js';
 import {
   registerRibbonTooltip,
@@ -6439,6 +6440,9 @@ function commitSaveResult(filename: string, handle: unknown | null, format: 'cmi
     setCurrentDocHandle(handle);
     currentDocFormat = format;
   }
+  // A committed save (e.g. Save-As of a recovered draft) writes the content
+  // to a real file, so it's no longer a stale-recovery-overwrite candidate.
+  recoveredDocJournalSavedAt.delete(activeDocIdentity().sessionUid);
   updateWindowTitle();
   // Format/handle may have changed (e.g., Save-As from unsaved →
   // .cmir-with-handle), which flips the autosave button between
@@ -7016,6 +7020,24 @@ async function runSaveFlowInner(): Promise<boolean> {
   if (!(await getHost().ensureWritable(file.handle))) {
     return runSaveAsFlow();
   }
+  // Recovered-draft guard: a doc opened from the recovery sidebar may be about
+  // to overwrite a file that's NEWER than the journal it came from (a stale
+  // journal from an older session). The changed-on-disk guard can't catch this
+  // — the file was never read this session — so run the same stale-overwrite
+  // confirmation as the sidebar's Save, on the first in-place save. Cleared
+  // once the doc is written.
+  const activeUid = activeDocIdentity().sessionUid;
+  const recoveredSavedAt = recoveredDocJournalSavedAt.get(activeUid);
+  if (recoveredSavedAt) {
+    const disk = await getHost().statFile(file.handle).catch(() => null);
+    if (
+      disk &&
+      journalPredatesFile(recoveredSavedAt, disk.mtimeMs) &&
+      !(await confirmStaleRecoveryOverwrite(file.filename ?? 'this file', recoveredSavedAt, disk.mtimeMs))
+    ) {
+      return false;
+    }
+  }
   // Saving in place to a .docx flattens live views / linked copies — confirm
   // first. This also covers the close/quit save prompts, which route here.
   if (file.format === 'docx' && !(await confirmDocxDropsLiveLinks())) return false;
@@ -7069,6 +7091,8 @@ async function runSaveFlowInner(): Promise<boolean> {
       if (choice !== 'overwrite') return false;
       await getHost().saveExisting(file.handle, bytes, { force: true });
     }
+    // Written to its file — no longer a stale-recovery-overwrite candidate.
+    recoveredDocJournalSavedAt.delete(activeUid);
     if (docId) {
       learnStore.registerDoc({
         docId,
@@ -8638,6 +8662,10 @@ async function runStartupRecoveryInner(): Promise<void> {
       return saveRecoveryEntry(entry);
     },
     onOpen: async (entry) => {
+      // Remember this is a recovered draft so its FIRST normal Ctrl-S runs the
+      // same stale-overwrite guard as the sidebar's Save (the open-then-save
+      // path has no on-disk baseline to catch it otherwise).
+      recoveredDocJournalSavedAt.set(entry.uid, entry.savedAt);
       // Multi-doc opens into a slot; single-doc replaces the
       // current view.
       if (multiDocActive && multiDocOnRecoveredDoc) {
@@ -8683,6 +8711,46 @@ async function runStartupRecoveryInner(): Promise<void> {
  *  Deletes the journal entry on success so it doesn't reappear in
  *  the recovery list next launch. Returns whether the user
  *  committed to a save. */
+/** Second confirmation before a recovery Save overwrites a file that's newer
+ *  than the draft. Safe choice (Keep the file) is the default — Enter, Esc,
+ *  and Cancel all resolve to NOT overwriting; only an explicit pick of the
+ *  destructive option returns true. */
+async function confirmStaleRecoveryOverwrite(
+  name: string,
+  journalSavedAtIso: string,
+  fileMtimeMs: number,
+): Promise<boolean> {
+  const fmt = (ms: number): string =>
+    new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  const displayName = name || 'this file';
+  const choice = await promptForRouteChoice<'keep' | 'overwrite'>({
+    message: `“${displayName}” on disk is newer than this recovered draft.`,
+    choices: [
+      {
+        value: 'keep',
+        label: 'Keep the file on disk',
+        description: `Leaves the newer file (changed ${fmt(fileMtimeMs)}) as-is.`,
+      },
+      {
+        value: 'overwrite',
+        label: 'Replace it with the older draft',
+        description: `Overwrites the newer file with this draft (from ${fmt(
+          Date.parse(journalSavedAtIso),
+        )}). The newer changes are lost and this can’t be undone.`,
+      },
+    ],
+    cancelLabel: 'Cancel',
+  });
+  return choice === 'overwrite';
+}
+
+/** Journal `savedAt` (ISO) for each recovered-but-not-yet-saved doc, keyed by
+ *  session uid. A doc opened from the recovery sidebar goes in here so its
+ *  FIRST normal in-place save can run the same stale-overwrite guard as the
+ *  sidebar's own Save; the entry clears once the doc has been written to its
+ *  file. Keyed by uid so single-doc and three-pane share one map. */
+const recoveredDocJournalSavedAt = new Map<string, string>();
+
 async function saveRecoveryEntry(entry: JournalEntry): Promise<boolean> {
   const host = getHost();
   // In-place save when we have a handle and the host supports
@@ -8690,6 +8758,16 @@ async function saveRecoveryEntry(entry: JournalEntry): Promise<boolean> {
   // PM to either cmir-out (cheap) or docx-out (toDocx).
   if (entry.handle && entry.format && host.supportsInPlaceSave) {
     try {
+      // Stale-journal guard: if the file on disk is newer than this journal,
+      // it was edited (and saved) in a session AFTER the crash that left this
+      // journal behind. Writing the journal would overwrite that newer work,
+      // so require an explicit confirmation first. (A real recovery journal is
+      // newer than the last save, so it never trips this.)
+      const disk = await host.statFile(entry.handle).catch(() => null);
+      if (disk && journalPredatesFile(entry.savedAt, disk.mtimeMs)) {
+        const proceed = await confirmStaleRecoveryOverwrite(entry.filename, entry.savedAt, disk.mtimeMs);
+        if (!proceed) return false;
+      }
       const bytes = await reserializeJournalAs(entry, entry.format);
       if (typeof entry.handle !== 'string') return false;
       await host.saveExisting(entry.handle, bytes);

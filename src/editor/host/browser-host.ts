@@ -435,6 +435,22 @@ export class BrowserHost implements Host {
     await writable.close();
   }
 
+  /** Best-effort file stat for the recovery-save staleness check. Reads
+   *  `lastModified`/`size` off the File System Access handle's current File.
+   *  Returns null when there's no readable handle (so the caller skips the
+   *  check rather than blocking) — `getFile()` needs only read access, which
+   *  a recoverable handle already has. */
+  async statFile(handle: unknown): Promise<{ mtimeMs: number; size: number } | null> {
+    const fh = handle as FileSystemFileHandle | null;
+    if (!fh || typeof fh.getFile !== 'function') return null;
+    try {
+      const file = await fh.getFile();
+      return { mtimeMs: file.lastModified, size: file.size };
+    } catch {
+      return null;
+    }
+  }
+
   /** Ensure write access to `handle`, prompting if necessary. MUST be called
    *  from a user gesture (Save / autosave toggle) so the readwrite prompt can
    *  show. Returns whether write access is granted. */

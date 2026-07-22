@@ -171,6 +171,13 @@ export interface Host {
    *  are always writable) and where there's no permission model. */
   ensureWritable(handle: unknown): Promise<boolean>;
 
+  /** Last-modified time + size of the file `handle` points at, or `null`
+   *  when it doesn't exist / can't be read without a prompt. Used by the
+   *  crash-recovery Save to detect a journal that's older than the file it
+   *  would overwrite (a stale journal from a previous session), so it can
+   *  warn before destroying newer on-disk work. */
+  statFile(handle: unknown): Promise<{ mtimeMs: number; size: number } | null>;
+
   /** Whether this host can actually perform in-place saves. The
    *  caller uses this to decide whether to even surface the
    *  silent-Save affordance — when false, "Save" devolves into
