@@ -11,6 +11,7 @@ import { isPluginEnabled, setPluginEnabled } from '../../src/editor/plugins-stor
 const deps = {
   appVersion: '0.1.0-test',
   getView: () => null,
+  findViewForDocId: () => null,
   getDocIdentity: () => null,
   ensureDocId: () => null,
 };

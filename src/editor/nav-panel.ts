@@ -48,7 +48,7 @@ function collectOutlineWithWindows(doc: PMNode): HeadingEntry[] {
   // position (no base heading shares a self_ref's pos), preserving inner order.
   return [...base, ...projected].sort((a, b) => a.pos - b.pos);
 }
-import { preciseScrollIntoView } from './precise-scroll.js';
+import { preciseScrollIntoView, scrollToHeadingId } from './precise-scroll.js';
 import {
   collectHeadings,
   computeHeadingRange,
@@ -2090,13 +2090,7 @@ export class NavigationPanel {
       // Fall through to scroll-only behavior if the position is stale.
     }
 
-    if (entry.id) {
-      const target = this.view.dom.querySelector<HTMLElement>(`[data-id="${cssEscape(entry.id)}"]`);
-      if (target) {
-        preciseScrollIntoView(this.view, target);
-        return;
-      }
-    }
+    if (entry.id && scrollToHeadingId(this.view, entry.id)) return;
 
     // Fallback: resolve the doc position and scroll the editor's
     // closest containing element into view.
@@ -2144,10 +2138,4 @@ function maybeCloseContextMenu(e: MouseEvent | KeyboardEvent): void {
 }
 
 /** Minimal CSS.escape polyfill for jsdom-style environments. */
-function cssEscape(s: string): string {
-  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
-    return CSS.escape(s);
-  }
-  return s.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
-}
 

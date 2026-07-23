@@ -74,6 +74,10 @@ export interface CardMirrorPluginApi {
 export interface PluginApiDeps {
   appVersion: string;
   getView(): EditorView | null;
+  /** Live view of any pane in this window holding `docId` (focused or
+   *  not), or null. Lets a jump land locally without the IPC hop even
+   *  when the target doc is in an unfocused pane. */
+  findViewForDocId(docId: string): EditorView | null;
   /** Identity of the focused doc; docId null until minted. */
   getDocIdentity(): { docId: string | null; docTitle: string } | null;
   /** Mint + stamp a docId for the focused doc; null when no doc. */
@@ -111,10 +115,9 @@ export function createPluginApi(pluginId: string, deps: PluginApiDeps): CardMirr
     async jumpToSource(token) {
       const payload = parseSourceToken(token);
       if (!payload) return { ok: false, error: 'bad-request' };
-      const view = deps.getView();
-      const ident = deps.getDocIdentity();
-      if (view && ident?.docId === payload.docId) {
-        const local = jumpToTokenInView(view, ident.docId, token);
+      const view = deps.findViewForDocId(payload.docId);
+      if (view) {
+        const local = jumpToTokenInView(view, payload.docId, token);
         if (local !== 'not-mine') return local;
       }
       const host = getElectronHost();

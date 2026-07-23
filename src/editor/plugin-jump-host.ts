@@ -5,6 +5,7 @@
  */
 import type { EditorView } from 'prosemirror-view';
 import { jumpToTokenInView } from './plugin-jump.js';
+import { parseSourceToken } from './plugin-source-token.js';
 
 interface JumpRequest {
   requestId: string;
@@ -25,8 +26,9 @@ interface JumpBridge {
 }
 
 export interface PluginJumpHostOpts {
-  getFocusedView: () => EditorView | null;
-  getFocusedDocId: () => string | null;
+  /** Return a live view for `docId` if any pane in this window has that
+   *  doc open (focused or not), else null. */
+  findViewForDocId: (docId: string) => EditorView | null;
 }
 
 export function installPluginJumpHost(opts: PluginJumpHostOpts): () => void {
@@ -34,12 +36,19 @@ export function installPluginJumpHost(opts: PluginJumpHostOpts): () => void {
   if (!bridge) return () => {};
   return bridge.onExternalJumpRequest((req) => {
     const requestId = req.requestId;
-    const view = opts.getFocusedView();
+    // Parse FIRST: a garbage token is `bad-request` regardless of which
+    // panes are open, so it never masquerades as `not-mine`.
+    const payload = parseSourceToken(req.source);
+    if (!payload) {
+      bridge.sendExternalJumpResult({ requestId, ok: false, error: 'bad-request' });
+      return;
+    }
+    const view = opts.findViewForDocId(payload.docId);
     if (!view) {
       bridge.sendExternalJumpResult({ requestId, ok: false, error: 'not-mine' });
       return;
     }
-    const res = jumpToTokenInView(view, opts.getFocusedDocId(), req.source);
+    const res = jumpToTokenInView(view, payload.docId, req.source);
     if (res === 'not-mine') {
       bridge.sendExternalJumpResult({ requestId, ok: false, error: 'not-mine' });
     } else if (res.ok) {

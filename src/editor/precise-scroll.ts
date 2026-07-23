@@ -79,6 +79,27 @@ export type PreciseScrollBlock = 'start' | 'center';
  *  passes. Latest scroll wins. */
 let scrollGeneration = 0;
 
+/** Escape a value for use inside a CSS attribute selector. */
+function cssEscape(s: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(s);
+  return s.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
+}
+
+/** Scroll a heading into view by its stable `data-id`, the reliable
+ *  nav-pane jump path. Returns true when the element was found and
+ *  scrolled; false when it isn't in the rendered DOM (e.g. tests, or a
+ *  cv:auto-skipped region the caller must fall back for). */
+export function scrollToHeadingId(
+  view: EditorView,
+  headingId: string,
+  block: PreciseScrollBlock = 'start',
+): boolean {
+  const target = view.dom.querySelector<HTMLElement>(`[data-id="${cssEscape(headingId)}"]`);
+  if (!target) return false;
+  preciseScrollIntoView(view, target, block);
+  return true;
+}
+
 export function preciseScrollIntoView(
   _view: EditorView,
   target: HTMLElement,

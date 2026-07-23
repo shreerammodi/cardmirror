@@ -887,6 +887,11 @@ let multiDocSetFocusedFile:
   | null = null;
 /** Set the focused DocRecord's Learn docId (minted/forked lazily). */
 let multiDocSetFocusedDocId: ((docId: string) => void) | null = null;
+/** Find the live view of any pane in this window (focused or not) whose
+ *  DocRecord carries `docId`, else null. Backs the inbound-jump host and
+ *  the plugin API's local-first jump, so a doc open in an unfocused pane
+ *  jumps without the main-process broadcast hop. */
+let multiDocFindViewForDocId: ((docId: string) => EditorView | null) | null = null;
 /** Crash-recovery hook: clear the focused pane's journal after a
  *  successful save in multi-doc mode. The shell knows the
  *  DocRecord's uid; the editor only knows it has a focused doc. */
@@ -962,6 +967,8 @@ export function enableMultiDocMode(opts: {
   } | null;
   setFocusedFile?: (file: { filename: string; handle: unknown | null; format: 'cmir' | 'docx' | null }) => void;
   setFocusedDocId?: (docId: string) => void;
+  /** Live view of any pane holding `docId` (focused or background), or null. */
+  findViewForDocId?: (docId: string) => EditorView | null;
   getAllFilenames?: () => (string | null)[];
   /** Filename of the open doc with `uid` (across all panes + stacks), or null.
    *  Lets collab publish/label a session with its OWNER doc's name rather than
@@ -1018,6 +1025,7 @@ export function enableMultiDocMode(opts: {
   multiDocGetFocusedFile = opts.getFocusedFile ?? null;
   multiDocSetFocusedFile = opts.setFocusedFile ?? null;
   multiDocSetFocusedDocId = opts.setFocusedDocId ?? null;
+  multiDocFindViewForDocId = opts.findViewForDocId ?? null;
   multiDocGetAllFilenames = opts.getAllFilenames ?? null;
   multiDocGetFilenameForUid = opts.getFilenameForUid ?? null;
   multiDocCreateSessionDoc = opts.createSessionDoc ?? null;
@@ -5397,6 +5405,14 @@ function activeDocIdentity(): { docId: string | null; sessionUid: string } {
   return { docId: currentDocId, sessionUid: currentDocUid };
 }
 
+/** Find the live view for a doc open anywhere in THIS window — any pane
+ *  in multi-pane, the single view in single-doc — regardless of focus.
+ *  Returns null when no open doc has that id. */
+function findViewForDocId(docId: string): EditorView | null {
+  if (multiDocActive && multiDocFindViewForDocId) return multiDocFindViewForDocId(docId);
+  return currentDocId === docId ? getActiveView() : null;
+}
+
 /** Write the active doc's persistent docId back into its record
  *  (focused pane in multi-pane, module global in single-doc). */
 function setActiveDocId(docId: string): void {
@@ -8013,8 +8029,7 @@ installExternalInsertHost({
 // answer `external:jump`, regardless of the `pluginsEnabled` switch.
 // No-ops when the preload bridge is absent (web / old shells).
 installPluginJumpHost({
-  getFocusedView: () => getActiveView(),
-  getFocusedDocId: () => activeDocIdentity().docId,
+  findViewForDocId: (docId) => findViewForDocId(docId),
 });
 // Plugin system boot: install the window registry, then load the
 // user-enabled plugins. Gated on the `pluginsEnabled` setting and on
@@ -8027,6 +8042,7 @@ async function initPlugins(): Promise<void> {
     createPluginApi(pluginId, {
       appVersion,
       getView: () => getActiveView(),
+      findViewForDocId: (docId) => findViewForDocId(docId),
       getDocIdentity: () => {
         const a = activeDocIdentity();
         return { docId: a.docId, docTitle: activeFile().filename || 'Untitled' };

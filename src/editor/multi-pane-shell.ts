@@ -2140,6 +2140,18 @@ class MultiPaneShell {
     if (rec) rec.docId = docId;
   }
 
+  /** View of any pane holding `docId` — every slot's full stack (visible
+   *  AND background), so an inbound jump reaches a doc open in an
+   *  unfocused pane. Returns null when no open doc has that id. */
+  findViewForDocId(docId: string): EditorView | null {
+    for (const id of SLOT_IDS) {
+      for (const rec of this.slots[id].stack) {
+        if (rec.docId === docId) return rec.view;
+      }
+    }
+    return null;
+  }
+
   /** Filenames in every slot, in slot order. Empty slots map to
    *  `null` so callers can preserve positional context if they
    *  want (or filter the nulls out). Used by the OS window-title
@@ -3152,6 +3164,7 @@ export function mountMultiPaneShell(): void {
     getFocusedFile: () => shell!.getFocusedFile(),
     setFocusedFile: (f) => shell!.setFocusedFile(f),
     setFocusedDocId: (id) => shell!.setFocusedDocId(id),
+    findViewForDocId: (id) => shell!.findViewForDocId(id),
     getAllFilenames: () => shell!.getAllFilenames(),
     getFilenameForUid: (uid) => shell!.filenameForUid(uid),
     createSessionDoc: () => shell!.createSessionDocIntoSlot(),
