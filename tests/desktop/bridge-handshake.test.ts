@@ -98,6 +98,19 @@ describe('flowPost', () => {
     await writeFlowHandshake('dead', 1);
     expect(await flowPost('dead', '/x', {})).toEqual({ ok: false, error: 'app-not-running' });
   });
+  it('rejects out-of-range and non-integer ports', async () => {
+    await writeFlowHandshake('badport', 0); // helper writes port 0
+    await writeFlowHandshake('floatport', 1.5 as any);
+    expect(await flowPost('badport', '/x', {})).toEqual({ ok: false, error: 'no-such-app' });
+    expect(await flowPost('floatport', '/x', {})).toEqual({ ok: false, error: 'no-such-app' });
+  });
+  it('ignores oversized handshake files', async () => {
+    await fs.writeFile(path.join(dir, 'big.json'), '"' + 'x'.repeat(70 * 1024) + '"');
+    expect((await scanFlowApps()).map((a) => a.id)).not.toContain('big');
+  });
+  it('rejects uppercase app ids per the published contract', async () => {
+    expect(await flowPost('Ebb', '/x', {})).toEqual({ ok: false, error: 'no-such-app' });
+  });
   it('maps a stalled body to timeout, not a hang', { timeout: 10_000 }, async () => {
     const live = await listen((_req, res) => {
       res.setHeader('Content-Type', 'application/json');

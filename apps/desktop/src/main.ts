@@ -3082,10 +3082,6 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin' || quitInitiated) app.quit();
 });
 
-// Tear down the Fast Debate Paste bridge before the app exits so
-// the discovery file goes with us (stale-file tolerance is
-// designed in, but cleaning up our own state means the next launch
-// starts from a known-empty state).
 app.on('before-quit', () => {
   // Remember that a genuine quit was asked for. The per-window
   // `close` handlers will `preventDefault()` this quit to confirm
@@ -3093,6 +3089,17 @@ app.on('before-quit', () => {
   // exit once the confirmations resolve. Cleared by
   // `host:close-cancelled` if the user backs out.
   quitInitiated = true;
+});
+
+// Tear down the Fast Debate Paste bridge only once the quit truly
+// proceeds. `will-quit` fires after every window has confirmed and
+// `window-all-closed` has re-issued the quit — never on a quit the
+// user cancelled (that clears `quitInitiated`, so the second
+// `app.quit()` never runs and `will-quit` never fires). Doing the
+// teardown here instead of in `before-quit` keeps the bridge and
+// both discovery files alive for the rest of the session after a
+// cancelled quit. Stale-file tolerance still covers a hard exit.
+app.on('will-quit', () => {
   void stopFastPasteBridge();
   void deleteCardmirrorHandshake();
 });

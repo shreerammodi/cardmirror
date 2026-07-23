@@ -16,7 +16,8 @@ export const BRIDGE_SCHEMA = 1;
 export const BRIDGE_TOKEN_HEADER = 'X-Bridge-Token';
 const PING_TIMEOUT_MS = 1500;
 const POST_TIMEOUT_MS = 3000;
-const APP_ID_RE = /^[a-z0-9][a-z0-9-]*$/i;
+const APP_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+const MAX_HANDSHAKE_BYTES = 64 * 1024;
 
 export interface FlowAppInfo {
   id: string;
@@ -73,10 +74,12 @@ export async function deleteCardmirrorHandshake(): Promise<void> {
 async function readHandshake(appId: string): Promise<HandshakeFile | null> {
   if (!APP_ID_RE.test(appId)) return null;
   try {
-    const raw = await fs.readFile(path.join(bridgeDirPath(), `${appId}.json`), 'utf8');
+    const filePath = path.join(bridgeDirPath(), `${appId}.json`);
+    if ((await fs.stat(filePath)).size > MAX_HANDSHAKE_BYTES) return null;
+    const raw = await fs.readFile(filePath, 'utf8');
     const obj = JSON.parse(raw) as Partial<HandshakeFile>;
     if (
-      typeof obj.port !== 'number' ||
+      !Number.isInteger(obj.port) || (obj.port as number) < 1 || (obj.port as number) > 65535 ||
       typeof obj.token !== 'string' ||
       typeof obj.kind !== 'string' ||
       typeof obj.app !== 'string'
@@ -88,13 +91,20 @@ async function readHandshake(appId: string): Promise<HandshakeFile | null> {
       app: obj.app,
       appVersion: typeof obj.appVersion === 'string' ? obj.appVersion : '',
       kind: obj.kind,
-      port: obj.port,
+      port: obj.port as number,
       token: obj.token,
       pid: typeof obj.pid === 'number' ? obj.pid : 0,
     };
   } catch {
     return null;
   }
+}
+
+/** An aborted/timed-out fetch surfaces as AbortError, a nested
+ *  AbortError cause, or (undici's deadline) TimeoutError. */
+function isTimeoutError(err: unknown): boolean {
+  const e = err as { name?: string; cause?: { name?: string } };
+  return e?.name === 'AbortError' || e?.name === 'TimeoutError' || e?.cause?.name === 'AbortError';
 }
 
 /** Headers-only deadline — fine for ping, which never reads a body. */
@@ -126,17 +136,24 @@ export async function scanFlowApps(): Promise<FlowAppInfo[]> {
   } catch {
     return [];
   }
-  const out: FlowAppInfo[] = [];
+  const candidates: Array<{ id: string; hs: HandshakeFile }> = [];
   for (const name of names) {
     if (!name.endsWith('.json')) continue;
     const id = name.slice(0, -'.json'.length);
     const hs = await readHandshake(id);
     if (!hs || hs.kind !== 'flow') continue;
-    if (await ping(hs)) {
-      out.push({ id, app: hs.app, appVersion: hs.appVersion, schema: hs.schema, kind: 'flow' });
-    }
+    candidates.push({ id, hs });
   }
-  return out;
+  const alive = await Promise.all(candidates.map((c) => ping(c.hs)));
+  return candidates
+    .filter((_, i) => alive[i])
+    .map(({ id, hs }) => ({
+      id,
+      app: hs.app,
+      appVersion: hs.appVersion,
+      schema: hs.schema,
+      kind: 'flow' as const,
+    }));
 }
 
 export async function flowPost(
@@ -161,13 +178,13 @@ export async function flowPost(
     });
   } catch (err) {
     clearTimeout(timer);
-    if ((err as Error).name === 'AbortError') return { ok: false, error: 'timeout' };
+    if (isTimeoutError(err)) return { ok: false, error: 'timeout' };
     return { ok: false, error: 'app-not-running' };
   }
   try {
     return { ok: true, status: res.status, body: await res.json() };
   } catch (err) {
-    if ((err as Error).name === 'AbortError') return { ok: false, error: 'timeout' };
+    if (isTimeoutError(err)) return { ok: false, error: 'timeout' };
     return { ok: false, error: 'bad-response' };
   } finally {
     clearTimeout(timer);
