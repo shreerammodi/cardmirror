@@ -32,9 +32,11 @@ import {
   ribbonKeyStringFor,
   formatKeyForDisplay,
   commandLabelFor,
+  effectivePluginDefaultKeys,
+  foldKeyString,
   type AnyCommandId,
 } from './ribbon-commands.js';
-import { pluginCommandIds, pluginDefaultKey } from './plugin-registry.js';
+import { pluginCommandIds } from './plugin-registry.js';
 import { RIBBON_GROUPS } from './ribbon-groups.js';
 import { isRibbonCommandAvailable } from './ribbon-availability.js';
 import { settings, type KeyboardMacro } from './settings.js';
@@ -51,12 +53,15 @@ function getOverrides(): Partial<Record<string, string | string[]>> {
  *  out at the chip-rendering level). */
 function resolvedKeys(id: AnyCommandId): string[] {
   const overrides = getOverrides();
+  // Plugin ids resolve through the shared helper so a plugin default that
+  // loses a static collision doesn't show a chip that never dispatches.
+  if (!(id in (DEFAULT_RIBBON_KEYS as Record<string, unknown>))) {
+    return effectivePluginDefaultKeys(id, overrides);
+  }
   const spec =
     id in overrides
       ? overrides[id]!
-      : ((DEFAULT_RIBBON_KEYS as Record<string, string | string[] | undefined>)[id] ??
-        pluginDefaultKey(id) ??
-        []);
+      : ((DEFAULT_RIBBON_KEYS as Record<string, string | string[] | undefined>)[id] ?? []);
   const arr = Array.isArray(spec) ? spec : [spec];
   return arr.filter((k) => typeof k === 'string') as string[];
 }
@@ -124,9 +129,10 @@ function findConflict(
   key: string,
   excludeId: AnyCommandId,
 ): AnyCommandId | null {
+  const folded = foldKeyString(key);
   for (const id of [...RIBBON_COMMAND_IDS, ...pluginCommandIds()]) {
     if (id === excludeId) continue;
-    if (resolvedKeys(id).includes(key)) return id;
+    if (resolvedKeys(id).some((k) => foldKeyString(k) === folded)) return id;
   }
   return null;
 }
@@ -135,7 +141,8 @@ function findConflict(
  *  default exactly, the override is dropped; otherwise the trimmed
  *  list becomes the new override. */
 function removeKeyFromCommand(id: AnyCommandId, key: string): void {
-  const current = resolvedKeys(id).filter((k) => k !== key);
+  const folded = foldKeyString(key);
+  const current = resolvedKeys(id).filter((k) => foldKeyString(k) !== folded);
   setOverrideKeys(id, current);
 }
 

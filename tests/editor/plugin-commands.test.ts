@@ -9,6 +9,7 @@ import {
   buildRibbonKeymap,
   getRibbonCommand,
   ribbonCommandForKey,
+  effectivePluginDefaultKeys,
   commandLabelFor,
   commandAliasesFor,
 } from '../../src/editor/ribbon-commands.js';
@@ -25,6 +26,18 @@ function registerDemo(run: () => void): void {
     apiVersion: 1,
     commands: [
       { id: 'demo.hello', label: 'Say Hello', keywords: ['greet'], defaultKey: 'Mod-Alt-9', run },
+    ],
+  });
+}
+
+function registerDemoWithKey(defaultKey: string): void {
+  installPluginRegistry(() => stubApi);
+  registerPluginDefinition({
+    id: 'demo',
+    name: 'Demo',
+    apiVersion: 1,
+    commands: [
+      { id: 'demo.hello', label: 'Say Hello', keywords: ['greet'], defaultKey, run: () => {} },
     ],
   });
 }
@@ -85,5 +98,23 @@ describe('plugin commands in the chokepoints', () => {
     }
     expect(run).not.toHaveBeenCalled();
     expect(ribbonCommandForKey('F4')).toBe('setPocket');
+  });
+  it('a plugin default differing only in case never steals a static key', () => {
+    // toggleReadingMarker's static default is 'Mod-Shift-d'.
+    registerDemoWithKey('Mod-Shift-D');
+    const map = buildRibbonKeymap({});
+    expect(map['Mod-Shift-D']).toBeUndefined();
+    expect(ribbonCommandForKey('Mod-Shift-D')).not.toBe('demo.hello');
+  });
+  it('a suppressed plugin default is not displayed as bound', () => {
+    // F4 is setPocket's static default — the plugin default loses.
+    registerDemoWithKey('F4');
+    expect(effectivePluginDefaultKeys('demo.hello', {})).toEqual([]);
+  });
+  it('an overridden plugin command displays the override only', () => {
+    registerDemoWithKey('Mod-Alt-9');
+    expect(effectivePluginDefaultKeys('demo.hello', { 'demo.hello': 'Mod-Alt-8' })).toEqual([
+      'Mod-Alt-8',
+    ]);
   });
 });

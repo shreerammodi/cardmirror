@@ -106,9 +106,9 @@ import {
   formatKeyForDisplay,
   commandLabelFor,
   commandAliasesFor,
+  effectivePluginDefaultKeys,
   type AnyCommandId,
 } from './ribbon-commands.js';
-import { pluginDefaultKey } from './plugin-registry.js';
 import { availableRibbonCommandIds } from './ribbon-availability.js';
 
 // ── Warm-cache machinery (module-level, shared by the open palette and
@@ -381,11 +381,15 @@ function searchDropzoneSource(query: string): PaletteResult[] {
 
 /** The current display keybinding for a command (first binding), or ''. */
 function commandKeyDisplay(id: AnyCommandId): string {
-  const spec =
-    settings.get('ribbonKeyOverrides')[id] ??
-    (DEFAULT_RIBBON_KEYS as Record<string, string | string[] | undefined>)[id] ??
-    pluginDefaultKey(id) ??
-    '';
+  const overrides = settings.get('ribbonKeyOverrides');
+  const isStatic = id in (DEFAULT_RIBBON_KEYS as Record<string, unknown>);
+  // Plugin ids: show only the keys that survive static collision, so the
+  // palette never advertises a chord the plugin doesn't actually own.
+  const spec = isStatic
+    ? (overrides[id] ??
+      (DEFAULT_RIBBON_KEYS as Record<string, string | string[] | undefined>)[id] ??
+      '')
+    : effectivePluginDefaultKeys(id, overrides);
   const first = Array.isArray(spec) ? spec[0] : spec;
   return first ? formatKeyForDisplay(first) : '';
 }
