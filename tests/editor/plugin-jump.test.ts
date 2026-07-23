@@ -122,6 +122,30 @@ describe('installPluginJumpHost', () => {
     );
   });
 
+  it('raises a background stacked doc so the jump lands in a visible view', () => {
+    const bridge = installStubBridge();
+    // Model a slot stack: vA visible, vB stacked-but-hidden. The shell's
+    // findViewForDocId raises the matching record before returning it, so
+    // the host selects in what the user actually sees.
+    const vA = makeView(doc);
+    const vB = makeView(doc);
+    let visible = vA;
+    installPluginJumpHost({
+      findViewForDocId: (docId) => {
+        if (docId !== 'dB') return null;
+        visible = vB; // showRecord equivalent: raise the background record
+        return vB;
+      },
+    });
+    const token = mintSourceToken({ docId: 'dB', docTitle: 'B', headingId: id, anchor: null });
+    bridge.fire(token);
+    expect(bridge.acks).toEqual([{ requestId: 'r1', ok: true }]);
+    expect(visible).toBe(vB); // the hidden doc was raised
+    expect(vB.state.doc.resolve(vB.state.selection.from).parent.textContent).toBe(
+      'Target heading',
+    );
+  });
+
   it('refuses to land inside a self_ref mirror', () => {
     const mirror = schema.nodes['self_ref']!.create(
       { source_heading_id: 'src', source_label: 'L' },

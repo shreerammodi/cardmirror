@@ -116,10 +116,9 @@ export function createPluginApi(pluginId: string, deps: PluginApiDeps): CardMirr
       const payload = parseSourceToken(token);
       if (!payload) return { ok: false, error: 'bad-request' };
       const view = deps.findViewForDocId(payload.docId);
-      if (view) {
-        const local = jumpToTokenInView(view, payload.docId, token);
-        if (local !== 'not-mine') return local;
-      }
+      // A matched view always carries payload.docId, so the local jump is
+      // authoritative — jumpToTokenInView can't answer 'not-mine' here.
+      if (view) return jumpToTokenInView(view, payload.docId, token) as JumpResult;
       const host = getElectronHost();
       if (host?.pluginJump) return (await host.pluginJump(token)) as JumpResult;
       return { ok: false, error: 'doc-not-open', docTitle: payload.docTitle };

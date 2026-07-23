@@ -2142,11 +2142,21 @@ class MultiPaneShell {
 
   /** View of any pane holding `docId` — every slot's full stack (visible
    *  AND background), so an inbound jump reaches a doc open in an
-   *  unfocused pane. Returns null when no open doc has that id. */
+   *  unfocused pane. A background (stacked-but-hidden) record is RAISED
+   *  to its slot's visible position first: its view stays memory-resident
+   *  while hidden but its `editorEl` is detached, so jumping into it would
+   *  select in an invisible editor and the user would see nothing.
+   *  `showRecord` mounts synchronously (appendChild), so on return the
+   *  view's DOM is attached and `scrollToHeadingId` has an element to hit.
+   *  Returns null when no open doc has that id. */
   findViewForDocId(docId: string): EditorView | null {
     for (const id of SLOT_IDS) {
-      for (const rec of this.slots[id].stack) {
-        if (rec.docId === docId) return rec.view;
+      const slot = this.slots[id];
+      for (const rec of slot.stack) {
+        if (rec.docId === docId) {
+          slot.showRecord(rec); // no-op when already visible
+          return rec.view;
+        }
       }
     }
     return null;
