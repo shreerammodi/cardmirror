@@ -62,7 +62,12 @@ export function registerPluginDefinition(
       error: `unsupported apiVersion ${String(def.apiVersion)} (this CardMirror supports ${PLUGIN_API_VERSION})`,
     };
   }
-  if (plugins.has(def.id)) return { ok: false, error: `plugin "${def.id}" already registered` };
+  // Ids this plugin already owns — so a re-registration (e.g. re-enable
+  // re-runs the bundle) doesn't trip the global command-collision check
+  // against its own previously-registered commands.
+  const ownIds = new Set(
+    [...commands.entries()].filter(([, e]) => e.pluginId === def.id).map(([id]) => id),
+  );
   const raw = def.commands;
   const cmds = Array.isArray(raw) ? [...raw] : null;
   if (!cmds) return { ok: false, error: 'commands must be an array' };
@@ -93,11 +98,18 @@ export function registerPluginDefinition(
     ) {
       return { ok: false, error: `command "${id}" has invalid defaultKey` };
     }
-    if (commands.has(id) || seen.has(id)) {
+    if ((commands.has(id) && !ownIds.has(id)) || seen.has(id)) {
       return { ok: false, error: `command id "${id}" already registered` };
     }
     seen.add(id);
     snapshots.push({ id, label, keywords, defaultKey, run });
+  }
+  if (plugins.has(def.id)) {
+    // Already registered: an identical command-id list is a silent no-op
+    // success (the re-enable path); any difference still rejects.
+    const same = seen.size === ownIds.size && [...seen].every((id) => ownIds.has(id));
+    if (same) return { ok: true };
+    return { ok: false, error: `plugin "${def.id}" already registered` };
   }
   const api = makeApi(def.id);
   plugins.set(def.id, { def, api });

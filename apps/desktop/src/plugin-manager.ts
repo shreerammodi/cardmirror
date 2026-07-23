@@ -13,6 +13,8 @@ export const MANIFEST_NAME = 'cardmirror-plugin.json';
 export const BUNDLE_NAME = 'plugin.js';
 const PLUGIN_API_VERSION = 1; // keep in sync with src/editor/plugin-registry.ts
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+const RESERVED_ID_RE = /^(con|prn|aux|nul|com\d|lpt\d)$/i; // Windows device names
+const MAX_ASSET_BYTES = 5 * 1024 * 1024; // 5 MiB per release asset
 
 export interface PluginManifest {
   id: string;
@@ -74,13 +76,42 @@ export function validateManifest(
 ): { ok: true; manifest: PluginManifest } | { ok: false; error: string } {
   const m = obj as Partial<PluginManifest> | null;
   if (!m || typeof m !== 'object') return { ok: false, error: 'manifest is not an object' };
-  if (typeof m.id !== 'string' || !ID_RE.test(m.id)) return { ok: false, error: 'bad plugin id' };
+  if (typeof m.id !== 'string' || !ID_RE.test(m.id) || RESERVED_ID_RE.test(m.id)) {
+    return { ok: false, error: 'bad plugin id' };
+  }
   if (typeof m.name !== 'string' || !m.name) return { ok: false, error: 'missing name' };
   if (typeof m.version !== 'string' || !m.version) return { ok: false, error: 'missing version' };
   if (m.apiVersion !== PLUGIN_API_VERSION) {
     return { ok: false, error: `plugin needs apiVersion ${String(m.apiVersion)}; this CardMirror supports ${PLUGIN_API_VERSION}` };
   }
   return { ok: true, manifest: m as PluginManifest };
+}
+
+/**
+ * Guard against id hijack: a second repo publishing a manifest with an
+ * id already owned by an installed plugin would overwrite it. Returns an
+ * error message to block, or null to allow. Same-repo reinstall (the
+ * update path) is allowed; a missing stored repo on the existing install
+ * (pre-repo-field manifests) can't be proven to match, so it blocks —
+ * uninstall + reinstall is the recovery.
+ */
+export function checkInstallCollision(
+  existing: PluginManifest | undefined,
+  ref: string,
+): string | null {
+  if (!existing) return null;
+  if (existing.repo && existing.repo === ref) return null;
+  return `A different plugin ("${existing.repo ?? 'unknown source'}") already owns the id "${existing.id}". Uninstall it first.`;
+}
+
+async function readInstalledManifest(id: string): Promise<PluginManifest | undefined> {
+  try {
+    const raw = await fs.readFile(path.join(pluginDir(id), MANIFEST_NAME), 'utf8');
+    const v = validateManifest(JSON.parse(raw));
+    return v.ok ? v.manifest : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function pluginsRootDir(): string {
@@ -108,7 +139,11 @@ async function downloadAsset(release: GithubRelease, name: string): Promise<stri
     headers: { 'User-Agent': 'cardmirror' },
   });
   if (!res.ok) return null;
-  return res.text();
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_ASSET_BYTES) return null;
+  const text = await res.text();
+  if (text.length > MAX_ASSET_BYTES) return null;
+  return text;
 }
 
 export async function installFromGithub(
@@ -139,10 +174,13 @@ export async function installFromGithub(
   if (v.manifest.minAppVersion && compareVersions(app.getVersion(), v.manifest.minAppVersion) < 0) {
     return { ok: false, error: `This plugin needs CardMirror ${v.manifest.minAppVersion} or newer.` };
   }
+  const ownerRepo = `${parsed.owner}/${parsed.repo}`;
+  const collision = checkInstallCollision(await readInstalledManifest(v.manifest.id), ownerRepo);
+  if (collision) return { ok: false, error: collision };
   // Persist the source repo so checkPluginUpdate (and the settings UI)
   // know where this install came from. Written into the saved manifest,
   // not just returned — the info must survive an app restart.
-  v.manifest.repo = `${parsed.owner}/${parsed.repo}`;
+  v.manifest.repo = ownerRepo;
   const savedManifestText = JSON.stringify(v.manifest, null, 2);
   const dir = pluginDir(v.manifest.id);
   await fs.mkdir(dir, { recursive: true });
@@ -171,7 +209,15 @@ export async function listInstalled(): Promise<PluginManifest[]> {
     try {
       const raw = await fs.readFile(path.join(pluginsRootDir(), e.name, MANIFEST_NAME), 'utf8');
       const v = validateManifest(JSON.parse(raw));
-      if (v.ok && v.manifest.id === e.name) out.push(v.manifest);
+      if (!v.ok || v.manifest.id !== e.name) continue;
+      // The version gate applies at load too, not just install: an app
+      // downgrade must not boot a plugin built for a newer CardMirror.
+      // ponytail: incompatible installs hidden, not listed as disabled
+      if (v.manifest.minAppVersion && compareVersions(app.getVersion(), v.manifest.minAppVersion) < 0) {
+        console.warn(`[plugins] ${e.name} needs CardMirror ${v.manifest.minAppVersion}; skipping`);
+        continue;
+      }
+      out.push(v.manifest);
     } catch {
       /* skip broken installs */
     }

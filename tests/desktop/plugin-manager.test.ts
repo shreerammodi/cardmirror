@@ -3,6 +3,7 @@ import {
   parseRepoRef,
   compareVersions,
   validateManifest,
+  checkInstallCollision,
 } from '../../apps/desktop/src/plugin-manager.js';
 
 describe('parseRepoRef', () => {
@@ -48,5 +49,25 @@ describe('validateManifest', () => {
     expect(validateManifest({ ...good, id: undefined }).ok).toBe(false);
     expect(validateManifest({ ...good, apiVersion: 99 }).ok).toBe(false);
     expect(validateManifest({ ...good, version: 7 }).ok).toBe(false);
+  });
+  it('rejects Windows reserved device ids', () => {
+    expect(validateManifest({ ...good, id: 'con' }).ok).toBe(false);
+    expect(validateManifest({ ...good, id: 'com1' }).ok).toBe(false);
+  });
+});
+
+describe('checkInstallCollision', () => {
+  const existing = { id: 'demo', name: 'Demo', version: '1.0.0', apiVersion: 1, repo: 'owner/demo' };
+  it('allows a same-repo reinstall (the update path)', () => {
+    expect(checkInstallCollision(existing, 'owner/demo')).toBeNull();
+  });
+  it('blocks a different repo claiming an installed id', () => {
+    expect(checkInstallCollision(existing, 'evil/demo')).toContain('already owns the id');
+  });
+  it('allows a fresh id with no existing install', () => {
+    expect(checkInstallCollision(undefined, 'owner/demo')).toBeNull();
+  });
+  it('blocks when the existing install has no stored repo', () => {
+    expect(checkInstallCollision({ ...existing, repo: undefined }, 'owner/demo')).toContain('already owns the id');
   });
 });

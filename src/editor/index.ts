@@ -8068,7 +8068,14 @@ async function initPlugins(): Promise<void> {
       },
     }),
   );
-  const installed = (await host.pluginList()) as { id: string; name: string }[];
+  let installed: { id: string; name: string }[];
+  try {
+    installed = (await host.pluginList()) as { id: string; name: string }[];
+  } catch (err) {
+    console.warn('[plugins] could not list installed plugins:', err);
+    showToast('Plugins failed to load.');
+    return;
+  }
   for (const p of installed) {
     if (!isPluginEnabled(p.id)) continue;
     // A rejecting IPC call must not skip the remaining plugins (or escape

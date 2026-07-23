@@ -54,10 +54,20 @@ describe('plugin registry', () => {
     bad.commands[0]!.id = 'other.hello';
     expect(registerPluginDefinition(bad).ok).toBe(false);
   });
-  it('rejects duplicate plugin ids', () => {
+  it('re-registering the same definition is a no-op success', () => {
     installPluginRegistry(() => stubApi);
     expect(registerPluginDefinition(def()).ok).toBe(true);
-    expect(registerPluginDefinition(def()).ok).toBe(false);
+    expect(registerPluginDefinition(def()).ok).toBe(true);
+    expect(pluginCommandIds()).toEqual(['demo.hello']);
+    expect(registeredPlugins()).toEqual([{ id: 'demo', name: 'Demo' }]);
+  });
+  it('re-registering with different commands still rejects', () => {
+    installPluginRegistry(() => stubApi);
+    expect(registerPluginDefinition(def()).ok).toBe(true);
+    const d2 = def();
+    d2.commands.push({ id: 'demo.extra', label: 'Extra', run: () => {} });
+    expect(registerPluginDefinition(d2).ok).toBe(false);
+    expect(pluginCommandIds()).toEqual(['demo.hello']);
   });
   it('rejects duplicate command ids within one definition', () => {
     installPluginRegistry(() => stubApi);

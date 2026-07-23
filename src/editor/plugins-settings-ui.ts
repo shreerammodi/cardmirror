@@ -55,6 +55,24 @@ export function renderPluginsPanel(container: HTMLElement): void {
   installBtn.textContent = 'Install';
   installRow.append(input, installBtn);
 
+  // Install/update/uninstall failures surface here, next to the action,
+  // not as a transient toast that scrolls away. Cleared on the next
+  // successful action.
+  const errorEl = document.createElement('p');
+  errorEl.className = 'pmd-plugins-error';
+  const showError = (msg: string): void => {
+    errorEl.textContent = msg;
+  };
+  const clearError = (): void => {
+    errorEl.textContent = '';
+  };
+  /** Like `guarded`, but routes the rejection inline instead of a toast. */
+  const guardedInline = (work: () => Promise<void>): void => {
+    void work().catch((err: unknown) => {
+      showError(`Plugin operation failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
+  };
+
   const list = document.createElement('div');
   list.className = 'pmd-plugins-list';
 
@@ -63,7 +81,7 @@ export function renderPluginsPanel(container: HTMLElement): void {
   devBtn.textContent = 'Load plugin from file…';
   devRow.append(devBtn);
 
-  container.append(installRow, list, devRow);
+  container.append(installRow, errorEl, list, devRow);
 
   async function refresh(): Promise<void> {
     const plugins = ((await host!.pluginList()) as InstalledPlugin[]) ?? [];
@@ -85,9 +103,10 @@ export function renderPluginsPanel(container: HTMLElement): void {
       enable.addEventListener('change', () => {
         setPluginEnabled(p.id, enable.checked);
         if (enable.checked) {
-          guarded(async () => {
+          guardedInline(async () => {
+            clearError();
             const r = await host!.pluginLoad(p.id);
-            if (!r.ok) showToast(`${p.name} failed to load: ${r.error ?? 'unknown error'}`);
+            if (!r.ok) showError(`${p.name} failed to load: ${r.error ?? 'unknown error'}`);
           });
         } else {
           showToast('Plugin disabled. It stops fully on the next launch.');
@@ -96,13 +115,14 @@ export function renderPluginsPanel(container: HTMLElement): void {
       const update = document.createElement('button');
       update.textContent = 'Check for updates';
       update.addEventListener('click', () => {
-        guarded(async () => {
+        guardedInline(async () => {
+          clearError();
           const res = (await host!.pluginCheckUpdate(p.id, p.repo ?? '')) as
             | { ok: true; latest: string; hasUpdate: boolean }
             | { ok: false; error: string }
             | undefined;
           if (!res || !res.ok) {
-            showToast(`Update check failed: ${res && 'error' in res ? res.error : 'unavailable'}`);
+            showError(`Update check failed: ${res && 'error' in res ? res.error : 'unavailable'}`);
             return;
           }
           if (!res.hasUpdate) {
@@ -110,18 +130,25 @@ export function renderPluginsPanel(container: HTMLElement): void {
             return;
           }
           if (await confirmDialog(`Update ${p.name} to v${res.latest}?`)) {
-            const r = (await host!.pluginInstall(p.repo ?? '')) as { ok?: boolean } | undefined;
-            showToast(r?.ok ? `${p.name} updated. Restart to apply.` : 'Update failed.');
+            const r = (await host!.pluginInstall(p.repo ?? '')) as
+              | { ok: true }
+              | { ok: false; error: string }
+              | undefined;
+            if (r?.ok) showToast(`${p.name} updated. Restart to apply.`);
+            else showError(`Update failed: ${r && 'error' in r ? r.error : 'unavailable'}`);
           }
         });
       });
       const remove = document.createElement('button');
       remove.textContent = 'Uninstall';
       remove.addEventListener('click', () => {
-        guarded(async () => {
+        guardedInline(async () => {
           if (!(await confirmDialog(`Uninstall ${p.name}?`))) return;
+          clearError();
           await host!.pluginUninstall(p.id);
           setPluginEnabled(p.id, false);
+          // Drop the plugin's storage bag so a reinstall starts clean.
+          localStorage.removeItem(`plugin:${p.id}`);
           showToast(`${p.name} uninstalled. Restart to fully unload it.`);
           guarded(refresh);
         });
@@ -132,9 +159,10 @@ export function renderPluginsPanel(container: HTMLElement): void {
   }
 
   installBtn.addEventListener('click', () => {
-    guarded(async () => {
+    guardedInline(async () => {
       const ref = input.value.trim();
       if (!ref) return;
+      clearError();
       installBtn.disabled = true;
       try {
         const res = (await host.pluginInstall(ref)) as
@@ -142,12 +170,12 @@ export function renderPluginsPanel(container: HTMLElement): void {
           | { ok: false; error: string }
           | undefined;
         if (!res || !res.ok) {
-          showToast(`Install failed: ${res && 'error' in res ? res.error : 'unavailable'}`);
+          showError(`Install failed: ${res && 'error' in res ? res.error : 'unavailable'}`);
           return;
         }
         const p = res.plugin;
         const consent = await confirmDialog(
-          `Install ${p.name} v${p.version}${p.author ? ` by ${p.author}` : ''}? ` +
+          `Install ${p.name} v${p.version} by ${p.author ?? 'an unknown author'}? ` +
             'This plugin runs with full access to CardMirror and your documents.',
         );
         if (!consent) {
