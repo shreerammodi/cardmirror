@@ -11,10 +11,13 @@ import {
   DEFAULT_RIBBON_KEYS,
   RIBBON_COMMAND_LABELS,
   formatKeyForDisplay,
+  commandLabelFor,
+  effectivePluginDefaultKeys,
   type RibbonCommandId,
 } from './ribbon-commands.js';
 import { RIBBON_GROUPS } from './ribbon-groups.js';
 import { isRibbonCommandAvailable } from './ribbon-availability.js';
+import { pluginCommandIds } from './plugin-registry.js';
 import { settings } from './settings.js';
 import { setIcon } from './icons';
 
@@ -132,6 +135,52 @@ class ReferenceModal {
         const labelEl = document.createElement('span');
         labelEl.className = 'pmd-reference-label';
         labelEl.textContent = RIBBON_COMMAND_LABELS[id];
+        row.appendChild(labelEl);
+
+        rows.appendChild(row);
+      }
+
+      section.appendChild(rows);
+      body.appendChild(section);
+    }
+
+    // Registered plugin commands get their own section, appended after
+    // the static groups — reusing `effectivePluginDefaultKeys` so the
+    // printed keys match what actually dispatches (a plugin default
+    // that loses to a static key prints as unbound, not as a lie).
+    // Skipped entirely while no plugin has registered commands.
+    const pluginIds = pluginCommandIds();
+    if (pluginIds.length > 0) {
+      const section = document.createElement('section');
+      section.className = 'pmd-reference-group';
+
+      const heading = document.createElement('h3');
+      heading.className = 'pmd-reference-group-title';
+      heading.textContent = 'Plugins';
+      section.appendChild(heading);
+
+      const rows = document.createElement('div');
+      rows.className = 'pmd-reference-group-rows';
+
+      const overrides = settings.get('ribbonKeyOverrides');
+      for (const id of pluginIds) {
+        const row = document.createElement('div');
+        row.className = 'pmd-reference-row';
+
+        const keys = effectivePluginDefaultKeys(id, overrides);
+        const keyText = keys
+          .map((k) => formatKeyForDisplay(k))
+          .filter((s) => s.length > 0)
+          .join(' / ');
+
+        const keyEl = document.createElement('span');
+        keyEl.className = 'pmd-reference-key';
+        keyEl.textContent = keyText || '—';
+        row.appendChild(keyEl);
+
+        const labelEl = document.createElement('span');
+        labelEl.className = 'pmd-reference-label';
+        labelEl.textContent = commandLabelFor(id);
         row.appendChild(labelEl);
 
         rows.appendChild(row);

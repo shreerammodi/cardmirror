@@ -23,7 +23,7 @@ A plugin is one GitHub repository. Each release attaches two assets:
 
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
-| `id` | string | yes | Lowercase. Must match `^[a-z0-9][a-z0-9-]*$`. |
+| `id` | string | yes | Lowercase. Must match `^[a-z0-9][a-z0-9-]*$`. Cannot be a Windows reserved device name (`con`, `prn`, `aux`, `nul`, `comN`, `lptN`). |
 | `name` | string | yes | Display name. |
 | `version` | string | yes | Semver, for example `0.1.0` or `0.2.0-beta.1`. |
 | `description` | string | no | One line for the Plugins tab. |
@@ -51,11 +51,14 @@ Example:
 1. The user pastes a GitHub URL or an `owner/repo` shorthand into the
    Plugins settings tab.
 2. The main process fetches the latest GitHub release and downloads
-   the two assets.
+   the two assets. Each asset must be 5 MiB or less.
 3. The app validates the manifest and applies the version gates below.
-4. The app writes both files into `userData/plugins/<id>/` with an
+4. The app checks for an id collision. If a different repository
+   already owns the id, install fails and asks the user to uninstall
+   the existing plugin first.
+5. The app writes both files into `userData/plugins/<id>/` with an
    atomic write (tmp file, then rename).
-5. The user enables the plugin in the Plugins tab. Enabled plugins
+6. The user enables the plugin in the Plugins tab. Enabled plugins
    load from disk at each launch and work offline.
 
 A developer path exists: "Load plugin from file..." in the Plugins tab
@@ -67,6 +70,9 @@ loads a local `plugin.js` without an install.
   Registration rejects it again at load time (section 2).
 - If `minAppVersion` is newer than the app version, install fails with
   "This plugin needs CardMirror `<minAppVersion>` or newer."
+- Both gates also run at every app launch, not only at install. An
+  installed plugin that fails either gate does not load and does not
+  appear in the Plugins tab.
 - The gate is two-sided. At run time, read `api.appVersion` and refuse
   an app that is too old for your plugin.
 
@@ -214,7 +220,8 @@ export interface CardMirrorPluginApi {
   flowing app. The main process reads the target's handshake file,
   attaches the token header, and applies a timeout. Plugins never see
   tokens or sockets. `unsupported` means the desktop host surface is
-  absent.
+  absent. The `ok` field shows transport success only. Read the
+  `status` field for the HTTP result.
 - `docInfo()` - `docId` and `docTitle` of the focused document, or
   `null` when there is none or the doc has no id yet.
 - `showToast(message)` - a transient notification in the app.
