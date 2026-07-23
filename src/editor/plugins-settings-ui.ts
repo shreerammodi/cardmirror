@@ -26,23 +26,39 @@ function guarded(work: () => Promise<void>): void {
   });
 }
 
+/** Panel-level status text — same treatment as an empty settings tab. */
+function placeholder(container: HTMLElement, text: string): void {
+  const p = document.createElement('p');
+  p.className = 'pmd-settings-empty';
+  p.textContent = text;
+  container.append(p);
+}
+
+/** A settings-style section header, matching the rest of the dialog. */
+function sectionTitle(text: string): HTMLElement {
+  const h = document.createElement('h3');
+  h.className = 'pmd-settings-section-title';
+  h.textContent = text;
+  return h;
+}
+
 export function renderPluginsPanel(container: HTMLElement): void {
   const host = getElectronHost();
   if (!host) {
-    container.textContent = 'Plugins are available on the desktop app only.';
+    placeholder(container, 'Plugins are available on the desktop app only.');
     return;
   }
   // The panel's install / dev-load actions execute third-party bundles
   // (webFrame.executeJavaScript), so they must be unreachable while the
   // master switch that promises to gate plugins is off.
   if (!settings.get('pluginsEnabled')) {
-    container.textContent = 'Enable plugins above, then restart CardMirror.';
+    placeholder(container, 'Enable plugins above, then restart CardMirror.');
     return;
   }
   // Switch is on but boot ran with it off — the window registry was never
   // installed, so a loaded bundle's registration would silently no-op.
   if (typeof window.__registerCardMirrorPlugin !== 'function') {
-    container.textContent = 'Restart CardMirror to activate plugins.';
+    placeholder(container, 'Restart CardMirror to activate plugins.');
     return;
   }
 
@@ -50,8 +66,11 @@ export function renderPluginsPanel(container: HTMLElement): void {
   installRow.className = 'pmd-plugins-install';
   const input = document.createElement('input');
   input.type = 'text';
+  input.className = 'pmd-settings-text pmd-plugins-input';
   input.placeholder = 'GitHub URL or owner/repo';
   const installBtn = document.createElement('button');
+  installBtn.type = 'button';
+  installBtn.className = 'pmd-install-info-btn';
   installBtn.textContent = 'Install';
   installRow.append(input, installBtn);
 
@@ -77,17 +96,32 @@ export function renderPluginsPanel(container: HTMLElement): void {
   list.className = 'pmd-plugins-list';
 
   const devRow = document.createElement('div');
+  devRow.className = 'pmd-plugins-dev';
+  const devDesc = document.createElement('p');
+  devDesc.className = 'pmd-settings-row-desc';
+  devDesc.textContent = 'Load an unpackaged plugin bundle for this session only.';
   const devBtn = document.createElement('button');
+  devBtn.type = 'button';
+  devBtn.className = 'pmd-install-info-btn';
   devBtn.textContent = 'Load plugin from file…';
-  devRow.append(devBtn);
+  devRow.append(devDesc, devBtn);
 
-  container.append(installRow, errorEl, list, devRow);
+  container.append(
+    sectionTitle('Install a plugin'),
+    installRow,
+    errorEl,
+    sectionTitle('Installed plugins'),
+    list,
+    sectionTitle('Developer'),
+    devRow,
+  );
 
   async function refresh(): Promise<void> {
     const plugins = ((await host!.pluginList()) as InstalledPlugin[]) ?? [];
     list.textContent = '';
     if (plugins.length === 0) {
       const empty = document.createElement('p');
+      empty.className = 'pmd-settings-empty';
       empty.textContent = 'No plugins installed.';
       list.append(empty);
       return;
@@ -96,9 +130,12 @@ export function renderPluginsPanel(container: HTMLElement): void {
       const row = document.createElement('div');
       row.className = 'pmd-plugins-row';
       const label = document.createElement('span');
+      label.className = 'pmd-plugins-name';
       label.textContent = `${p.name} v${p.version}${p.author ? ` — ${p.author}` : ''}`;
       const enable = document.createElement('input');
       enable.type = 'checkbox';
+      enable.className = 'pmd-settings-toggle';
+      enable.setAttribute('aria-label', `Enable ${p.name}`);
       enable.checked = isPluginEnabled(p.id);
       enable.addEventListener('change', () => {
         setPluginEnabled(p.id, enable.checked);
@@ -113,6 +150,8 @@ export function renderPluginsPanel(container: HTMLElement): void {
         }
       });
       const update = document.createElement('button');
+      update.type = 'button';
+      update.className = 'pmd-install-info-btn';
       update.textContent = 'Check for updates';
       update.addEventListener('click', () => {
         guardedInline(async () => {
@@ -140,6 +179,8 @@ export function renderPluginsPanel(container: HTMLElement): void {
         });
       });
       const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'pmd-install-info-btn';
       remove.textContent = 'Uninstall';
       remove.addEventListener('click', () => {
         guardedInline(async () => {

@@ -5813,6 +5813,72 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
   cursor: progress;
 }
 
+/* Plugins tab body — install field, installed-plugin rows, dev loader.
+   The widgets themselves reuse the settings classes (.pmd-settings-text,
+   .pmd-install-info-btn, .pmd-settings-toggle, .pmd-settings-section-title),
+   so only this panel's own layout lives here. */
+/* The panel is a wrapper element, so its leading header is a :first-child
+   and drops its own top border — the settings row above already drew one.
+   Restore the standard row-to-header gap the border-top rule would give. */
+.pmd-plugins-panel > .pmd-settings-section-title:first-child {
+  margin-top: 0;
+  padding-top: 0.75rem;
+}
+
+.pmd-plugins-install {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.pmd-plugins-input {
+  /* Overrides .pmd-settings-text's fixed 12rem basis — the field is the
+     row's only flexible element, so it takes the leftover width. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pmd-plugins-error {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--pmd-c-error-alt);
+}
+.pmd-plugins-error:empty {
+  display: none;
+}
+
+.pmd-plugins-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--pmd-c-divider-faint);
+}
+.pmd-plugins-row:last-child {
+  border-bottom: none;
+}
+/* The shared toggle is nudged down to sit level with a two-line settings
+   row's title; these rows are single-line and centred. */
+.pmd-plugins-row .pmd-settings-toggle {
+  margin-top: 0;
+}
+.pmd-plugins-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.pmd-plugins-dev {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+.pmd-plugins-dev p {
+  margin: 0;
+}
+
 .pmd-settings-row {
   padding: 0.75rem 0;
   border-bottom: 1px solid var(--pmd-c-divider-faint);
