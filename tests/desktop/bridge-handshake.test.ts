@@ -104,12 +104,43 @@ describe('flowPost', () => {
     expect(await flowPost('badport', '/x', {})).toEqual({ ok: false, error: 'no-such-app' });
     expect(await flowPost('floatport', '/x', {})).toEqual({ ok: false, error: 'no-such-app' });
   });
-  it('ignores oversized handshake files', async () => {
-    await fs.writeFile(path.join(dir, 'big.json'), '"' + 'x'.repeat(70 * 1024) + '"');
+  it('ignores oversized handshake files even when otherwise valid', async () => {
+    let pinged = false;
+    const live = await listen((_req, res) => {
+      pinged = true;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ ok: true }));
+    });
+    // Valid flow handshake, live port, but padded past the 64 KiB cap.
+    await fs.writeFile(
+      path.join(dir, 'big.json'),
+      JSON.stringify({
+        schema: 1,
+        app: 'big',
+        appVersion: 'x'.repeat(70 * 1024),
+        kind: 'flow',
+        port: live.port,
+        token: 'tok',
+        pid: 1,
+      }),
+    );
     expect((await scanFlowApps()).map((a) => a.id)).not.toContain('big');
+    expect(pinged).toBe(false); // skipped before any ping
+    live.close();
   });
-  it('rejects uppercase app ids per the published contract', async () => {
+  it('rejects uppercase app ids even with a valid handshake on disk', async () => {
+    let pinged = false;
+    const live = await listen((_req, res) => {
+      pinged = true;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ ok: true }));
+    });
+    // A complete, live handshake at Ebb.json — only the uppercase id
+    // must reject it (the published contract is lowercase-only).
+    await writeFlowHandshake('Ebb', live.port, 'tok');
     expect(await flowPost('Ebb', '/x', {})).toEqual({ ok: false, error: 'no-such-app' });
+    expect(pinged).toBe(false);
+    live.close();
   });
   it('maps a stalled body to timeout, not a hang', { timeout: 10_000 }, async () => {
     const live = await listen((_req, res) => {
