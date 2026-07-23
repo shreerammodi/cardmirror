@@ -205,21 +205,38 @@ function onJumpAck(_evt: unknown, ack: JumpAck): void {
   pending.resolve(ack);
 }
 
+// keep in sync with SOURCE_TOKEN_PREFIX in src/editor/plugin-source-token.ts
+const SOURCE_TOKEN_PREFIX = 'cmsrc1.';
+
 function dispatchJumpTo(win: BrowserWindow, source: string): Promise<JumpAck> {
   return new Promise((resolve) => {
+    if (win.isDestroyed()) {
+      resolve({ requestId: '', ok: false, error: 'not-mine' });
+      return;
+    }
     const requestId = crypto.randomBytes(8).toString('hex');
     const timer = setTimeout(() => {
       pendingJumpAcks.delete(requestId);
       resolve({ requestId, ok: false, error: 'not-mine' });
     }, RENDERER_ACK_TIMEOUT_MS);
     pendingJumpAcks.set(requestId, { resolve, timer });
-    win.webContents.send('external:jump', { requestId, source });
+    try {
+      win.webContents.send('external:jump', { requestId, source });
+    } catch {
+      // Window torn down between the isDestroyed() check and send
+      // (render process gone). Don't leave the route hanging on a
+      // timeout that can never be acked.
+      clearTimeout(timer);
+      pendingJumpAcks.delete(requestId);
+      resolve({ requestId, ok: false, error: 'not-mine' });
+    }
   });
 }
 
 /** Minimal token peek — main only needs docTitle for the
  *  doc-not-open message; full parsing stays renderer-side. */
 function docTitleFromToken(source: string): string | undefined {
+  if (!source.startsWith(SOURCE_TOKEN_PREFIX)) return undefined;
   const dot = source.indexOf('.');
   if (dot < 0) return undefined;
   try {
@@ -237,21 +254,39 @@ function docTitleFromToken(source: string): string | undefined {
 export async function broadcastJump(
   source: string,
 ): Promise<{ ok: boolean; error?: string; docTitle?: string }> {
-  const wins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
-  let sawBadRequest = false;
-  let sawNotFound = false;
-  for (const win of wins) {
-    const ack = await dispatchJumpTo(win, source);
-    if (ack.ok) {
-      win.show();
-      win.focus();
-      return { ok: true };
-    }
-    if (ack.error === 'bad-request') sawBadRequest = true;
-    if (ack.error === 'not-found') sawNotFound = true;
+  // An unparseable token can never match any window; reject it up front
+  // rather than broadcasting and misreporting doc-not-open (which would
+  // echo a forged docTitle from a token that isn't ours).
+  if (!source.startsWith(SOURCE_TOKEN_PREFIX)) {
+    return { ok: false, error: 'bad-request' };
   }
-  if (sawBadRequest) return { ok: false, error: 'bad-request' };
-  if (sawNotFound) return { ok: false, error: 'not-found' };
+  const wins = BrowserWindow.getAllWindows().filter(
+    (w) =>
+      !w.isDestroyed() &&
+      // ponytail: heuristic — skip windows that have no jump listener and
+      // would just burn the full ack timeout. The timer pop-out loads
+      // timer.html (main.ts:openTimerWindow); add other non-doc window
+      // URLs here if more such windows appear.
+      !w.webContents.getURL().endsWith('timer.html'),
+  );
+  const acks = await Promise.all(
+    wins.map((win) => dispatchJumpTo(win, source).then((ack) => ({ win, ack }))),
+  );
+  // First ok wins. Only one open doc holds a given docId in normal use,
+  // so multiple-ok isn't a real case; if it ever is, the first still wins.
+  const winner = acks.find((a) => a.ack.ok);
+  if (winner) {
+    if (winner.win.isMinimized()) winner.win.restore();
+    winner.win.show();
+    winner.win.focus();
+    return { ok: true };
+  }
+  if (acks.some((a) => a.ack.error === 'bad-request')) {
+    return { ok: false, error: 'bad-request' };
+  }
+  if (acks.some((a) => a.ack.error === 'not-found')) {
+    return { ok: false, error: 'not-found' };
+  }
   const docTitle = docTitleFromToken(source);
   return { ok: false, error: 'doc-not-open', ...(docTitle ? { docTitle } : {}) };
 }
@@ -338,7 +373,14 @@ async function handleRequest(
       jsonResponse(res, 400, { ok: false, error: 'bad-request' });
       return;
     }
-    const result = await broadcastJump(payload.source);
+    let result: { ok: boolean; error?: string; docTitle?: string };
+    try {
+      result = await broadcastJump(payload.source);
+    } catch {
+      // Never let an unexpected broadcast failure hang the client.
+      jsonResponse(res, 500, { ok: false, error: 'internal' });
+      return;
+    }
     if (result.ok) {
       jsonResponse(res, 200, { ok: true });
       return;

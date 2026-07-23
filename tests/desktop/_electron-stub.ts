@@ -5,19 +5,58 @@
 export const sentToRenderer: Array<{ channel: string; payload: any }> = [];
 export const ipcListeners = new Map<string, Array<(evt: unknown, ack: any) => void>>();
 
-const fakeWebContents = {
-  send: (channel: string, payload: any) => {
-    sentToRenderer.push({ channel, payload });
-  },
-};
-const makeWin = () => ({ webContents: fakeWebContents, isDestroyed: () => false });
+interface MockWinOpts {
+  url?: string;
+  sendThrows?: boolean;
+  destroyed?: boolean;
+  minimized?: boolean;
+}
 
-let mockFocusedWindow: ReturnType<typeof makeWin> | null = makeWin();
-let mockAllWindows: ReturnType<typeof makeWin>[] = [mockFocusedWindow];
+export interface MockWin {
+  webContents: { send: (channel: string, payload: any) => void; getURL: () => string };
+  isDestroyed: () => boolean;
+  isMinimized: () => boolean;
+  restore: () => void;
+  show: () => void;
+  focus: () => void;
+  __restored: boolean;
+  __shown: boolean;
+  __focused: boolean;
+}
 
-export function setMockFocusedWindow(win: ReturnType<typeof makeWin> | null): void {
+export function makeMockWindow(opts: MockWinOpts = {}): MockWin {
+  const win: MockWin = {
+    webContents: {
+      send: (channel: string, payload: any) => {
+        if (opts.sendThrows) throw new Error('render process gone');
+        sentToRenderer.push({ channel, payload });
+      },
+      getURL: () => opts.url ?? 'http://localhost/index.html',
+    },
+    isDestroyed: () => opts.destroyed ?? false,
+    isMinimized: () => opts.minimized ?? false,
+    restore: () => { win.__restored = true; },
+    show: () => { win.__shown = true; },
+    focus: () => { win.__focused = true; },
+    __restored: false,
+    __shown: false,
+    __focused: false,
+  };
+  return win;
+}
+
+const makeWin = makeMockWindow;
+
+let mockFocusedWindow: MockWin | null = makeWin();
+let mockAllWindows: MockWin[] = [mockFocusedWindow];
+
+export function setMockFocusedWindow(win: MockWin | null): void {
   mockFocusedWindow = win;
   mockAllWindows = win ? [win] : [];
+}
+
+export function setMockAllWindows(wins: MockWin[]): void {
+  mockAllWindows = wins;
 }
 
 export function resetElectronStub(userDataPath: string): void {

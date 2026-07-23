@@ -8,6 +8,8 @@ import {
   ipcListeners,
   resetElectronStub,
   setMockFocusedWindow,
+  setMockAllWindows,
+  makeMockWindow,
 } from './_electron-stub.js';
 import * as bridge from '../../apps/desktop/src/fast-paste-bridge.js';
 
@@ -304,6 +306,38 @@ describe('fast-paste-bridge', () => {
       });
       expect(r.status).toBe(200);
       expect(r.json).toEqual({ ok: false, error: 'doc-not-open', docTitle: 'AT Cap K.docx' });
+    });
+
+    it('400s a source without the cmsrc1 prefix, with no broadcast', async () => {
+      const ep = bridge.getRunningEndpoint()!;
+      const source =
+        'x.' + Buffer.from(JSON.stringify({ docTitle: 'forged' })).toString('base64url');
+      const r = await fetchJson({
+        method: 'POST', path: '/jump', port: ep.port, token: ep.token,
+        body: { source },
+      });
+      expect(r.status).toBe(400);
+      expect(r.json).toEqual({ ok: false, error: 'bad-request' });
+      expect(r.json.docTitle).toBeUndefined();
+      // The bad prefix short-circuits before any window is asked to jump.
+      expect(sentToRenderer.some((s) => s.channel === 'external:jump')).toBe(false);
+    });
+
+    it('answers even when a window is destroyed mid-broadcast', async () => {
+      // Only window in the broadcast throws on send (render process gone);
+      // the dispatch guard must resolve not-mine instead of rejecting and
+      // hanging the /jump route.
+      setMockAllWindows([makeMockWindow({ sendThrows: true })]);
+      const ep = bridge.getRunningEndpoint()!;
+      const source =
+        'cmsrc1.' +
+        Buffer.from(JSON.stringify({ docId: 'd', docTitle: 'Gone.docx' })).toString('base64url');
+      const r = await fetchJson({
+        method: 'POST', path: '/jump', port: ep.port, token: ep.token,
+        body: { source },
+      });
+      expect(r.status).toBe(200);
+      expect(r.json).toEqual({ ok: false, error: 'doc-not-open', docTitle: 'Gone.docx' });
     });
   });
 });
