@@ -339,5 +339,26 @@ describe('fast-paste-bridge', () => {
       expect(r.status).toBe(200);
       expect(r.json).toEqual({ ok: false, error: 'doc-not-open', docTitle: 'Gone.docx' });
     });
+
+    it('restores a minimized window that acks ok', async () => {
+      const win = makeMockWindow({ minimized: true });
+      setMockAllWindows([win]);
+      const ep = bridge.getRunningEndpoint()!;
+      const source =
+        'cmsrc1.' +
+        Buffer.from(JSON.stringify({ docId: 'd', docTitle: 'Min.docx' })).toString('base64url');
+      const jumped = fetchJson({
+        method: 'POST', path: '/jump', port: ep.port, token: ep.token,
+        body: { source },
+      });
+      await new Promise((r) => setTimeout(r, 20));
+      const sent = sentToRenderer.find((s) => s.channel === 'external:jump')!;
+      const listeners = ipcListeners.get('external:jump-result') ?? [];
+      for (const l of listeners) l(null, { requestId: sent.payload.requestId, ok: true });
+      const r = await jumped;
+      expect(r.status).toBe(200);
+      expect(r.json).toEqual({ ok: true });
+      expect(win.__restored).toBe(true);
+    });
   });
 });

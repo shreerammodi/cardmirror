@@ -2154,6 +2154,10 @@ class MultiPaneShell {
       const slot = this.slots[id];
       for (const rec of slot.stack) {
         if (rec.docId === docId) {
+          // Raised before resolution: if the jump then fails not-found, the
+          // raised record stays visible anyway. Accepted - the doc was
+          // explicitly requested, so surfacing it is reasonable regardless.
+          // Revisit if failed jumps raising docs turns out to be noisy.
           slot.showRecord(rec); // no-op when already visible
           return rec.view;
         }

@@ -25,10 +25,10 @@ export function resolveJumpInView(view: EditorView, payload: SourcePayload): boo
   }
   if (payload.anchor) {
     const r = resolveDescriptor(doc, payload.anchor);
-    // Never land inside a `self_ref`: its children are read-only mirrored
-    // text, so a match there is a coincidence, not the real source. Treat
-    // it as unresolved and fall through to not-found.
-    if (r && !inSelfRef(doc, r.from)) {
+    // Never land inside a `self_ref` or `transclusion_ref`: their children
+    // are read-only mirrored text, so a match there is a coincidence, not
+    // the real source. Treat it as unresolved and fall through to not-found.
+    if (r && !inMirroredContent(doc, r.from)) {
       select(view, r.from);
       return true;
     }
@@ -36,11 +36,14 @@ export function resolveJumpInView(view: EditorView, payload: SourcePayload): boo
   return false;
 }
 
-/** True when `pos` sits inside a `self_ref` mirror subtree. */
-function inSelfRef(doc: PMNode, pos: number): boolean {
+/** True when `pos` sits inside a `self_ref` or `transclusion_ref` mirror
+ *  subtree. */
+function inMirroredContent(doc: PMNode, pos: number): boolean {
   const $pos = doc.resolve(pos);
   for (let d = $pos.depth; d > 0; d--) {
-    if ($pos.node(d).type.name === 'self_ref') return true;
+    if ($pos.node(d).type.name === 'self_ref' || $pos.node(d).type.name === 'transclusion_ref') {
+      return true;
+    }
   }
   return false;
 }

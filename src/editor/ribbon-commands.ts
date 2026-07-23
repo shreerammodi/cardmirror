@@ -6384,6 +6384,8 @@ export function buildRibbonKeymap(
     const cmd: Command = () => runPluginCommand(id);
     for (const key of keysArray(spec)) {
       if (!key) continue;
+      // ponytail: plugin-vs-plugin collision (out[key]) still compares raw,
+      // unlike the folded static check; fold it too if two plugins ever collide
       if (!explicit && (staticFolded.has(foldKeyString(key)) || out[key])) continue;
       out[key] = cmd;
     }

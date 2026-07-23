@@ -165,4 +165,27 @@ describe('installPluginJumpHost', () => {
       docTitle: 'T',
     });
   });
+
+  it('refuses to land inside a transclusion_ref mirror', () => {
+    const mirror = schema.nodes['transclusion_ref']!.create(
+      { source_heading_id: 'src', source_label: 'L' },
+      [heading('block', 'Mirror only quote')],
+    );
+    const transclusionDoc = schema.nodes['doc']!.createChecked(null, [
+      heading('block', 'Real'),
+      mirror,
+    ]);
+    const view = makeView(transclusionDoc);
+    const token = mintSourceToken({
+      docId: 'd1',
+      docTitle: 'T',
+      headingId: newHeadingId(), // absent — force the anchor fallback
+      anchor: { quote: 'Mirror only quote', prefix: '', suffix: '', approxPos: 0 },
+    });
+    expect(jumpToTokenInView(view, 'd1', token)).toEqual({
+      ok: false,
+      error: 'not-found',
+      docTitle: 'T',
+    });
+  });
 });

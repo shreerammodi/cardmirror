@@ -206,6 +206,7 @@ function onJumpAck(_evt: unknown, ack: JumpAck): void {
 }
 
 // keep in sync with SOURCE_TOKEN_PREFIX in src/editor/plugin-source-token.ts
+// (this literal adds the dot separator; the source constant is the bare prefix)
 const SOURCE_TOKEN_PREFIX = 'cmsrc1.';
 
 function dispatchJumpTo(win: BrowserWindow, source: string): Promise<JumpAck> {
