@@ -23,6 +23,7 @@ import { schema, newHeadingId } from '../../src/schema/index.js';
 import { settings } from '../../src/editor/settings.js';
 import { editCoordinatorPlugin, claimRegion } from '../../src/editor/ai/edit-coordinator.js';
 import { citeClassifierPlugin } from '../../src/editor/cite-classifier-plugin.js';
+import { AiActivity } from '../../src/editor/ai/ai-activity.js';
 import { LlmError, type LlmRequest, type LlmReply } from '../../src/editor/ai/llm.js';
 import type { ConfirmOptions } from '../../src/editor/confirm-dialog.js';
 import type { ToastOptions } from '../../src/editor/toast.js';
@@ -296,6 +297,32 @@ describe('runReformatAllCites', () => {
     expect(view.state.doc.child(0).child(1).textContent).toBe('Rewritten, no locatable token.');
     expect(citeTexts(view.state.doc)).toEqual(['Jones 23, NEW B.', 'Lee 22, NEW C.']);
     expect(summary()).toContain('1 left unstyled');
+  });
+
+  it('numbers the progress readout over sent cites, not loop turns', async () => {
+    // A blank `cite_paragraph` is skipped without a request, but it is
+    // also absent from `total` (collectCiteParagraphs drops it). If the
+    // ordinal counted loop turns, every cite after the blank one would
+    // read past the total — "Cite 3 of 2".
+    const view = fakeView(
+      doc(
+        card(tag('A'), schema.nodes['cite_paragraph']!.create(), cite('Smith 24', ', a')),
+        card(tag('B'), cite('Jones 23', ', b')),
+      ),
+    );
+    callLlm.mockImplementation(
+      replyPerLastname({ Smith: 'Smith 24, NEW A.', Jones: 'Jones 23, NEW B.' }),
+    );
+    const setStage = vi.spyOn(AiActivity.prototype, 'setStage');
+
+    await runReformatAllCites(view);
+
+    const progress = setStage.mock.calls
+      .map(([s]) => s)
+      .filter((s): s is string => typeof s === 'string' && s.startsWith('Cite '));
+    setStage.mockRestore();
+    expect(progress).toEqual(['Cite 1 of 2 · Esc to stop', 'Cite 2 of 2 · Esc to stop']);
+    expect(sentTexts()).toEqual(['Smith 24, a', 'Jones 23, b']);
   });
 
   it('skips a cite another AI edit already holds, and still does the rest', async () => {

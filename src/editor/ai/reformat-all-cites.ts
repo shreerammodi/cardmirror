@@ -197,9 +197,15 @@ async function reformatAllCites(
     activity?.setStage('Stopping after this cite…');
   });
   let cursor = 0;
+  // Ordinal for the progress readout. Bumped only for paragraphs the
+  // pass actually takes on, so it stays in step with `total`, which
+  // counts non-empty cites only. A blank `cite_paragraph` sitting ahead
+  // of real ones must not burn a number, or the readout reads "Cite 3
+  // of 2".
+  let n = 0;
 
   try {
-    for (let n = 1; !s.cancelled; n++) {
+    while (!s.cancelled) {
       const target = nextCiteParagraph(view.state.doc, cursor);
       if (!target) break;
       // Advance past this paragraph BEFORE any await: a `continue` from
@@ -207,6 +213,7 @@ async function reformatAllCites(
       // the rewrite lands.
       cursor = target.to;
       if (!target.text) continue;
+      n++;
 
       const lease = claimRegion(view, { from: target.from, to: target.to }, { label: 'cite' });
       if (!lease) {
