@@ -631,8 +631,10 @@ for pulling a key phrase up into an undertag. A Settings → Editing toggle,
 **"Extract Undertag: wrap in quotes"** (off by default), controls whether
 the excerpt is quoted.
 
-Verbatim's other bulk cleanup macros (AutoNumberTags, ReformatAllCites,
+Verbatim's other bulk cleanup macros (AutoNumberTags,
 ConvertToDefaultStyles, and the rest) aren't in CardMirror.
+ReformatAllCites has an AI counterpart — see **Reformat Every Cite**
+under [AI features](#13-ai-features).
 
 ### Repair paragraph integrity
 
@@ -1500,6 +1502,7 @@ control is hidden, and AI features gray out cleanly when you're offline.
 | Feature | How to run it | What it does |
 |---------|---------------|--------------|
 | **Format Cite** | Mod-Shift-X on a selection | Turns a pasted citation or URL into a properly styled cite, with the cite mark on the author and date. |
+| **Reformat Every Cite** | Search Everything → "reformat all cites" (unbound; assign a key in Settings → Keyboard) | Runs **Format Cite** over every cite in the open document, one at a time. Because that is one model request per cite, a confirmation first tells you how many requests it will make. Each cite is its own undo step, **Esc** stops the pass after the cite in flight, and a summary reports how many were reformatted, failed, or were left unstyled. |
 | **Repair Text** | Mod-Shift-R on a selection | Fixes OCR / PDF extraction errors (dropped ligatures, `rn`/`m`, mid-word hyphenation, run-together words) without changing the wording. Corrections apply in place, one at a time with a highlight; the whole repair is a single undo. |
 | **Repair Formatting** | Mod-Alt-R on a selection | Normalizes an imported card's formatting to Verbatim's four-layer scheme (underline / emphasis / highlighting / background color) — fixing bold or italics standing in for emphasis, direct underlining, bold-underline, and underlining lost to an unsupported style. It never changes your text. |
 | **Translate** | Mod-Shift-T on a selection | Translates the selection and copies it to the clipboard, leaving your document unchanged. Uses your AI provider when AI is on; otherwise falls back to a free, keyless backend, so it works even with AI off. |
@@ -2590,10 +2593,15 @@ revision metadata.
 ### Notes for Verbatim users
 
 - Several of Verbatim's bulk cleanup macros — AutoNumberTags,
-  DeNumberTags, ReformatAllCites, FixFakeTags, ConvertToDefaultStyles, and
-  similar — aren't in CardMirror, and aren't currently planned. The
-  cleanup commands that are here: Convert Analytics to Tags, Fix
-  Formatting Gaps, Remove Hyperlinks, and Select Similar Formatting.
+  DeNumberTags, FixFakeTags, ConvertToDefaultStyles, and similar —
+  aren't in CardMirror, and aren't currently planned. The cleanup
+  commands that are here: Convert Analytics to Tags, Fix Formatting
+  Gaps, Remove Hyperlinks, and Select Similar Formatting.
+- ReformatAllCites has an AI-driven counterpart: **Reformat Every Cite**
+  rewrites every cite in the document through the AI cite formatter
+  (see [AI features](#13-ai-features)). It reads the citation and
+  reformats it, rather than pattern-matching the old text the way the
+  Verbatim macro does.
 - **OCR**, **caselist** upload, **Tabroom** integration, and **vTub**
   don't exist in CardMirror yet.
 - CardMirror is pageless (like Word's Web Layout); it round-trips page

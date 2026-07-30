@@ -5,6 +5,54 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
+## 0.1.0-beta.28 — Unreleased
+
+- **Reformat Every Cite in Document (AI)** (new
+  `src/editor/ai/reformat-all-cites.ts`; ribbon `reformatAllCites`,
+  unbound by default, in the AI group; wired in `index.ts` /
+  `ribbon-groups.ts`). Runs the existing `aiCreateCite` pipeline — same
+  prompt, `parseCiteResponse`, `buildCiteTransaction` — over every
+  `cite_paragraph` in the open document, one at a time. Nothing about
+  per-cite behavior is re-implemented; this is the driver. Design points,
+  all forced by "one model request per cite, on a doc that can hold
+  hundreds":
+  - **Confirm first.** A short dialog states the exact request count
+    ("2 cites … that is 2 model requests"), that each cite is its own
+    undo step, and that Esc stops the pass. Declining touches nothing.
+  - **One lease at a time, not one per cite.** A whole-document lease
+    would block the user from typing for the entire run; N live leases
+    would make every keystroke run N `leaseTouched` region diffs in
+    `coordinatorBlocks`. The pass claims and releases per cite, so the
+    rest of the doc stays editable and a cite another AI op already
+    holds is skipped (counted, not failed).
+  - **No cached positions.** The pass walks a document cursor and asks
+    the LIVE doc for the next `cite_paragraph` each iteration. A
+    precomputed position list or an ordinal index breaks on three real
+    cases: the rewritten cite changing length, a user edit elsewhere
+    during the run, and a rewrite the cite classifier DEMOTES to
+    `card_body` because no token could be located (cite-ness is the
+    mark). All three are covered by tests.
+  - **One transaction per cite**, so partial progress survives a failure
+    and a bad cite undoes on its own. A single failed cite doesn't abort
+    the pass; an `auth`/`model` `LlmError` does (it would otherwise
+    repeat identically for every remaining cite).
+  - **Progress and stop.** The activity pill narrates "Cite N of M · Esc
+    to stop"; Escape sets a cancel flag checked between cites (the
+    request in flight still lands) and stands down while a modal is open
+    so it can't swallow a dialog's Escape. One end-of-run summary toast
+    tallies reformatted / failed / skipped / left-unstyled — the
+    per-cite unstyled toast from `applyCiteToSelection` would be a toast
+    storm across a document, so the pass calls `buildCiteTransaction`
+    directly and reads `CITE_TOKENS_MARKED_META` itself.
+  Smoke-tested in the browser against a stubbed provider: the palette
+  finds it by "reformat all cites", the confirm text pluralizes
+  correctly (1 cite / 2 cites), both cites were rewritten in place with
+  `cite_mark` intact, undo stepped back one cite at a time, and Escape
+  mid-flight stopped after one request with "Reformatted 1 of 2 cites ·
+  stopped." Docs: MANUAL.md §13 AI table + the Verbatim-users note (the
+  "ReformatAllCites isn't in CardMirror" claim was stale),
+  ARCHITECTURE.md §13/§14, PROJECT.md status.
+
 ## 0.1.0-beta.27 — 2026-07-30
 
 - **File-index service (utilityProcess) + off-thread warm parsing.** The

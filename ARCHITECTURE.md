@@ -492,9 +492,12 @@ user-facing source of truth. The notable design points:
 **The cleanup family.** A few of Verbatim's cleanup commands are shipped —
 Convert Analytics to Tags, Convert Cited Analytics to Tags, Fix
 Formatting Gaps, Remove Hyperlinks, and Select Similar Formatting. The
-rest (AutoNumberTags, DeNumberTags, ReformatAllCites, FixFakeTags,
-ConvertToDefaultStyles, …) map cleanly to schema transforms but aren't
-planned right now.
+rest (AutoNumberTags, DeNumberTags, FixFakeTags, ConvertToDefaultStyles,
+…) map cleanly to schema transforms but aren't planned right now.
+ReformatAllCites is covered instead by `reformatAllCites` (§14, AI):
+reformatting a citation needs judgment, not a pattern rewrite, so it
+drives the AI cite creator over every `cite_paragraph` rather than
+being a schema transform.
 
 ## 14. Images and AI
 
@@ -511,6 +514,18 @@ surface. Shipped:
 
 - **`aiCreateCite` (Mod-Shift-X)** formats a selection into a
   Verbatim-style citation with `cite_mark` on the extracted tokens.
+- **`reformatAllCites`** (unbound) drives `aiCreateCite`'s prompt, parser
+  and transaction builder over every `cite_paragraph` in the document —
+  one request and one undo step per cite, behind a request-count confirm
+  (`reformat-all-cites.ts`). It holds ONE lease at a time, not one per
+  cite: a whole-doc lease would lock out typing for the entire run, and N
+  live leases would make every keystroke run N region diffs in
+  `coordinatorBlocks`. Positions are never cached either — it walks a
+  document cursor and re-scans the live doc for the next cite each
+  iteration, which survives the rewritten cite's length change, user
+  edits elsewhere, and a cite the classifier demotes to `card_body` when
+  no token could be marked (any of which would invalidate a precomputed
+  position list or an ordinal index).
 - **`aiAskAboutSelection` (Mod-Shift-Q)** starts an AI comment thread
   with the surrounding card as context; `@AI` in a thread re-invokes it.
 - **`aiGenerateAltText`** and **`aiGenerateTable`** (right-click an image)

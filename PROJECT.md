@@ -51,7 +51,8 @@ the F-key formatting commands · cards, analytics, tables, and images ·
 read mode · send-to-speech · drag-and-drop reordering · the three-slot
 multi-doc workspace · command-palette file search and find/replace ·
 spaced-repetition flashcards · AI cite/alt-text/table/comment features
-(comments, notes, and ask-AI work on images too) · AI OCR/PDF text repair
+(comments, notes, and ask-AI work on images too; cite formatting also
+runs whole-document behind a confirm) · AI OCR/PDF text repair
 (diff-based, animated, single undo) · selection translation
 (MyMemory keyless / Anthropic / Google, AI-optional) · editor spellcheck ·
 autosave and crash recovery · desktop auto-update · encrypted card sharing ·
@@ -61,9 +62,10 @@ views + editable linked copies) · display-only card numbering.
 **Planned** (rationale in `ARCHITECTURE.md`): Verbatim Flow integration ·
 numbered/bulleted lists · per-type display-spacing ·
 fuller screen-reader support and accessibility presets. The
-remaining Verbatim cleanup macros (AutoNumberTags, ReformatAllCites,
+remaining Verbatim cleanup macros (AutoNumberTags,
 ConvertToDefaultStyles, …) aren't planned, though several cleanup
-commands already ship.
+commands already ship — and ReformatAllCites has an AI counterpart in
+**Reformat Every Cite**.
 
 **Out of scope:** section/page layout, footnotes, revision-ID metadata,
 non-heading bookmarks, localization. The importer drops these; the

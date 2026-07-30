@@ -146,6 +146,7 @@ import { commentsPlugin, commentsKey, loadThreads, getCommentsState, gcOrphanThr
 import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
 import { CommentsColumn, addCommentToSelection, FC_PREFIX, AI_PREFIX, NOTE_PREFIX } from './comments-ui.js';
 import { runAiCreateCite } from './ai/cite-creator.js';
+import { runReformatAllCites } from './ai/reformat-all-cites.js';
 import { runTranslate } from './translate.js';
 import { runRepairText } from './ai/repair-text.js';
 import { runRepairFormatting } from './ai/repair-formatting.js';
@@ -1595,6 +1596,10 @@ const ribbonContext: RibbonContext = {
   aiCreateCite: () => {
     if (!view) return;
     runAiCreateCite(view);
+  },
+  reformatAllCites: () => {
+    if (!view) return;
+    void runReformatAllCites(view);
   },
   translate: () => {
     if (!view) return;
