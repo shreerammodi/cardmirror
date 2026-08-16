@@ -3,13 +3,19 @@
  * Reformat Every Cite (AI) — the whole-document sweep over the cite
  * creator.
  *
- * The load-bearing invariant is the cursor walk: the pass re-scans the
- * LIVE doc for the next `cite_paragraph` each iteration instead of
- * caching positions, because a rewritten cite changes length and can
- * even stop being a `cite_paragraph` (the classifier demotes a cite
- * whose author/date token found no home). Both cases would break a
- * precomputed position list or an ordinal index, and both are covered
- * here — every cite is visited exactly once, none twice, none skipped.
+ * The load-bearing invariant is position tracking through the edit
+ * coordinator: the pass claims a lease per cite up front and applies at
+ * the lease's LIVE bounds, because replies come back out of order and
+ * every rewrite shifts the cites after it — a rewritten cite changes
+ * length and can even stop being a `cite_paragraph` (the classifier
+ * demotes a cite whose author/date token found no home). Both cases
+ * would break a cached position list or an ordinal index, and both are
+ * covered here — every cite is sent exactly once, none twice, none
+ * skipped, each rewrite landing on its own paragraph.
+ *
+ * The dispatch shape is the other contract: bounded concurrency behind a
+ * one-cite slow start, so a pass that cannot work at all costs a single
+ * request.
  *
  * `runReformatAllCites` returns the pass promise, so every assertion
  * below awaits the real completion instead of a timer.
@@ -23,13 +29,12 @@ import { schema, newHeadingId } from '../../src/schema/index.js';
 import { settings } from '../../src/editor/settings.js';
 import { editCoordinatorPlugin, claimRegion } from '../../src/editor/ai/edit-coordinator.js';
 import { citeClassifierPlugin } from '../../src/editor/cite-classifier-plugin.js';
-import { AiActivity } from '../../src/editor/ai/ai-activity.js';
+import { ThinkingTooltip } from '../../src/editor/ai/thinking-tooltip.js';
 import { LlmError, type LlmRequest, type LlmReply } from '../../src/editor/ai/llm.js';
 import type { ConfirmOptions } from '../../src/editor/confirm-dialog.js';
 import type { ToastOptions } from '../../src/editor/toast.js';
 import {
   collectCiteParagraphs,
-  nextCiteParagraph,
   runReformatAllCites,
 } from '../../src/editor/ai/reformat-all-cites.js';
 
@@ -74,6 +79,9 @@ interface FakeView {
   isDestroyed: boolean;
   dom: HTMLElement;
   dispatch(tr: unknown): void;
+  /** Test hook: fires after every transaction lands, so a test can await
+   *  the real edit instead of guessing at a delay. */
+  onDispatch?: (state: EditorState) => void;
 }
 function fakeView(d: PMNode): EditorView & FakeView {
   const v: FakeView = {
@@ -88,6 +96,7 @@ function fakeView(d: PMNode): EditorView & FakeView {
       // test, which builds them off this very state.
       const step = tr as Parameters<EditorState['apply']>[0];
       v.state = v.state.apply(step);
+      v.onDispatch?.(v.state);
     },
   };
   // Deliberate stand-in: the pass reads four members, and the DOM-facing
@@ -181,21 +190,19 @@ describe('collectCiteParagraphs', () => {
   });
 });
 
-describe('nextCiteParagraph', () => {
-  const d = doc(cite('Smith 24', ', one'), body('x'), cite('Jones 23', ', two'));
-  const targets = collectCiteParagraphs(d);
-
-  it('returns the first cite at or after the cursor', () => {
-    expect(nextCiteParagraph(d, 0)!.text).toBe('Smith 24, one');
-    expect(nextCiteParagraph(d, targets[0]!.to)!.text).toBe('Jones 23, two');
-  });
-
-  it('returns null once the cursor is past the last cite', () => {
-    expect(nextCiteParagraph(d, targets[1]!.to)).toBeNull();
-  });
-});
-
 describe('runReformatAllCites', () => {
+  /** A gate that opens once `count` callers are waiting on it. Lets a test
+   *  hold the whole pool in flight — and prove it IS in flight — without
+   *  a wall-clock delay. */
+  const barrier = (count: number) => {
+    const gate = Promise.withResolvers<void>();
+    let arrived = 0;
+    return async (): Promise<void> => {
+      if (++arrived >= count) gate.resolve();
+      await gate.promise;
+    };
+  };
+
   it('does not even confirm when the document has no cites', async () => {
     await runReformatAllCites(fakeView(doc(card(tag('A'), body('no cites here')))));
     expect(showConfirm).not.toHaveBeenCalled();
@@ -299,11 +306,11 @@ describe('runReformatAllCites', () => {
     expect(summary()).toContain('1 left unstyled');
   });
 
-  it('numbers the progress readout over sent cites, not loop turns', async () => {
-    // A blank `cite_paragraph` is skipped without a request, but it is
-    // also absent from `total` (collectCiteParagraphs drops it). If the
-    // ordinal counted loop turns, every cite after the blank one would
-    // read past the total — "Cite 3 of 2".
+  it('counts the progress readout against the authorized total', async () => {
+    // One pill narrates the whole pass, so the readout counts rewrites,
+    // not the cite in hand. A blank `cite_paragraph` is skipped without a
+    // request AND absent from `total` (collectCiteParagraphs drops it); if
+    // it burned a number the readout would read past the total.
     const view = fakeView(
       doc(
         card(tag('A'), schema.nodes['cite_paragraph']!.create(), cite('Smith 24', ', a')),
@@ -313,20 +320,22 @@ describe('runReformatAllCites', () => {
     callLlm.mockImplementation(
       replyPerLastname({ Smith: 'Smith 24, NEW A.', Jones: 'Jones 23, NEW B.' }),
     );
-    const setStage = vi.spyOn(AiActivity.prototype, 'setStage');
+    const setStage = vi.spyOn(ThinkingTooltip.prototype, 'setStage');
 
     await runReformatAllCites(view);
 
     const progress = setStage.mock.calls
       .map(([s]) => s)
-      .filter((s): s is string => typeof s === 'string' && s.startsWith('reformatting cite '));
+      .filter((s): s is string => typeof s === 'string');
     setStage.mockRestore();
-    // Gerund phrases, per the pill contract: the clod-mode template
-    // wraps stages as "<persona> is <stage>…", so "Cite 1 of 2" would
-    // render as the nonsense "Clod is Cite 1 of 2…".
-    expect(progress).toEqual([
-      'reformatting cite 1 of 2 · Esc to stop',
-      'reformatting cite 2 of 2 · Esc to stop',
+    // Gerund phrases, per the pill contract: the clod-mode template wraps
+    // stages as "<persona> is <stage>…", so "Cite 1 of 2" would render as
+    // the nonsense "Clod is Cite 1 of 2…". Deduped because a dispatch and
+    // the completion before it can report the same tally.
+    expect([...new Set(progress)]).toEqual([
+      'reformatting cites · 0 of 2 rewritten · Esc to stop',
+      'reformatting cites · 1 of 2 rewritten · Esc to stop',
+      'reformatting cites · 2 of 2 rewritten · Esc to stop',
     ]);
     expect(sentTexts()).toEqual(['Smith 24, a', 'Jones 23, b']);
   });
@@ -629,5 +638,101 @@ describe('runReformatAllCites', () => {
     expect(summary()).toBe(
       'Reformatted 2 of 2 cites · cites added during the run were left alone.',
     );
+  });
+
+  it('sends the first cite alone, then overlaps the rest', async () => {
+    // Slow start: one request until one comes back clean (a dead key must
+    // cost ONE call, not a pool's worth), then the remaining cites go out
+    // together instead of one round trip each.
+    const names = ['Smith 24', 'Jones 23', 'Lee 22', 'Diaz 21'];
+    const view = fakeView(doc(...names.map((c) => card(tag('T'), cite(c, ', x')))));
+    const poolFull = barrier(names.length - 1);
+    let inFlight = 0;
+    let call = 0;
+    const atStart: number[] = [];
+    callLlm.mockImplementation(async (req) => {
+      inFlight++;
+      atStart.push(inFlight);
+      // Only the post-slow-start cites wait for each other; the first one
+      // would deadlock on a barrier nobody else can reach.
+      if (++call > 1) await poolFull();
+      inFlight--;
+      const content = req.messages[0]!.content;
+      const head = (typeof content === 'string' ? content : '').split(',')[0]!;
+      return reply(`${head}, NEW.`, [head]);
+    });
+
+    await runReformatAllCites(view);
+
+    // The first request had the wire to itself; the other three shared it.
+    expect(atStart).toEqual([1, 1, 2, 3]);
+    expect(callLlm).toHaveBeenCalledTimes(4);
+    expect(summary()).toBe('Reformatted 4 of 4 cites.');
+  });
+
+  it('caps how many cites are in the air at once', async () => {
+    // Unbounded fan-out is what the cap exists to prevent: callLlm gives a
+    // 429 exactly one retry, so a hundred-cite document fired at once
+    // would come back mostly failed, at full token cost.
+    const names = Array.from({ length: 9 }, (_, i) => `Name${i} 2${i}`);
+    const view = fakeView(doc(...names.map((c) => card(tag('T'), cite(c, ', x')))));
+    // Six is the cap. If the pool were wider, this barrier would open on
+    // its own; if it were narrower, the pass would deadlock here.
+    const poolFull = barrier(6);
+    let inFlight = 0;
+    let peak = 0;
+    let call = 0;
+    callLlm.mockImplementation(async (req) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      if (++call > 1) await poolFull();
+      inFlight--;
+      const content = req.messages[0]!.content;
+      const head = (typeof content === 'string' ? content : '').split(',')[0]!;
+      return reply(`${head}, NEW.`, [head]);
+    });
+
+    await runReformatAllCites(view);
+
+    expect(peak).toBe(6);
+    expect(callLlm).toHaveBeenCalledTimes(9);
+    expect(summary()).toBe('Reformatted 9 of 9 cites.');
+  });
+
+  it('lands each out-of-order reply on its own cite', async () => {
+    // The invariant concurrency needs and a document cursor cannot give:
+    // replies arrive in whatever order, and an EARLIER cite's rewrite
+    // moves every later cite while those are still in flight. Positions
+    // come from each cite's lease, which the coordinator remaps, so a
+    // reply released third still lands on its own paragraph.
+    const grow = ', '.padEnd(300, 'z');
+    const names = ['Smith 24', 'Jones 23', 'Lee 22', 'Diaz 21'];
+    const view = fakeView(doc(...names.map((c) => card(tag('T'), cite(c, ', old')))));
+    const jonesApplied = Promise.withResolvers<void>();
+    const diazApplied = Promise.withResolvers<void>();
+    view.onDispatch = (state) => {
+      const texts = citeTexts(state.doc);
+      if (texts.includes(`Jones 23${grow}`)) jonesApplied.resolve();
+      if (texts.includes(`Diaz 21${grow}`)) diazApplied.resolve();
+    };
+    const poolFull = barrier(names.length - 1);
+    callLlm.mockImplementation(async (req) => {
+      const content = req.messages[0]!.content;
+      const head = (typeof content === 'string' ? content : '').split(',')[0]!;
+      const grown = reply(`${head}${grow}`, [head]);
+      if (head.startsWith('Smith')) return grown; // the slow-start cite
+      await poolFull();
+      // Jones lands first and grows by 300 characters, shifting Lee and
+      // Diaz while both are still in flight. Diaz then lands before Lee —
+      // out of document order.
+      if (head.startsWith('Diaz')) await jonesApplied.promise;
+      if (head.startsWith('Lee')) await diazApplied.promise;
+      return grown;
+    });
+
+    await runReformatAllCites(view);
+
+    expect(citeTexts(view.state.doc)).toEqual(names.map((n) => `${n}${grow}`));
+    expect(summary()).toBe('Reformatted 4 of 4 cites.');
   });
 });

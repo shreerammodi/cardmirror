@@ -5,6 +5,76 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
+## Unreleased
+
+### Changed: Reformat Every Cite runs its requests concurrently
+
+The pass was strictly sequential — `await` one cite's request, apply,
+then walk to the next — so wall-clock time was N round trips, and a
+file with a hundred cites took as long as a hundred cite formats. Cites
+are independent requests over disjoint ranges, so the pass now keeps
+`MAX_IN_FLIGHT` (6) of them in the air.
+
+Bounded, not all-at-once, deliberately: `callLlm` gives a 429 exactly
+one retry and treats a `retry-after` above 8s as a hard failure, so
+firing a hundred requests at a per-minute quota would convert a slow
+pass into a mostly-failed one at full token cost. A small pool captures
+nearly all of the speedup with none of that. Measured in the browser
+against a stubbed provider (1.2s per reply, 9 cites): 9 requests at
+t=0 / 1.2s ×6 / 2.4s ×2, 3.7s total against ~10.8s sequential.
+
+Two design changes fall out of concurrency:
+
+- **Slow start.** The first cite goes alone and the pool opens only once
+  one comes back clean. A rejected key, a retired model or an exhausted
+  quota therefore still costs ONE request, exactly as before, rather
+  than a pool's worth; `FAILURE_STREAK_LIMIT` covers failures that only
+  appear later. A failure does not open the pool.
+- **Leases instead of a document cursor.** The old walk re-scanned the
+  live doc for the next `cite_paragraph` each iteration — correct only
+  because exactly one cite was ever in flight. Replies now land out of
+  order, and an earlier cite's rewrite moves every later cite while
+  those are still in flight, which no cursor or ordinal index survives.
+  The pass claims a lease per cite up front and applies at the lease's
+  live bounds; the coordinator already remaps leases through every
+  intervening transaction, including a user edit above, a sibling's
+  length change, and a rewrite the classifier demotes to `card_body`.
+  The cost is explicit: N live leases for the run, so every cite line is
+  locked against typing and each user transaction runs N region diffs in
+  `coordinatorBlocks` — cheap per lease, over a run that is now a
+  fraction as long. Body text stays editable throughout.
+
+Cues split by granularity. Six pills all narrating the same pass is
+noise, so `AiActivity` (one pill bound to one range) is no longer used
+here: a single `ThinkingTooltip` carries the pass —
+`reformatting cites · 3 of 9 rewritten · Esc to stop` — and one
+`AiWorkingBox` per in-flight cite marks what is being worked on. Escape
+relabels the pill to `stopping after the cites in flight`. Everything
+else is unchanged: the request-count confirm (now stating the pool
+width), one transaction and one undo step per cite, the busy/unstyled/
+failed tallies, the mid-run-paste cap, and the per-pane guard.
+
+Found and fixed while smoke-testing the concurrent cues:
+`ThinkingTooltip.relayout` read `.pmd-dropzone-root`'s rect without
+checking that the shelf was visible. Hidden (empty shelf) it reports an
+all-zero rect, which put the pill floor above the band, and
+`packColumn`'s bottom-up pass then clamped EVERY pill to `bandTop` —
+concurrent pills piled on one pixel instead of queueing. A zero-height
+shelf now imposes no floor.
+
+Tests: `tests/editor/reformat-all-cites.test.ts` gains coverage for the
+dispatch shape (first cite alone, then three overlapping), the cap (nine
+cites, peak of six — a barrier that would deadlock a narrower pool and
+open on its own for a wider one), and out-of-order application (an
+earlier cite's 300-character growth lands while two later cites are in
+flight, which are then released in reverse document order). The
+pre-existing invariants — one request per cite, streak breaker, auth
+fail-fast, Escape scoping, per-pane guard, request cap — are unchanged
+and still pass as written. Smoke-tested in the browser against a
+stubbed Anthropic endpoint: ten cites rewritten in place with
+`cite_mark` intact, one pill plus six outlines, cues torn down at the
+end, and Escape mid-pool giving "Reformatted 7 of 16 cites · stopped."
+
 ## 1.0.1 — 2026-08-15
 
 ### Added: editor text context menu (Cut / Copy / Paste)

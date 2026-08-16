@@ -241,10 +241,14 @@ export class ThinkingTooltip {
       const vrect = viewport.getBoundingClientRect();
       const bandTop = Math.max(vrect.top, topChromeBottom(), 0) + EDGE;
       const bandBottom = Math.min(vrect.bottom, window.innerHeight) - EDGE;
-      const dz = document.querySelector('.pmd-dropzone-root');
-      const dropFloor = dz
-        ? Math.min(dz.getBoundingClientRect().top - SEL_GAP, bandBottom)
-        : bandBottom;
+      // A HIDDEN shelf (`display: none` when empty) reports an all-zero
+      // rect, and trusting its `top` put the floor above the band — which
+      // `packColumn`'s bottom-up pass then resolved by clamping EVERY pill
+      // to `bandTop`, piling concurrent pills on one pixel. No layout box,
+      // no floor.
+      const dzRect = document.querySelector('.pmd-dropzone-root')?.getBoundingClientRect();
+      const dropFloor =
+        dzRect && dzRect.height > 0 ? Math.min(dzRect.top - SEL_GAP, bandBottom) : bandBottom;
       const left = rect.left + EDGE;
 
       const items = pills.map((p) => {

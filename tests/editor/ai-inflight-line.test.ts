@@ -34,13 +34,15 @@ describe('inFlightLine', () => {
   });
 
   it('reformat-all stage strings read as sentences in both modes', () => {
-    const stage = 'reformatting cite 3 of 12 · Esc to stop';
-    expect(inFlightLine(stage, false, 'Clod')).toBe('Reformatting cite 3 of 12 · Esc to stop…');
-    expect(inFlightLine(stage, true, 'Clod')).toBe(
-      'Clod is reformatting cite 3 of 12 · Esc to stop…',
+    const stage = 'reformatting cites · 3 of 12 rewritten · Esc to stop';
+    expect(inFlightLine(stage, false, 'Clod')).toBe(
+      'Reformatting cites · 3 of 12 rewritten · Esc to stop…',
     );
-    expect(inFlightLine('stopping after this cite', true, 'Clod')).toBe(
-      'Clod is stopping after this cite…',
+    expect(inFlightLine(stage, true, 'Clod')).toBe(
+      'Clod is reformatting cites · 3 of 12 rewritten · Esc to stop…',
+    );
+    expect(inFlightLine('stopping after the cites in flight', true, 'Clod')).toBe(
+      'Clod is stopping after the cites in flight…',
     );
   });
 });

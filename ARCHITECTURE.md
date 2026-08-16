@@ -517,15 +517,21 @@ surface. Shipped:
 - **`reformatAllCites`** (unbound) drives `aiCreateCite`'s prompt, parser
   and transaction builder over every `cite_paragraph` in the document —
   one request and one undo step per cite, behind a request-count confirm
-  (`reformat-all-cites.ts`). It holds ONE lease at a time, not one per
-  cite: a whole-doc lease would lock out typing for the entire run, and N
-  live leases would make every keystroke run N region diffs in
-  `coordinatorBlocks`. Positions are never cached either — it walks a
-  document cursor and re-scans the live doc for the next cite each
-  iteration, which survives the rewritten cite's length change, user
-  edits elsewhere, and a cite the classifier demotes to `card_body` when
-  no token could be marked (any of which would invalidate a precomputed
-  position list or an ordinal index).
+  (`reformat-all-cites.ts`). Requests run CONCURRENTLY, up to
+  `MAX_IN_FLIGHT` (6), after a one-cite slow start: the pool only opens
+  once a cite comes back clean, so a dead key or retired model still
+  costs exactly one request. It is bounded rather than all-at-once
+  because `callLlm` gives a 429 a single retry, so fanning a hundred-cite
+  document at a per-minute quota would return mostly failures at full
+  token cost. Positions come from a lease per cite, claimed up front:
+  replies land out of order and each rewrite shifts the cites after it,
+  and leases remap through every intervening transaction — including a
+  user edit above, a sibling's length change, and a cite the classifier
+  demotes to `card_body` when no token could be marked. The cost is N
+  live leases for the run (every cite line locked, N region diffs per
+  user transaction in `coordinatorBlocks`), bought deliberately for a run
+  that is a fraction as long. Cues split by granularity: one
+  `ThinkingTooltip` for the pass, one `AiWorkingBox` per cite in flight.
 - **`aiAskAboutSelection` (Mod-Shift-Q)** starts an AI comment thread
   with the surrounding card as context; `@AI` in a thread re-invokes it.
 - **`aiGenerateAltText`** and **`aiGenerateTable`** (right-click an image)

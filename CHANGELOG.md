@@ -5,6 +5,23 @@ changes in each release, written for users of the editor. For
 in-depth rationale and implementation context behind each entry,
 see `DETAILED_CHANGELOG.md`.
 
+## Unreleased
+
+### Changed
+
+- **Reformat Every Cite is much faster.** The whole-document cite
+  reformatter used to wait for each cite before starting the next one,
+  so a hundred-cite file meant a hundred round trips back to back. It
+  now works on several cites at once — the first one goes alone, and
+  once it comes back the pass keeps six moving — which cuts a long run
+  to a fraction of the time it took. Nothing else about it changes: the
+  same confirmation up front, the same number of requests, one undo step
+  per cite, **Esc** still stops it (after the cites already in flight),
+  and the same end-of-run summary. Cites are locked while the pass runs;
+  the ones being worked on right now are outlined, and the pill counts
+  rewrites as they land. If your key is dead or your quota is gone,
+  that still costs exactly one request to find out, not six.
+
 ## 1.0.1 — 2026-08-15
 
 ### Added

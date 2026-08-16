@@ -4,40 +4,61 @@
  *
  * Every `cite_paragraph` in the doc is fed to the same prompt, the same
  * parser and the same transaction builder the `aiCreateCite` command
- * uses, one paragraph at a time. Nothing about the per-cite behaviour is
- * re-implemented here; this module is the *driver*:
+ * uses. Nothing about the per-cite behaviour is re-implemented here;
+ * this module is the *driver*:
  *
- *   - **Confirm first.** One model request per cite means real money and
- *     real minutes, so the pass never starts without an explicit OK that
- *     states the request count.
- *   - **Sequential, one lease at a time.** A lease per in-flight cite
- *     (never all of them at once): a whole-doc lease would lock the user
- *     out of typing for the entire run, and holding N leases would make
- *     every keystroke run N region-diffs in `coordinatorBlocks`.
- *   - **Re-scan between cites instead of caching positions.** The pass
- *     walks forward with a document cursor and asks the *live* doc for
- *     the next cite each iteration. That survives user edits elsewhere,
- *     the length change of the cite we just rewrote, and the case where
- *     a rewritten paragraph loses its `cite_mark` and gets demoted out
- *     of `cite_paragraph` by the classifier — all of which would
- *     invalidate a precomputed position list or an ordinal index.
+ *   - **Confirm first.** One model request per cite means real money, so
+ *     the pass never starts without an explicit OK that states the
+ *     request count.
+ *   - **Concurrent, bounded.** Cites are independent requests over
+ *     disjoint ranges, so the pass keeps `MAX_IN_FLIGHT` of them in the
+ *     air instead of paying one round trip per cite in series. It is
+ *     bounded rather than "all of them at once" on purpose:
+ *     `callLlm` gives a 429 exactly ONE retry and treats a
+ *     `retry-after` above 8s as a hard failure, so firing a
+ *     hundred-cite document at a provider whose limit is dozens per
+ *     minute would convert a slow pass into a mostly-failed one, at
+ *     full token cost. A small pool captures nearly all the speedup
+ *     with none of that.
+ *   - **Slow start.** The first cite goes alone; the pool only opens
+ *     once one comes back clean. A dead key, a retired model or an
+ *     exhausted quota therefore still costs exactly ONE request instead
+ *     of a pool's worth (`FAILURE_STREAK_LIMIT` covers the same ground
+ *     for failures that only show up later).
+ *   - **A lease per cite, claimed up front.** The lease is what tracks a
+ *     cite's position: leases remap through every intervening
+ *     transaction, so a cite's range is still right after the user
+ *     edited above it, after a *sibling* cite's rewrite changed length,
+ *     and whatever order the replies land in. Out-of-order completion is
+ *     exactly what a document cursor cannot survive, which is why the
+ *     pass no longer walks one. The cost is real and deliberate: while
+ *     the pass runs, every cite line is locked against typing and each
+ *     user transaction remaps N lease positions in `coordinatorBlocks`
+ *     — cheap per lease, and now over a run that is a fraction as long.
+ *     Body text stays editable throughout.
  *   - **One transaction per cite.** Partial progress survives a failure
  *     mid-pass, and a bad cite can be undone on its own. The flip side
  *     (N undo steps) is called out in the confirm text.
- *   - **Escape stops it.** The pass checks a cancel flag between cites;
- *     the request already in flight still lands.
- *   - **One pass per pane.** Per-cite leases leave nothing for a second
- *     invocation over the same document to collide with, so re-entrance
- *     is refused explicitly (`runningPasses`) rather than by the
- *     coordinator. Another pane is another document, and runs freely.
+ *   - **Escape stops it.** The pass stops dispatching; the requests
+ *     already in flight still land.
+ *   - **One pill, N tints.** The cues split by granularity: a single
+ *     `ThinkingTooltip` narrates the pass's progress, and one
+ *     `AiWorkingBox` per in-flight cite marks what is being worked on.
+ *     `AiActivity` pairs one pill with one range, which no longer fits.
+ *   - **One pass per pane.** A second invocation over the same document
+ *     is refused explicitly (`runningPasses`) — with a lease over every
+ *     cite it would find nothing to claim anyway, but it must not get as
+ *     far as a second confirm. Another pane is another document, and
+ *     runs freely.
  */
 
 import type { EditorView } from 'prosemirror-view';
 import type { Node as PMNode } from 'prosemirror-model';
 import { settings } from '../settings.js';
 import { callLlm, LlmError, activeApiKey } from './llm.js';
-import { AiActivity } from './ai-activity.js';
-import { claimRegion } from './edit-coordinator.js';
+import { ThinkingTooltip } from './thinking-tooltip.js';
+import { AiWorkingBox } from './ai-working-box.js';
+import { claimRegion, type EditLease } from './edit-coordinator.js';
 import { showConfirm } from '../confirm-dialog.js';
 import { isAnyOverlayOpen } from '../overlay-stack.js';
 import { showToast } from '../toast.js';
@@ -71,9 +92,9 @@ function targetFor(node: PMNode, pos: number): CiteTarget {
   };
 }
 
-/** Every non-empty `cite_paragraph` in the doc, in document order. Used
- *  for the up-front count in the confirm prompt; the pass itself
- *  re-scans as it goes (see `nextCiteParagraph`). */
+/** Every non-empty `cite_paragraph` in the doc, in document order. Blank
+ *  cite lines are dropped: there is nothing to reformat, and counting
+ *  them would inflate the authorized request count. */
 export function collectCiteParagraphs(doc: PMNode): CiteTarget[] {
   const out: CiteTarget[] = [];
   doc.descendants((node, pos) => {
@@ -84,22 +105,6 @@ export function collectCiteParagraphs(doc: PMNode): CiteTarget[] {
     return false;
   });
   return out;
-}
-
-/** The first `cite_paragraph` at or after `cursor`, read from the LIVE
- *  doc. The pass advances `cursor` past each paragraph it handles, and a
- *  handled paragraph always starts strictly before the new cursor, so
- *  this never returns the same paragraph twice — including when the
- *  rewritten cite is longer or shorter than the original. */
-export function nextCiteParagraph(doc: PMNode, cursor: number): CiteTarget | null {
-  let found: CiteTarget | null = null;
-  doc.descendants((node, pos) => {
-    if (found) return false;
-    if (node.type.name !== 'cite_paragraph') return true;
-    if (pos >= cursor) found = targetFor(node, pos);
-    return false;
-  });
-  return found;
 }
 
 /** Outcome tallies, so the summary toast can be honest about what
@@ -126,9 +131,18 @@ export interface ReformatAllCitesSummary {
   cappedOut: boolean;
 }
 
+/** Requests in the air at once once the pass is up to speed. Sized for
+ *  the provider, not the document: Anthropic's entry tier allows dozens
+ *  of requests a minute, and `callLlm` retries a 429 exactly once, so a
+ *  pool this size stays comfortably inside the limit while cutting a
+ *  hundred-cite pass from a hundred round trips to about seventeen. */
+const MAX_IN_FLIGHT = 6;
+
 /** Consecutive failures that end a pass. Two is within the noise of a
  *  flaky connection (each request has already burned its own internal
- *  retry); three in a row means the run is not going to recover. */
+ *  retry); three in a row means the run is not going to recover.
+ *  "In a row" is by completion order — with a pool in flight that is the
+ *  order replies land, which is the order the failures are observed. */
 const FAILURE_STREAK_LIMIT = 3;
 
 function summaryMessage(s: ReformatAllCitesSummary, total: number): string {
@@ -183,11 +197,8 @@ function installCancelKey(view: EditorView, onCancel: () => void): () => void {
  *  second slot — so two passes in two panes are two different documents'
  *  cites, and refusing the second would be an arbitrary restriction. What
  *  must not happen is two passes over the SAME document, which would send
- *  (and bill) every cite twice; the single-selection AI commands get that
- *  from the coordinator, since each holds a lease over its selection for
- *  the whole request, but this pass leases one cite at a time by design
- *  and so has nothing to collide with. Windows need no coordination at
- *  all: each is its own renderer, hence its own copy of this module. */
+ *  (and bill) every cite twice. Windows need no coordination at all: each
+ *  is its own renderer, hence its own copy of this module. */
 const runningPasses = new Set<EditorView>();
 
 /** Entry point — fires on the `reformatAllCites` ribbon command. The
@@ -226,9 +237,9 @@ export async function runReformatAllCites(view: EditorView): Promise<void> {
       title: 'Reformat every cite with AI?',
       message:
         `${total} cite${total === 1 ? '' : 's'} in this document will be sent to the AI ` +
-        `one at a time and rewritten in place.\n\n` +
+        `and rewritten in place, up to ${MAX_IN_FLIGHT} at a time.\n\n` +
         `That is ${total} model request${total === 1 ? '' : 's'}, so it costs ${total} ` +
-        `call${total === 1 ? '' : 's'} against your API key and can take a while. ` +
+        `call${total === 1 ? '' : 's'} against your API key. ` +
         `Each cite is its own undo step, and Escape stops the pass.`,
       confirmLabel: `Reformat ${total} cite${total === 1 ? '' : 's'}`,
       cancelLabel: 'Cancel',
@@ -238,6 +249,16 @@ export async function runReformatAllCites(view: EditorView): Promise<void> {
   } finally {
     runningPasses.delete(view);
   }
+}
+
+/** One cite the pass has claimed and will send. */
+interface CiteJob {
+  target: CiteTarget;
+  /** Live bounds of this cite for the whole run — see the module note on
+   *  why positions come from a lease and not a cursor. */
+  lease: EditLease;
+  /** 1-based ordinal over claimed cites, for the console log lines. */
+  n: number;
 }
 
 async function reformatAllCites(
@@ -255,120 +276,190 @@ async function reformatAllCites(
     halted: false,
     cappedOut: false,
   };
-  let activity: AiActivity | null = null;
+  // Cues: ONE pill for the pass, one purple tint per cite in flight.
+  // `AiActivity` deliberately isn't used here — it pairs exactly one pill
+  // with exactly one range, and six pills all narrating the same pass is
+  // noise. The tints already say which cites are being worked on, so the
+  // pill carries the pass's progress instead.
+  const tip = new ThinkingTooltip();
+  let tipShown = false;
+  const tints = new Map<CiteJob, AiWorkingBox>();
+  const inFlight = new Set<CiteJob>();
+  /** Set by an auth/model failure: the same error is waiting for every
+   *  remaining cite, so stop dispatching. Not a summary field — the
+   *  toast it raises already says what happened. */
+  let aborted = false;
+
+  /** Re-anchor and re-label every cue. Called on each dispatch and each
+   *  completion: a rewrite moves the cites after it, so the tints of the
+   *  requests still in flight need their leases re-read, not their
+   *  original rects. */
+  const refreshCues = (): void => {
+    let anchor: { from: number; to: number } | null = null;
+    for (const job of inFlight) {
+      const r = job.lease.region();
+      if (!r) continue;
+      tints.get(job)?.setRange(r);
+      // The pill tracks the topmost cite still in flight, so it walks down
+      // the document with the pass instead of jumping around the pool.
+      if (!anchor || r.from < anchor.from) anchor = r;
+    }
+    tip.setStage(
+      s.cancelled
+        ? 'stopping after the cites in flight'
+        : `reformatting cites · ${s.done} of ${total} rewritten · Esc to stop`,
+    );
+    if (!anchor) return;
+    if (tipShown) tip.setRange(anchor);
+    else {
+      tip.show(view, anchor);
+      tipShown = true;
+    }
+  };
+
   const removeCancelKey = installCancelKey(view, () => {
     if (s.cancelled) return;
     s.cancelled = true;
-    activity?.setStage('stopping after this cite');
+    refreshCues();
   });
-  let cursor = 0;
-  // Ordinal for the progress readout. Bumped only for paragraphs the
-  // pass actually takes on, so it stays in step with `total`, which
-  // counts non-empty cites only. A blank `cite_paragraph` sitting ahead
-  // of real ones must not burn a number, or the readout reads "Cite 3
-  // of 2".
-  let n = 0;
-  // Failures since the last success — see FAILURE_STREAK_LIMIT.
+
+  // Re-scan rather than reusing the list the confirm was counted from:
+  // the dialog is an await, and a collab partner's edit during it would
+  // leave every cached position stale. Capped at the authorized count —
+  // cites that appeared in the meantime are none of this pass's
+  // business, since billing past the number the user agreed to is worse
+  // than leaving them for a second run.
+  const fresh = collectCiteParagraphs(view.state.doc);
+  if (fresh.length > total) s.cappedOut = true;
+
+  // Claim every cite before sending any of them. The lease both reserves
+  // the range against other AI edits and, from here on, IS the cite's
+  // position: replies land out of order and each rewrite shifts the
+  // cites after it.
+  const jobs: CiteJob[] = [];
+  for (const target of fresh.slice(0, total)) {
+    const lease = claimRegion(view, { from: target.from, to: target.to }, { label: 'cite' });
+    if (!lease) {
+      s.skipped++;
+      continue;
+    }
+    jobs.push({ target, lease, n: jobs.length + 1 });
+  }
+
+  /** Next unclaimed job. Bumped before the await, so no two workers can
+   *  take the same cite. */
+  let next = 0;
+  /** Failures since the last success — see FAILURE_STREAK_LIMIT. */
   let streak = 0;
+  const stopped = (): boolean => s.cancelled || s.halted || aborted;
 
-  try {
-    while (!s.cancelled) {
-      // Checked at the top so every failure path reaches it — two of
-      // them `continue` out of the middle of the loop. A key, quota or
-      // endpoint that is simply not working fails the same way on every
-      // remaining cite; stop once that is clear rather than walking the
-      // whole document to prove it.
-      if (streak >= FAILURE_STREAK_LIMIT) {
-        s.halted = true;
-        break;
-      }
-      const target = nextCiteParagraph(view.state.doc, cursor);
-      if (!target) break;
-      // Advance past this paragraph BEFORE any await: a `continue` from
-      // here must not re-find it. Corrected from the live lease once the
-      // cite is done with, however it ended.
-      cursor = target.to;
-      if (!target.text) continue;
-      // The confirm authorized exactly `total` requests. Cites pasted in
-      // while the pass runs are none of its business — billing past the
-      // number the user agreed to is worse than leaving them for a
-      // second run, and the readout could otherwise say "Cite 9 of 7".
-      if (n >= total) {
-        s.cappedOut = true;
-        break;
-      }
-      n++;
-
-      const lease = claimRegion(view, { from: target.from, to: target.to }, { label: 'cite' });
-      if (!lease) {
-        s.skipped++;
-        continue;
-      }
-      try {
-        const range = { from: target.from, to: target.to };
-        if (activity) activity.setRange(range);
-        else {
-          activity = new AiActivity(view, range, 'selection');
-          activity.start();
-        }
-        activity.setStage(`reformatting cite ${n} of ${total} · Esc to stop`);
-
-        const reply = await callLlm({
-          apiKey,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: target.text }],
-        });
-        const parsed = parseCiteResponse(reply.text);
-        // Apply at the lease's CURRENT bounds — user edits elsewhere in
-        // the doc during the request have shifted them.
-        const region = lease.region();
-        if (!region) {
-          console.warn(`[cite-all] cite ${n}: range no longer in the document`);
-          s.failed++;
-          streak++;
-          continue;
-        }
-        // `buildCiteTransaction` rather than `applyCiteToSelection`: the
-        // latter toasts per unstyled cite, which across a whole document
-        // is a toast storm. Tally instead and report once at the end.
-        const tr = buildCiteTransaction(view.state, region.from, region.to, parsed);
-        if (!tr) {
-          s.failed++;
-          streak++;
-          continue;
-        }
-        lease.apply(tr);
-        if (parsed.tokens.length > 0 && tr.getMeta(CITE_TOKENS_MARKED_META) === 0) s.unstyled++;
-        s.done++;
-        streak = 0;
-      } catch (e) {
-        const msg = e instanceof LlmError ? e.message : e instanceof Error ? e.message : String(e);
-        console.warn(`[cite-all] cite ${n} failed: ${msg}`);
+  const runJob = async (job: CiteJob): Promise<void> => {
+    const { lease, n } = job;
+    const at = lease.region();
+    if (!at) {
+      console.warn(`[cite-all] cite ${n}: range no longer in the document`);
+      s.failed++;
+      streak++;
+      return;
+    }
+    const tint = new AiWorkingBox();
+    tint.show(view, at);
+    tints.set(job, tint);
+    inFlight.add(job);
+    refreshCues();
+    try {
+      const reply = await callLlm({
+        apiKey,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: job.target.text }],
+      });
+      const parsed = parseCiteResponse(reply.text);
+      // Apply at the lease's CURRENT bounds — a sibling cite's rewrite
+      // or a user edit above this one has shifted them.
+      const region = lease.region();
+      if (!region) {
+        console.warn(`[cite-all] cite ${n}: range no longer in the document`);
         s.failed++;
         streak++;
-        // Auth / model / config failures repeat on every remaining cite;
-        // stop rather than burning the whole document down on them.
-        if (e instanceof LlmError && (e.kind === 'auth' || e.kind === 'model')) {
-          showToast(`Reformat cites: ${msg}`);
-          break;
-        }
-      } finally {
-        // Re-read the cursor from the LIVE lease on EVERY exit path, not
-        // just the rewrite: positions move while a request is in flight
-        // (the user edits above the cite), so a failed cite would
-        // otherwise leave the cursor pointing past cites that then never
-        // got visited — silently under-reporting the run. Null means the
-        // range is gone entirely, and there is no mapped position left to
-        // trust; the stale cursor at least cannot re-send an earlier
-        // cite. Must precede `release()`, which drops the lease.
-        const end = lease.region();
-        if (end) cursor = end.to;
-        lease.release();
+        return;
       }
+      // `buildCiteTransaction` rather than `applyCiteToSelection`: the
+      // latter toasts per unstyled cite, which across a whole document
+      // is a toast storm. Tally instead and report once at the end.
+      const tr = buildCiteTransaction(view.state, region.from, region.to, parsed);
+      if (!tr) {
+        s.failed++;
+        streak++;
+        return;
+      }
+      lease.apply(tr);
+      if (parsed.tokens.length > 0 && tr.getMeta(CITE_TOKENS_MARKED_META) === 0) s.unstyled++;
+      s.done++;
+      streak = 0;
+    } catch (e) {
+      const msg = e instanceof LlmError ? e.message : e instanceof Error ? e.message : String(e);
+      console.warn(`[cite-all] cite ${n} failed: ${msg}`);
+      s.failed++;
+      streak++;
+      // Auth / model / config failures repeat on every remaining cite;
+      // stop rather than burning the whole document down on them.
+      if (e instanceof LlmError && (e.kind === 'auth' || e.kind === 'model')) {
+        showToast(`Reformat cites: ${msg}`);
+        aborted = true;
+      }
+    } finally {
+      inFlight.delete(job);
+      tints.delete(job);
+      tint.hide();
+      refreshCues();
+    }
+  };
+
+  /** One worker, draining the queue until it empties, the pass stops, or
+   *  `until` says this worker's job is done (the slow-start case). */
+  const worker = async (until?: () => boolean): Promise<void> => {
+    for (;;) {
+      // Checked here so every failure path reaches it: a key, quota or
+      // endpoint that is simply not working fails the same way on every
+      // remaining cite, so stop once that is clear rather than walking
+      // the whole document to prove it.
+      if (streak >= FAILURE_STREAK_LIMIT) s.halted = true;
+      if (stopped() || until?.()) return;
+      const job = jobs[next];
+      if (!job) return;
+      next++;
+      await runJob(job);
+    }
+  };
+
+  try {
+    // Slow start: one cite at a time until one comes back clean, so a
+    // pass that cannot work at all costs a single request. A failure
+    // does NOT open the pool — that is the whole point.
+    await worker(() => s.done > 0);
+    const pool = Math.min(MAX_IN_FLIGHT, jobs.length - next);
+    if (!stopped() && pool > 0) {
+      await Promise.all(Array.from({ length: pool }, () => worker()));
     }
   } finally {
     removeCancelKey();
-    activity?.stop();
+    tip.hide();
+    for (const t of tints.values()) t.hide();
+    tints.clear();
+    inFlight.clear();
+    // A cite sitting after everything we claimed was pasted in mid-run
+    // (the leases are still live here, so this reads real positions, not
+    // the pre-run ones). Cites added ABOVE the pass are not detected —
+    // they aren't billed either way, and the summary is a courtesy.
+    let anchor = -1;
+    for (const j of jobs) {
+      const r = j.lease.region();
+      if (r) anchor = Math.max(anchor, r.to);
+    }
+    if (anchor >= 0 && collectCiteParagraphs(view.state.doc).some((t) => t.pos >= anchor)) {
+      s.cappedOut = true;
+    }
+    for (const j of jobs) j.lease.release();
   }
 
   showToast(summaryMessage(s, total), { durationMs: 5000 });
