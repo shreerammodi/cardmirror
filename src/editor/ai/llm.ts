@@ -67,9 +67,21 @@ export interface LlmRequest {
    *  the newest Claude models reject sampling parameters, and the client
    *  silently retries without it rather than failing the request. */
   temperature?: number;
-  /** System prompt. Falls back to the explainer-flavored default. */
+  /** System prompt. Falls back to the explainer-flavored default. Marked
+   *  as a cache breakpoint (see `cachedSystem`), so a prompt reused across
+   *  calls is billed at the cache-read rate and stops counting against the
+   *  input-tokens-per-minute quota. */
   system?: string;
   messages: LlmMessage[];
+  /** Part of a BULK pass (a whole-document sweep), not an interactive
+   *  one-shot. Bulk requests wait out a long `retry-after` and retry a
+   *  throttle more than once: the user authorized a job measured in
+   *  minutes, so absorbing a 30-second backoff is right where failing an
+   *  interactive keystroke would not be. */
+  bulk?: boolean;
+  /** Called when the request is about to sleep off a transient failure,
+   *  so a long-running caller can say so instead of looking hung. */
+  onThrottle?: (delayMs: number) => void;
 }
 
 export interface LlmReply {
@@ -77,6 +89,10 @@ export interface LlmReply {
   /** The API's `stop_reason` — `'max_tokens'` means the output was
    *  truncated by the token limit (i.e. likely invalid/cut-off JSON). */
   stopReason?: string;
+  /** Whether the call had to sleep off a 429/5xx before succeeding. A
+   *  bulk caller reads this to back its concurrency off — the provider
+   *  said "slower", and only the caller can act on that. */
+  throttled?: boolean;
 }
 
 /** The single source of truth for which Claude model the app talks to.
@@ -173,16 +189,74 @@ const REQUEST_TIMEOUT_MS = 300_000;
  *  automatic retry absorbs the transient blips; anything persistent still
  *  surfaces after the second attempt. Returns the delay before the retry,
  *  or null when the status isn't transient — or the server asked for a
- *  longer wait than an interactive action should silently absorb.
- *  Exported for tests. */
-export function transientRetryDelayMs(status: number, retryAfter: string | null): number | null {
+ *  longer wait than the caller should silently absorb.
+ *
+ *  That last cap is what `bulk` moves. An interactive command must not
+ *  freeze for half a minute on a keystroke, so a `retry-after` above
+ *  `INTERACTIVE_RETRY_CAP_S` fails instead. A whole-document pass is the
+ *  opposite case: the user authorized a job measured in minutes, and
+ *  turning a "slow down for 30 seconds" into a failed cite wastes the
+ *  tokens already spent.
+ *
+ *  `retryAfter` is often null in the browser regardless of what the
+ *  provider sent: `retry-after` is not a CORS-safelisted response header,
+ *  so a cross-origin reply only exposes it via
+ *  `Access-Control-Expose-Headers`. Both caps then simply never bind and
+ *  the flat 2s default applies — which is why the default has to be a
+ *  sane backoff on its own. Exported for tests. */
+export function transientRetryDelayMs(
+  status: number,
+  retryAfter: string | null,
+  bulk = false,
+): number | null {
   if (status === 429) {
+    const cap = bulk ? BULK_RETRY_CAP_S : INTERACTIVE_RETRY_CAP_S;
     const s = Number(retryAfter);
-    if (Number.isFinite(s) && s > 0) return s <= 8 ? s * 1000 : null;
+    if (Number.isFinite(s) && s > 0) return s <= cap ? s * 1000 : null;
     return 2000;
   }
   if (status === 408 || status >= 500) return 1500;
   return null;
+}
+
+/** Longest `retry-after` an interactive command absorbs silently. */
+const INTERACTIVE_RETRY_CAP_S = 8;
+/** Longest `retry-after` a bulk pass absorbs. Sized to cover the
+ *  per-minute quota windows both providers reset on, so a throttled sweep
+ *  slows down instead of failing. */
+const BULK_RETRY_CAP_S = 60;
+/** Transient retries per request: `BULK_RETRIES` for a bulk pass, whose
+ *  throttles are partly self-inflicted (its own concurrency) and clear as
+ *  the caller backs off, one for everything else. */
+const BULK_RETRIES = 3;
+
+/** Marks a content block as a prompt-cache breakpoint for both providers
+ *  (OpenRouter passes Anthropic's annotation through).
+ *
+ *  Every request in a sweep resends the same system prompt — the cite
+ *  formatter's is ~1700 tokens against a ~80-token citation, so ~95% of
+ *  the input is one identical prefix. Marking it makes every call after
+ *  the first a cache read: 0.1x the input price, and excluded from the
+ *  input-tokens-per-minute quota, which is the limit that actually caps a
+ *  bulk pass.
+ *
+ *  It goes on the SYSTEM block deliberately, not at the request's top
+ *  level: top-level ("automatic") caching moves the breakpoint to the last
+ *  cacheable block, which here is the varying user message, so every call
+ *  would write a fresh entry instead of reading the shared prefix.
+ *
+ *  Applied unconditionally. A prompt under the model's minimum cacheable
+ *  length (1024 tokens on Sonnet 4.6) is simply not cached, with no error,
+ *  so short-prompt features neither pay the 1.25x write nor break. */
+const CACHE_BREAKPOINT = { type: 'ephemeral' } as const;
+
+/** djb2, hex. Not a checksum: it only has to map one system prompt to one
+ *  stable OpenRouter session key, so collisions between two DIFFERENT
+ *  prompts cost at most a cold cache. */
+function cheapHash(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(16);
 }
 
 /** Test seam: the retry pause. Tests stub `wait` so retries don't
@@ -224,7 +298,7 @@ async function fetchWithTimeout(
 }
 
 type OpenRouterBlock =
-  | { type: 'text'; text: string }
+  | { type: 'text'; text: string; cache_control?: typeof CACHE_BREAKPOINT }
   | { type: 'image_url'; image_url: { url: string } };
 
 interface OpenRouterMessage {
@@ -247,10 +321,17 @@ function toOpenRouterContent(content: string | LlmContentBlock[]): string | Open
 /** Translate an Anthropic-shaped request's system + messages into the
  *  OpenRouter (OpenAI-chat) message array: the top-level `system` field
  *  becomes a leading `system` message, image blocks become `image_url`
- *  data URLs. Exported for testing. */
+ *  data URLs. The system message goes as a one-block array carrying
+ *  `CACHE_BREAKPOINT` — OpenRouter passes Anthropic's annotation straight
+ *  through, and models that don't cache ignore it. Exported for testing. */
 export function toOpenRouterMessages(req: LlmRequest): OpenRouterMessage[] {
   const msgs: OpenRouterMessage[] = [];
-  if (req.system) msgs.push({ role: 'system', content: req.system });
+  if (req.system) {
+    msgs.push({
+      role: 'system',
+      content: [{ type: 'text', text: req.system, cache_control: CACHE_BREAKPOINT }],
+    });
+  }
   for (const m of req.messages) {
     msgs.push({ role: m.role, content: toOpenRouterContent(m.content) });
   }
@@ -367,13 +448,16 @@ function throwAnthropicHttpError(
 async function callAnthropicApi(req: LlmRequest): Promise<LlmReply> {
   const requestedModel = req.model ?? resolveAiModel();
   let temperature = req.temperature;
-  let transientRetries = 1;
+  let transientRetries = req.bulk ? BULK_RETRIES : 1;
+  let throttled = false;
   for (;;) {
     const body = {
       model: requestedModel,
       max_tokens: req.maxTokens ?? defaultMaxTokens(),
       ...(temperature != null ? { temperature } : {}),
-      ...(req.system ? { system: req.system } : {}),
+      ...(req.system
+        ? { system: [{ type: 'text', text: req.system, cache_control: CACHE_BREAKPOINT }] }
+        : {}),
       messages: req.messages,
     };
 
@@ -414,10 +498,12 @@ async function callAnthropicApi(req: LlmRequest): Promise<LlmReply> {
       }
       const delay =
         transientRetries > 0
-          ? transientRetryDelayMs(res.status, res.headers.get('retry-after'))
+          ? transientRetryDelayMs(res.status, res.headers.get('retry-after'), req.bulk)
           : null;
       if (delay !== null) {
         transientRetries--;
+        throttled = true;
+        req.onThrottle?.(delay);
         await llmSleep.wait(delay);
         continue;
       }
@@ -462,7 +548,7 @@ async function callAnthropicApi(req: LlmRequest): Promise<LlmReply> {
     if (!text) {
       throw new LlmError('Anthropic returned an empty response.', res.status, 'parse');
     }
-    return { text, stopReason };
+    return { text, stopReason, throttled };
   }
 }
 
@@ -521,12 +607,19 @@ async function callOpenRouter(req: LlmRequest): Promise<LlmReply> {
     );
   }
   let temperature = req.temperature;
-  let transientRetries = 1;
+  let transientRetries = req.bulk ? BULK_RETRIES : 1;
+  let throttled = false;
   for (;;) {
     const body = {
       model,
       max_tokens: req.maxTokens ?? defaultMaxTokens(),
       ...(temperature != null ? { temperature } : {}),
+      // Sticky routing keeps the cached prefix warm. Without a session id
+      // OpenRouter derives one by hashing the first system AND first user
+      // message, so a sweep's per-item user text would scatter its calls
+      // across providers and cold-start the cache on each one. Keyed by
+      // the system prompt: every call sharing a prompt shares a session.
+      ...(req.system ? { session_id: `cm-${cheapHash(req.system)}` } : {}),
       messages: toOpenRouterMessages(req),
     };
 
@@ -568,10 +661,12 @@ async function callOpenRouter(req: LlmRequest): Promise<LlmReply> {
       }
       const delay =
         transientRetries > 0
-          ? transientRetryDelayMs(res.status, res.headers.get('retry-after'))
+          ? transientRetryDelayMs(res.status, res.headers.get('retry-after'), req.bulk)
           : null;
       if (delay !== null) {
         transientRetries--;
+        throttled = true;
+        req.onThrottle?.(delay);
         await llmSleep.wait(delay);
         continue;
       }
@@ -588,7 +683,7 @@ async function callOpenRouter(req: LlmRequest): Promise<LlmReply> {
         'parse',
       );
     }
-    return parseOpenRouterReply(json);
+    return { ...parseOpenRouterReply(json), throttled };
   }
 }
 

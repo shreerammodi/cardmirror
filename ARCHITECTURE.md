@@ -510,20 +510,38 @@ editing.
 **AI features** are all gated by the `aiFeaturesEnabled` setting plus a
 user-provided Anthropic API key stored locally and POSTed directly to
 Anthropic — no server middleman. Master toggle off hides every AI
-surface. Shipped:
+surface.
+
+Every request sends its system prompt as a single content block carrying
+`cache_control: ephemeral` (`CACHE_BREAKPOINT` in `llm.ts`; OpenRouter
+passes the annotation through and gets a `session_id` keyed off the prompt
+so sticky routing keeps the entry warm). The breakpoint sits on the system
+block, not at the request's top level, because top-level "automatic"
+caching would move it to the varying user message and write a fresh entry
+per call. Reused prompts then bill at 0.1x and stop counting against the
+input-tokens-per-minute quota — which is what actually caps a bulk sweep,
+where ~95% of the input is one identical prefix. Prompts under the model's
+minimum cacheable length are silently not cached, so this is safe to apply
+unconditionally.
+
+Shipped:
 
 - **`aiCreateCite` (Mod-Shift-X)** formats a selection into a
   Verbatim-style citation with `cite_mark` on the extracted tokens.
 - **`reformatAllCites`** (unbound) drives `aiCreateCite`'s prompt, parser
   and transaction builder over every `cite_paragraph` in the document —
   one request and one undo step per cite, behind a request-count confirm
-  (`reformat-all-cites.ts`). Requests run CONCURRENTLY, up to
-  `MAX_IN_FLIGHT` (6), after a one-cite slow start: the pool only opens
-  once a cite comes back clean, so a dead key or retired model still
-  costs exactly one request. It is bounded rather than all-at-once
-  because `callLlm` gives a 429 a single retry, so fanning a hundred-cite
-  document at a per-minute quota would return mostly failures at full
-  token cost. Positions come from a lease per cite, claimed up front:
+  (`reformat-all-cites.ts`). Requests run CONCURRENTLY, and how many is
+  not a constant: `adaptConcurrency` is AIMD over the number in flight —
+  +1 per clean reply, halved whenever the provider made a request wait
+  (`LlmReply.throttled`) — so the pass finds the level the user's key and
+  tier tolerate, with `MAX_IN_FLIGHT` (12) only as a ceiling. Starting the
+  ramp at 1 IS the slow start: the first cite goes alone, so a dead key or
+  a retired model still costs exactly one request. Every call is
+  `bulk: true`, which lets `callLlm` wait out a `retry-after` up to a
+  minute rather than fail a cite the tokens were already spent on; the
+  pill narrates the backoff. Positions come from a lease per cite, claimed
+  up front:
   replies land out of order and each rewrite shifts the cites after it,
   and leases remap through every intervening transaction — including a
   user edit above, a sibling's length change, and a cite the classifier

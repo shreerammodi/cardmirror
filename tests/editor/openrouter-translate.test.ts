@@ -11,14 +11,22 @@ import {
 } from '../../src/editor/ai/llm.js';
 
 describe('toOpenRouterMessages', () => {
-  it('prepends the system prompt as a system message', () => {
+  it('prepends the system prompt as a cache-marked system message', () => {
     const msgs = toOpenRouterMessages({
       apiKey: 'k',
       system: 'You are helpful.',
       messages: [{ role: 'user', content: 'hi' }],
     });
+    // One text block rather than a bare string, so the prompt carries the
+    // cache breakpoint: a prompt reused across calls (a bulk pass) bills
+    // at the cache-read rate instead of full input on every call.
     expect(msgs).toEqual([
-      { role: 'system', content: 'You are helpful.' },
+      {
+        role: 'system',
+        content: [
+          { type: 'text', text: 'You are helpful.', cache_control: { type: 'ephemeral' } },
+        ],
+      },
       { role: 'user', content: 'hi' },
     ]);
   });

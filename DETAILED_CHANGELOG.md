@@ -7,29 +7,65 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+### Changed: prompt caching, and bulk requests that ride out a throttle
+
+`llm.ts` now sends the system prompt as a single content block carrying
+`cache_control: {type: 'ephemeral'}` on both providers. The measurement
+behind it: the cite formatter's system prompt is 6372 characters (~1722
+tokens) against a ~80-token citation, so a hundred-cite sweep spent ~180k
+input tokens of which ~96% was one identical prefix, resent. Cached, that
+prefix bills at 0.1x AND stops counting against the
+input-tokens-per-minute quota — the limit that actually caps a bulk pass,
+long before requests-per-minute does.
+
+The breakpoint sits on the system block rather than at the request's top
+level ("automatic" caching) deliberately: automatic caching moves the
+breakpoint to the last cacheable block, which here is the per-cite user
+message, so every call would write a fresh entry instead of reading the
+shared prefix. It is applied unconditionally, which is safe because a
+prompt under the model's minimum cacheable length (1024 tokens on Sonnet
+4.6) is simply not cached and no error is returned — short-prompt features
+neither pay the 1.25x write nor break. On OpenRouter the annotation passes
+through, plus a `session_id` derived from the prompt: without one,
+OpenRouter derives its sticky-routing key by hashing the first system AND
+first user message, so a sweep's per-cite text would scatter calls across
+providers and cold-start the cache on each.
+
+Second change, `LlmRequest.bulk`. `transientRetryDelayMs` used to fail any
+429 whose `retry-after` exceeded 8s, which is right for an interactive
+keystroke and wrong for a job the user authorized in minutes: it threw
+away a cite whose tokens were already spent. Bulk requests now absorb up
+to 60s and get three transient retries instead of one. `LlmReply.throttled`
+reports back that a wait happened, and `LlmRequest.onThrottle` fires before
+the sleep so a long-running caller can say so instead of looking hung.
+(Caveat documented at the function: `retry-after` is not a CORS-safelisted
+response header, so in the browser it is often unreadable and the flat 2s
+default applies regardless of the caps.)
+
 ### Changed: Reformat Every Cite runs its requests concurrently
 
-The pass was strictly sequential — `await` one cite's request, apply,
-then walk to the next — so wall-clock time was N round trips, and a
-file with a hundred cites took as long as a hundred cite formats. Cites
-are independent requests over disjoint ranges, so the pass now keeps
-`MAX_IN_FLIGHT` (6) of them in the air.
+The pass was strictly sequential — `await` one cite's request, apply, then
+walk to the next — so wall-clock time was N round trips, and a file with a
+hundred cites took as long as a hundred cite formats. Cites are independent
+requests over disjoint ranges, so they now run in parallel.
 
-Bounded, not all-at-once, deliberately: `callLlm` gives a 429 exactly
-one retry and treats a `retry-after` above 8s as a hard failure, so
-firing a hundred requests at a per-minute quota would convert a slow
-pass into a mostly-failed one at full token cost. A small pool captures
-nearly all of the speedup with none of that. Measured in the browser
-against a stubbed provider (1.2s per reply, 9 cites): 9 requests at
-t=0 / 1.2s ×6 / 2.4s ×2, 3.7s total against ~10.8s sequential.
+How many is not a constant. `adaptConcurrency` is AIMD over the number in
+flight: +1 per clean reply, halved whenever the provider made a request
+wait. Every quota that matters (requests and tokens per minute) varies by
+provider, tier and model, so a hardcoded pool width is either too timid
+for a paid tier or a mass-failure generator on an entry one; the ramp finds
+the level empirically and `MAX_IN_FLIGHT` (12) is only a ceiling. Measured
+in the browser against a stubbed provider (0.9s per reply, 20 cites): the
+pool climbed 1 → 2 → 4 → 8 (successes arrive in batches, so the additive
+increase compounds per wave) and finished in 4.65s against ~18s
+sequential, still climbing when the document ran out.
 
-Two design changes fall out of concurrency:
+Two design points fall out of concurrency:
 
-- **Slow start.** The first cite goes alone and the pool opens only once
-  one comes back clean. A rejected key, a retired model or an exhausted
-  quota therefore still costs ONE request, exactly as before, rather
-  than a pool's worth; `FAILURE_STREAK_LIMIT` covers failures that only
-  appear later. A failure does not open the pool.
+- **The ramp starting at 1 IS the slow start.** The first cite goes alone,
+  so a rejected key, a retired model or an exhausted quota still costs ONE
+  request; a failure never widens the pool, and `FAILURE_STREAK_LIMIT`
+  covers failures that only appear later.
 - **Leases instead of a document cursor.** The old walk re-scanned the
   live doc for the next `cite_paragraph` each iteration — correct only
   because exactly one cite was ever in flight. Replies now land out of
@@ -44,36 +80,48 @@ Two design changes fall out of concurrency:
   `coordinatorBlocks` — cheap per lease, over a run that is now a
   fraction as long. Body text stays editable throughout.
 
-Cues split by granularity. Six pills all narrating the same pass is
-noise, so `AiActivity` (one pill bound to one range) is no longer used
-here: a single `ThinkingTooltip` carries the pass —
-`reformatting cites · 3 of 9 rewritten · Esc to stop` — and one
-`AiWorkingBox` per in-flight cite marks what is being worked on. Escape
-relabels the pill to `stopping after the cites in flight`. Everything
-else is unchanged: the request-count confirm (now stating the pool
-width), one transaction and one undo step per cite, the busy/unstyled/
-failed tallies, the mid-run-paste cap, and the per-pane guard.
+Cues split by granularity. Six pills all narrating the same pass is noise,
+so `AiActivity` (one pill bound to one range) is no longer used here: a
+single `ThinkingTooltip` carries the pass —
+`reformatting cites · 3 of 9 rewritten · Esc to stop`, or
+`· waiting out a rate limit ·` while a request sleeps off a backoff — and
+one `AiWorkingBox` per in-flight cite marks what is being worked on.
+Escape relabels the pill to `stopping after the cites in flight`. The
+backoff narration is keyed by job and cleared on every exit path; keyed by
+a counter it would have stuck on for the rest of the pass whenever a
+request throttled and then failed anyway. Everything else is unchanged:
+the request-count confirm, one transaction and one undo step per cite, the
+busy/unstyled/failed tallies, the mid-run-paste cap, and the per-pane
+guard.
 
 Found and fixed while smoke-testing the concurrent cues:
 `ThinkingTooltip.relayout` read `.pmd-dropzone-root`'s rect without
 checking that the shelf was visible. Hidden (empty shelf) it reports an
-all-zero rect, which put the pill floor above the band, and
-`packColumn`'s bottom-up pass then clamped EVERY pill to `bandTop` —
-concurrent pills piled on one pixel instead of queueing. A zero-height
-shelf now imposes no floor.
+all-zero rect, which put the pill floor above the band, and `packColumn`'s
+bottom-up pass then clamped EVERY pill to `bandTop` — concurrent pills
+piled on one pixel instead of queueing. A zero-height shelf now imposes no
+floor.
 
-Tests: `tests/editor/reformat-all-cites.test.ts` gains coverage for the
-dispatch shape (first cite alone, then three overlapping), the cap (nine
-cites, peak of six — a barrier that would deadlock a narrower pool and
-open on its own for a wider one), and out-of-order application (an
-earlier cite's 300-character growth lands while two later cites are in
-flight, which are then released in reverse document order). The
-pre-existing invariants — one request per cite, streak breaker, auth
-fail-fast, Escape scoping, per-pane guard, request cap — are unchanged
-and still pass as written. Smoke-tested in the browser against a
-stubbed Anthropic endpoint: ten cites rewritten in place with
-`cite_mark` intact, one pill plus six outlines, cues torn down at the
-end, and Escape mid-pool giving "Reformatted 7 of 16 cites · stopped."
+Tests. `adaptConcurrency` is exported and unit-tested as a policy table
+(+1 to the ceiling, halve to a floor of 1).
+`tests/editor/reformat-all-cites.test.ts` covers the ramp (40 cites: first
+request alone, peak exactly at the ceiling), the backoff (every reply
+`throttled` pins concurrency at 1 for all 10 cites), `bulk: true` and
+`onThrottle` being passed, the narration clearing after a
+throttled-then-failed request, and out-of-order application (an earlier
+cite's 300-character growth lands while two later cites are in flight,
+which are then released out of document order). `llm-errors.test.ts` covers
+the cached system block on both providers, the sticky `session_id`, the
+bulk retry cap, and `throttled`/`onThrottle`. The pre-existing invariants —
+one request per cite, streak breaker, auth fail-fast, Escape scoping,
+per-pane guard, request cap — are unchanged and still pass as written.
+
+Smoke-tested in the browser against a stubbed Anthropic endpoint: the
+request body carries the cached system block, byte-identical across calls;
+20 cites ramped 1 → 2 → 4 → 8 and finished in 4.65s; a 429 carrying
+`retry-after` was waited out with the pill reading "waiting out a rate
+limit", after which concurrency dropped to 1 and re-climbed, all 4 cites
+landing with no failures.
 
 ## 1.0.1 — 2026-08-15
 

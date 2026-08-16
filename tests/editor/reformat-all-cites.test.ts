@@ -34,6 +34,7 @@ import { LlmError, type LlmRequest, type LlmReply } from '../../src/editor/ai/ll
 import type { ConfirmOptions } from '../../src/editor/confirm-dialog.js';
 import type { ToastOptions } from '../../src/editor/toast.js';
 import {
+  adaptConcurrency,
   collectCiteParagraphs,
   runReformatAllCites,
 } from '../../src/editor/ai/reformat-all-cites.js';
@@ -640,22 +641,20 @@ describe('runReformatAllCites', () => {
     );
   });
 
-  it('sends the first cite alone, then overlaps the rest', async () => {
-    // Slow start: one request until one comes back clean (a dead key must
-    // cost ONE call, not a pool's worth), then the remaining cites go out
-    // together instead of one round trip each.
-    const names = ['Smith 24', 'Jones 23', 'Lee 22', 'Diaz 21'];
+  it('ramps concurrency up from one, and never past the ceiling', async () => {
+    // The ramp starts at 1, so the first cite always goes alone (a dead
+    // key must cost ONE call, not a pool's worth), and each clean reply
+    // earns one more slot until MAX_IN_FLIGHT.
+    const names = Array.from({ length: 40 }, (_, i) => `Name${i} 2${i % 10}`);
     const view = fakeView(doc(...names.map((c) => card(tag('T'), cite(c, ', x')))));
-    const poolFull = barrier(names.length - 1);
     let inFlight = 0;
-    let call = 0;
     const atStart: number[] = [];
     callLlm.mockImplementation(async (req) => {
       inFlight++;
       atStart.push(inFlight);
-      // Only the post-slow-start cites wait for each other; the first one
-      // would deadlock on a barrier nobody else can reach.
-      if (++call > 1) await poolFull();
+      // One microtask hop is all it takes for overlap to be observable:
+      // the dispatcher fills every free slot before any reply resumes.
+      await Promise.resolve();
       inFlight--;
       const content = req.messages[0]!.content;
       const head = (typeof content === 'string' ? content : '').split(',')[0]!;
@@ -664,39 +663,77 @@ describe('runReformatAllCites', () => {
 
     await runReformatAllCites(view);
 
-    // The first request had the wire to itself; the other three shared it.
-    expect(atStart).toEqual([1, 1, 2, 3]);
-    expect(callLlm).toHaveBeenCalledTimes(4);
-    expect(summary()).toBe('Reformatted 4 of 4 cites.');
+    expect(atStart[0]).toBe(1); // alone
+    expect(Math.max(...atStart)).toBe(12); // the ceiling, reached
+    expect(callLlm).toHaveBeenCalledTimes(40);
+    expect(summary()).toBe('Reformatted 40 of 40 cites.');
   });
 
-  it('caps how many cites are in the air at once', async () => {
-    // Unbounded fan-out is what the cap exists to prevent: callLlm gives a
-    // 429 exactly one retry, so a hundred-cite document fired at once
-    // would come back mostly failed, at full token cost.
-    const names = Array.from({ length: 9 }, (_, i) => `Name${i} 2${i}`);
+  it('stops widening the pool when the provider throttles', async () => {
+    // `throttled` means callLlm already slept off a 429/5xx. Pushing
+    // harder into a quota that has been hit converts speed into failed
+    // cites once the retry budget runs out, so the ramp halves instead —
+    // from 1 that means staying strictly sequential.
+    const names = Array.from({ length: 10 }, (_, i) => `Slow${i} 2${i}`);
     const view = fakeView(doc(...names.map((c) => card(tag('T'), cite(c, ', x')))));
-    // Six is the cap. If the pool were wider, this barrier would open on
-    // its own; if it were narrower, the pass would deadlock here.
-    const poolFull = barrier(6);
     let inFlight = 0;
     let peak = 0;
-    let call = 0;
     callLlm.mockImplementation(async (req) => {
       inFlight++;
       peak = Math.max(peak, inFlight);
-      if (++call > 1) await poolFull();
+      await Promise.resolve();
       inFlight--;
       const content = req.messages[0]!.content;
       const head = (typeof content === 'string' ? content : '').split(',')[0]!;
-      return reply(`${head}, NEW.`, [head]);
+      return { ...reply(`${head}, NEW.`, [head]), throttled: true };
     });
 
     await runReformatAllCites(view);
 
-    expect(peak).toBe(6);
-    expect(callLlm).toHaveBeenCalledTimes(9);
-    expect(summary()).toBe('Reformatted 9 of 9 cites.');
+    expect(peak).toBe(1);
+    expect(callLlm).toHaveBeenCalledTimes(10);
+    expect(summary()).toBe('Reformatted 10 of 10 cites.');
+  });
+
+  it('sends every cite as a bulk request', async () => {
+    // Bulk is what lets a long `retry-after` be waited out instead of
+    // failing the cite, and what the pill's backoff narration hangs off.
+    const view = fakeView(doc(card(tag('A'), cite('Smith 24', ', a'))));
+    callLlm.mockImplementation(replyPerLastname({ Smith: 'Smith 24, NEW A.' }));
+
+    await runReformatAllCites(view);
+
+    expect(callLlm.mock.calls[0]![0].bulk).toBe(true);
+    expect(typeof callLlm.mock.calls[0]![0].onThrottle).toBe('function');
+  });
+
+  it('stops narrating a backoff once the throttled request is done', async () => {
+    // The pill says "waiting out a rate limit" while a bulk request sleeps
+    // one off. A request that throttled and then FAILED anyway used to
+    // leave that narration stuck on for the rest of the pass.
+    const view = fakeView(
+      doc(card(tag('A'), cite('Smith 24', ', a')), card(tag('B'), cite('Jones 23', ', b'))),
+    );
+    callLlm.mockImplementation(async (req) => {
+      const content = req.messages[0]!.content;
+      const sent = typeof content === 'string' ? content : '';
+      if (sent.startsWith('Smith')) {
+        req.onThrottle?.(30_000); // the provider said "wait"…
+        throw new LlmError('rate limited', 429, 'rate-limit'); // …then gave up
+      }
+      return reply('Jones 23, NEW B.', ['Jones 23']);
+    });
+    const setStage = vi.spyOn(ThinkingTooltip.prototype, 'setStage');
+
+    await runReformatAllCites(view);
+
+    const stages = setStage.mock.calls
+      .map(([s]) => s)
+      .filter((s): s is string => typeof s === 'string');
+    setStage.mockRestore();
+    expect(stages.some((s) => s.includes('waiting out a rate limit'))).toBe(true);
+    expect(stages.at(-1)).not.toContain('waiting out a rate limit');
+    expect(summary()).toBe('Reformatted 1 of 2 cites · 1 failed.');
   });
 
   it('lands each out-of-order reply on its own cite', async () => {
@@ -706,33 +743,50 @@ describe('runReformatAllCites', () => {
     // come from each cite's lease, which the coordinator remaps, so a
     // reply released third still lands on its own paragraph.
     const grow = ', '.padEnd(300, 'z');
-    const names = ['Smith 24', 'Jones 23', 'Lee 22', 'Diaz 21'];
+    const names = ['Smith 24', 'Jones 23', 'Lee 22', 'Diaz 21', 'Okoye 20'];
     const view = fakeView(doc(...names.map((c) => card(tag('T'), cite(c, ', old')))));
-    const jonesApplied = Promise.withResolvers<void>();
-    const diazApplied = Promise.withResolvers<void>();
+    const leeApplied = Promise.withResolvers<void>();
+    const okoyeApplied = Promise.withResolvers<void>();
     view.onDispatch = (state) => {
       const texts = citeTexts(state.doc);
-      if (texts.includes(`Jones 23${grow}`)) jonesApplied.resolve();
-      if (texts.includes(`Diaz 21${grow}`)) diazApplied.resolve();
+      if (texts.includes(`Lee 22${grow}`)) leeApplied.resolve();
+      if (texts.includes(`Okoye 20${grow}`)) okoyeApplied.resolve();
     };
-    const poolFull = barrier(names.length - 1);
+    // Smith and Jones return at once, which ramps the pool to three; the
+    // last three cites then wait for each other so all three are provably
+    // in flight before any of them lands.
+    const poolFull = barrier(3);
     callLlm.mockImplementation(async (req) => {
       const content = req.messages[0]!.content;
       const head = (typeof content === 'string' ? content : '').split(',')[0]!;
       const grown = reply(`${head}${grow}`, [head]);
-      if (head.startsWith('Smith')) return grown; // the slow-start cite
+      if (head.startsWith('Smith') || head.startsWith('Jones')) return grown;
       await poolFull();
-      // Jones lands first and grows by 300 characters, shifting Lee and
-      // Diaz while both are still in flight. Diaz then lands before Lee —
-      // out of document order.
-      if (head.startsWith('Diaz')) await jonesApplied.promise;
-      if (head.startsWith('Lee')) await diazApplied.promise;
+      // Lee lands first and grows by 300 characters, shifting Diaz and
+      // Okoye while both are still in flight. Okoye then lands before
+      // Diaz — out of document order.
+      if (head.startsWith('Okoye')) await leeApplied.promise;
+      if (head.startsWith('Diaz')) await okoyeApplied.promise;
       return grown;
     });
 
     await runReformatAllCites(view);
 
     expect(citeTexts(view.state.doc)).toEqual(names.map((n) => `${n}${grow}`));
-    expect(summary()).toBe('Reformatted 4 of 4 cites.');
+    expect(summary()).toBe('Reformatted 5 of 5 cites.');
+  });
+});
+
+describe('adaptConcurrency', () => {
+  it('adds one slot per clean reply, up to the ceiling', () => {
+    expect(adaptConcurrency(1, 'ok', 4)).toBe(2);
+    expect(adaptConcurrency(3, 'ok', 4)).toBe(4);
+    expect(adaptConcurrency(4, 'ok', 4)).toBe(4);
+  });
+
+  it('halves on a throttle, never below one', () => {
+    expect(adaptConcurrency(8, 'throttled')).toBe(4);
+    expect(adaptConcurrency(3, 'throttled')).toBe(1);
+    expect(adaptConcurrency(1, 'throttled')).toBe(1);
   });
 });

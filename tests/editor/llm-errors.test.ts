@@ -66,8 +66,17 @@ describe('transientRetryDelayMs (retry policy table)', () => {
     expect(transientRetryDelayMs(429, 'Wed, 21 Oct 2026 07:28:00 GMT')).toBe(2000);
   });
 
-  it('does not silently absorb a long retry-after', () => {
+  it('does not silently absorb a long retry-after for an interactive call', () => {
     expect(transientRetryDelayMs(429, '30')).toBeNull();
+  });
+
+  it('waits out a long retry-after for a BULK call, up to a minute', () => {
+    // An interactive keystroke must not freeze for half a minute; a
+    // whole-document pass the user authorized should slow down rather
+    // than throw away the tokens a throttled request already spent.
+    expect(transientRetryDelayMs(429, '30', true)).toBe(30_000);
+    expect(transientRetryDelayMs(429, '60', true)).toBe(60_000);
+    expect(transientRetryDelayMs(429, '61', true)).toBeNull();
   });
 
   it('retries timeouts and server errors (500/502/503/529) after a short pause', () => {
@@ -80,6 +89,83 @@ describe('transientRetryDelayMs (retry policy table)', () => {
     for (const status of [400, 401, 402, 403, 404, 413]) {
       expect(transientRetryDelayMs(status, null), `status=${status}`).toBeNull();
     }
+  });
+});
+
+describe('prompt caching', () => {
+  const LONG_SYSTEM = 'You format citations. '.repeat(200);
+
+  it('marks the Anthropic system prompt as a cache breakpoint', async () => {
+    // ~95% of a sweep's input is one identical system prompt; cached, it
+    // bills at 0.1x and stops counting against the per-minute input quota.
+    const mock = fetchReturning(jsonResponse(200, OK_ANTHROPIC));
+    await callLlm({ ...REQ, system: LONG_SYSTEM });
+    expect(sentBody(mock, 0).system).toEqual([
+      { type: 'text', text: LONG_SYSTEM, cache_control: { type: 'ephemeral' } },
+    ]);
+  });
+
+  it('sends no system field when there is no system prompt', async () => {
+    const mock = fetchReturning(jsonResponse(200, OK_ANTHROPIC));
+    await callLlm(REQ);
+    expect(sentBody(mock, 0)).not.toHaveProperty('system');
+  });
+
+  it('marks the OpenRouter system message and pins a sticky session', async () => {
+    // Without a session id OpenRouter derives one from the first system
+    // AND first user message, so a sweep's per-cite text would scatter
+    // across providers and cold-start the cache on every call.
+    settings.set('aiProvider', 'openrouter');
+    settings.set('openrouterModel', 'anthropic/claude-sonnet-4.6');
+    const mock = fetchReturning(
+      jsonResponse(200, { choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }] }),
+    );
+    await callLlm({ ...REQ, system: LONG_SYSTEM });
+    const body = sentBody(mock, 0);
+    expect((body.messages as Array<{ role: string; content: unknown }>)[0]).toEqual({
+      role: 'system',
+      content: [{ type: 'text', text: LONG_SYSTEM, cache_control: { type: 'ephemeral' } }],
+    });
+    expect(body.session_id).toMatch(/^cm-[0-9a-f]+$/);
+  });
+});
+
+describe('bulk requests', () => {
+  const RATE_LIMITED = jsonResponse(429, { error: { message: 'slow down' } }, { 'retry-after': '20' });
+
+  it('reports a throttle back to the caller', async () => {
+    const mock = fetchReturning(RATE_LIMITED, jsonResponse(200, OK_ANTHROPIC));
+    const reply = await callLlm({ ...REQ, bulk: true });
+    expect(mock).toHaveBeenCalledTimes(2);
+    expect(reply.throttled).toBe(true);
+    expect(reply.text).toBe('hello');
+  });
+
+  it('leaves throttled unset when nothing had to wait', async () => {
+    fetchReturning(jsonResponse(200, OK_ANTHROPIC));
+    expect((await callLlm({ ...REQ, bulk: true })).throttled).toBe(false);
+  });
+
+  it('announces the backoff before sleeping it off', async () => {
+    fetchReturning(RATE_LIMITED, jsonResponse(200, OK_ANTHROPIC));
+    const onThrottle = vi.fn();
+    await callLlm({ ...REQ, bulk: true, onThrottle });
+    expect(onThrottle).toHaveBeenCalledWith(20_000);
+  });
+
+  it('retries a throttle more than once, unlike an interactive call', async () => {
+    // Interactive: one retry, then the 429 surfaces.
+    fetchReturning(RATE_LIMITED, RATE_LIMITED, jsonResponse(200, OK_ANTHROPIC));
+    await expect(callLlm(REQ)).rejects.toThrow(LlmError);
+
+    const bulk = fetchReturning(
+      RATE_LIMITED,
+      RATE_LIMITED,
+      RATE_LIMITED,
+      jsonResponse(200, OK_ANTHROPIC),
+    );
+    expect((await callLlm({ ...REQ, bulk: true })).text).toBe('hello');
+    expect(bulk).toHaveBeenCalledTimes(4);
   });
 });
 

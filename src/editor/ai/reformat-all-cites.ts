@@ -10,21 +10,26 @@
  *   - **Confirm first.** One model request per cite means real money, so
  *     the pass never starts without an explicit OK that states the
  *     request count.
- *   - **Concurrent, bounded.** Cites are independent requests over
- *     disjoint ranges, so the pass keeps `MAX_IN_FLIGHT` of them in the
- *     air instead of paying one round trip per cite in series. It is
- *     bounded rather than "all of them at once" on purpose:
- *     `callLlm` gives a 429 exactly ONE retry and treats a
- *     `retry-after` above 8s as a hard failure, so firing a
- *     hundred-cite document at a provider whose limit is dozens per
- *     minute would convert a slow pass into a mostly-failed one, at
- *     full token cost. A small pool captures nearly all the speedup
- *     with none of that.
- *   - **Slow start.** The first cite goes alone; the pool only opens
- *     once one comes back clean. A dead key, a retired model or an
- *     exhausted quota therefore still costs exactly ONE request instead
- *     of a pool's worth (`FAILURE_STREAK_LIMIT` covers the same ground
- *     for failures that only show up later).
+ *   - **Concurrent, self-throttling.** Cites are independent requests over
+ *     disjoint ranges, so the pass runs them in parallel instead of paying
+ *     one round trip per cite in series. How many is not a guess:
+ *     `adaptConcurrency` ramps by one per clean reply and halves whenever
+ *     the provider makes a request wait, so the pass finds the level its
+ *     key and tier actually tolerate. `MAX_IN_FLIGHT` is only the ceiling.
+ *   - **Slow start falls out of that.** The ramp begins at one, so the
+ *     first cite goes alone and a dead key, a retired model or an
+ *     exhausted quota still costs exactly ONE request rather than a
+ *     pool's worth. A failure never widens the pool
+ *     (`FAILURE_STREAK_LIMIT` covers failures that only show up later).
+ *   - **Bulk requests, not interactive ones.** Every call is `bulk: true`,
+ *     which lets `callLlm` wait out a long `retry-after` instead of
+ *     failing: a whole-document pass is a job measured in minutes, and a
+ *     throttled cite's tokens are already spent. The pill says when a
+ *     request is sleeping off a backoff so the pass can't look hung. The
+ *     same prompt on every call is also a cache breakpoint, so after the
+ *     first cite the ~1700-token system prompt is a cache read: 0.1x the
+ *     price and out of the input-tokens-per-minute quota, which is the
+ *     limit that would otherwise cap the ramp.
  *   - **A lease per cite, claimed up front.** The lease is what tracks a
  *     cite's position: leases remap through every intervening
  *     transaction, so a cite's range is still right after the user
@@ -131,12 +136,31 @@ export interface ReformatAllCitesSummary {
   cappedOut: boolean;
 }
 
-/** Requests in the air at once once the pass is up to speed. Sized for
- *  the provider, not the document: Anthropic's entry tier allows dozens
- *  of requests a minute, and `callLlm` retries a 429 exactly once, so a
- *  pool this size stays comfortably inside the limit while cutting a
- *  hundred-cite pass from a hundred round trips to about seventeen. */
-const MAX_IN_FLIGHT = 6;
+/** Ceiling on requests in the air. Not a target — `adaptConcurrency`
+ *  finds the level the provider actually tolerates, and this only bounds
+ *  how far it can climb. Every quota that matters (requests and tokens per
+ *  minute) differs by provider, tier and model, so guessing one number for
+ *  everyone is what the ramp exists to avoid. */
+const MAX_IN_FLIGHT = 12;
+
+/** Additive-increase / multiplicative-decrease, the standard congestion
+ *  policy, over the number of cites in flight.
+ *
+ *  Starting at 1 IS the slow start: one cite goes alone, and only a clean
+ *  reply earns a second slot, so a dead key or a retired model still costs
+ *  exactly one request. `'throttled'` means the provider made the request
+ *  wait (a 429 or 5xx that `callLlm` slept off, reported back through
+ *  `LlmReply.throttled`) — halve, because a pass that keeps pushing at a
+ *  quota it has already hit converts its own speed into failed cites once
+ *  the retry budget runs out. Exported for tests. */
+export function adaptConcurrency(
+  target: number,
+  outcome: 'ok' | 'throttled',
+  ceiling = MAX_IN_FLIGHT,
+): number {
+  if (outcome === 'throttled') return Math.max(1, Math.floor(target / 2));
+  return Math.min(ceiling, target + 1);
+}
 
 /** Consecutive failures that end a pass. Two is within the noise of a
  *  flaky connection (each request has already burned its own internal
@@ -237,7 +261,7 @@ export async function runReformatAllCites(view: EditorView): Promise<void> {
       title: 'Reformat every cite with AI?',
       message:
         `${total} cite${total === 1 ? '' : 's'} in this document will be sent to the AI ` +
-        `and rewritten in place, up to ${MAX_IN_FLIGHT} at a time.\n\n` +
+        `and rewritten in place, several at a time — as fast as your API key allows.\n\n` +
         `That is ${total} model request${total === 1 ? '' : 's'}, so it costs ${total} ` +
         `call${total === 1 ? '' : 's'} against your API key. ` +
         `Each cite is its own undo step, and Escape stops the pass.`,
@@ -304,10 +328,15 @@ async function reformatAllCites(
       // the document with the pass instead of jumping around the pool.
       if (!anchor || r.from < anchor.from) anchor = r;
     }
+    const progress = `reformatting cites · ${s.done} of ${total} rewritten`;
     tip.setStage(
       s.cancelled
         ? 'stopping after the cites in flight'
-        : `reformatting cites · ${s.done} of ${total} rewritten · Esc to stop`,
+        : backingOff.size > 0
+          ? // A bulk request waits out a provider backoff for up to a
+            // minute; without saying so the pass looks hung.
+            `${progress} · waiting out a rate limit · Esc to stop`
+          : `${progress} · Esc to stop`,
     );
     if (!anchor) return;
     if (tipShown) tip.setRange(anchor);
@@ -346,11 +375,18 @@ async function reformatAllCites(
     jobs.push({ target, lease, n: jobs.length + 1 });
   }
 
-  /** Next unclaimed job. Bumped before the await, so no two workers can
+  /** Next unclaimed job. Bumped before the await, so no two dispatches can
    *  take the same cite. */
   let next = 0;
   /** Failures since the last success — see FAILURE_STREAK_LIMIT. */
   let streak = 0;
+  /** Cites allowed in flight right now — see `adaptConcurrency`. */
+  let allowed = 1;
+  /** Jobs whose request is sleeping off a provider backoff, so the pill
+   *  says so instead of looking hung for up to a minute. Keyed by job and
+   *  cleared on EVERY exit path: a request that throttled and then failed
+   *  outright would otherwise leave the narration stuck on. */
+  const backingOff = new Set<CiteJob>();
   const stopped = (): boolean => s.cancelled || s.halted || aborted;
 
   const runJob = async (job: CiteJob): Promise<void> => {
@@ -372,7 +408,17 @@ async function reformatAllCites(
         apiKey,
         system: systemPrompt,
         messages: [{ role: 'user', content: job.target.text }],
+        // Bulk: wait out a long `retry-after` rather than failing the
+        // cite. The user authorized a job measured in minutes, and the
+        // tokens for a throttled request are already spent.
+        bulk: true,
+        onThrottle: () => {
+          backingOff.add(job);
+          refreshCues();
+        },
       });
+      backingOff.delete(job);
+      if (reply.throttled) allowed = adaptConcurrency(allowed, 'throttled');
       const parsed = parseCiteResponse(reply.text);
       // Apply at the lease's CURRENT bounds — a sibling cite's rewrite
       // or a user edit above this one has shifted them.
@@ -396,6 +442,9 @@ async function reformatAllCites(
       if (parsed.tokens.length > 0 && tr.getMeta(CITE_TOKENS_MARKED_META) === 0) s.unstyled++;
       s.done++;
       streak = 0;
+      // A clean reply earns one more slot. Nothing else does — a failure
+      // must never widen the pool.
+      if (!reply.throttled) allowed = adaptConcurrency(allowed, 'ok');
     } catch (e) {
       const msg = e instanceof LlmError ? e.message : e instanceof Error ? e.message : String(e);
       console.warn(`[cite-all] cite ${n} failed: ${msg}`);
@@ -408,6 +457,7 @@ async function reformatAllCites(
         aborted = true;
       }
     } finally {
+      backingOff.delete(job);
       inFlight.delete(job);
       tints.delete(job);
       tint.hide();
@@ -415,32 +465,35 @@ async function reformatAllCites(
     }
   };
 
-  /** One worker, draining the queue until it empties, the pass stops, or
-   *  `until` says this worker's job is done (the slow-start case). */
-  const worker = async (until?: () => boolean): Promise<void> => {
+  /** Dispatch loop. Keeps `allowed` cites in flight, refilling as each
+   *  lands, and re-reads `allowed` every pass so a ramp-up or a backoff
+   *  takes effect on the next slot rather than the next document. */
+  const dispatch = async (): Promise<void> => {
+    const live = new Map<number, Promise<void>>();
+    let id = 0;
     for (;;) {
       // Checked here so every failure path reaches it: a key, quota or
       // endpoint that is simply not working fails the same way on every
       // remaining cite, so stop once that is clear rather than walking
       // the whole document to prove it.
       if (streak >= FAILURE_STREAK_LIMIT) s.halted = true;
-      if (stopped() || until?.()) return;
-      const job = jobs[next];
-      if (!job) return;
-      next++;
-      await runJob(job);
+      while (live.size < allowed && next < jobs.length && !stopped()) {
+        const job = jobs[next++]!;
+        const slot = id++;
+        live.set(
+          slot,
+          runJob(job).finally(() => live.delete(slot)),
+        );
+      }
+      if (live.size === 0) return;
+      // Wake on the FIRST completion, not all of them: that is what lets
+      // the pool refill continuously instead of in lockstep waves.
+      await Promise.race(live.values());
     }
   };
 
   try {
-    // Slow start: one cite at a time until one comes back clean, so a
-    // pass that cannot work at all costs a single request. A failure
-    // does NOT open the pool — that is the whole point.
-    await worker(() => s.done > 0);
-    const pool = Math.min(MAX_IN_FLIGHT, jobs.length - next);
-    if (!stopped() && pool > 0) {
-      await Promise.all(Array.from({ length: pool }, () => worker()));
-    }
+    await dispatch();
   } finally {
     removeCancelKey();
     tip.hide();

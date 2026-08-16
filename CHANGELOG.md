@@ -10,17 +10,29 @@ see `DETAILED_CHANGELOG.md`.
 ### Changed
 
 - **Reformat Every Cite is much faster.** The whole-document cite
-  reformatter used to wait for each cite before starting the next one,
-  so a hundred-cite file meant a hundred round trips back to back. It
-  now works on several cites at once — the first one goes alone, and
-  once it comes back the pass keeps six moving — which cuts a long run
-  to a fraction of the time it took. Nothing else about it changes: the
-  same confirmation up front, the same number of requests, one undo step
-  per cite, **Esc** still stops it (after the cites already in flight),
-  and the same end-of-run summary. Cites are locked while the pass runs;
-  the ones being worked on right now are outlined, and the pill counts
-  rewrites as they land. If your key is dead or your quota is gone,
-  that still costs exactly one request to find out, not six.
+  reformatter used to wait for each cite before starting the next one, so
+  a hundred-cite file meant a hundred round trips back to back. It now
+  works on several cites at once, and it tunes itself: the first cite goes
+  alone, then the pass keeps speeding up for as long as your AI provider
+  keeps up, and eases off the moment it asks you to slow down. On a
+  twenty-cite document that took four and a half seconds instead of
+  eighteen. Nothing else about it changes: the same confirmation up front,
+  the same number of requests, one undo step per cite, **Esc** still stops
+  it (after the cites already in flight), and the same end-of-run summary.
+  Cites are locked while the pass runs; the ones being worked on right now
+  are outlined, and the pill counts rewrites as they land. If your key is
+  dead or your quota is gone, that still costs exactly one request to find
+  out.
+
+- **Whole-document AI passes are cheaper, and no longer give up when the
+  provider asks them to wait.** Every AI request now reuses its
+  instructions from the provider's cache instead of resending them, which
+  cuts what a long run costs against your API key by roughly ninety
+  percent and is what lets it run this fast in the first place. And when a
+  provider replies "slow down for thirty seconds", a whole-document pass
+  now waits it out — with the pill saying so — rather than counting that
+  cite as failed and wasting what it already paid for. Single commands
+  still fail fast instead of freezing on a keystroke.
 
 ## 1.0.1 — 2026-08-15
 
