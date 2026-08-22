@@ -305,6 +305,50 @@ happened, and the tokens the renderer mints when the user's Allow
 replays the insert have no reply left to travel on - the same honest
 cost `/insert-after` documents for its queued adds.
 
+### Fixed: a pasted heading keeps its id when the doc has let it go
+
+A provenance token resolves by heading UUID first and falls back to a
+text anchor (`src/editor/plugin-source-range.ts`). Paste destroyed the
+first half: `transformPasted` stamped a fresh `newHeadingId()` onto every
+pasted heading, so a Cmd+X / Cmd+V of a card - the ordinary way a line
+moves - orphaned the token's UUID and dropped resolution onto the anchor,
+whose stored prefix/suffix context is exactly what a move changes. The
+context gate then refused the match and `/replace` answered `not-found`
+with the line in plain sight. The same paste also broke the nav pane's
+position for that section and its docx bookmark.
+
+The unconditional restamp existed for a real reason - a copy must not
+duplicate an id - and for a mechanical one: `toDOM` writes `data-id` but
+`parseDOM.getAttrs` read only `indent`, so pasted headings arrived id-less
+and something had to fill them. Both are answered by asking the document
+instead of assuming. `readHeadingId` in `src/schema/nodes.ts` reads
+`data-id` back on all five heading types, and `dedupeHeadingIds`
+(`src/editor/drag-controller.ts`, replacing `freshHeadingIds`) keeps a
+pasted id when the target doc does not hold it and mints when it does.
+That one test separates a move from a copy without being told which
+happened: cut content is gone from the doc, so its ids are free; copied
+content is still there, so its ids are taken. A slice is also deduped
+against itself, so two pasted headings carrying one id do not both keep
+it, and an id-less heading is still stamped - the nav pane keys
+expand/collapse, jump and the level filter off the id, so a heading
+without one is inert.
+
+`reparseClipboardStructuralSlice` takes the doc for the same pass, and
+the linked-copy restore branch keeps using it: a same-doc copy collides
+with its still-live source and is minted fresh, which is what that branch
+wanted from `freshHeadingIds` in the first place.
+
+`tests/editor/source-token-across-a-move.test.ts` is the regression: a
+line sent in over `/insert`, cut, pasted lower, then rewritten through
+`/replace` - with the copy as the control, proving a duplicate does not
+capture the original's token. It fails on `resolveSourceRange` returning
+null with the `parseDOM` half reverted.
+
+**Undertags and cites still move by anchor alone.** They carry no id, so
+a token naming one resolves only through its text anchor and a move can
+still lose it. Giving them ids is a schema change with a docx bookmark
+story of its own, and is not done here.
+
 ## 1.3.0 — 2026-08-20
 
 ### Added: citeTokens on the insert bridge (styled external cites)

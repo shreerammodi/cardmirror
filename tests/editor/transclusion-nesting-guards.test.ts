@@ -19,7 +19,7 @@ import {
   isZoneEdited,
   isTransclusionNode,
 } from '../../src/editor/transclusion.js';
-import { freshHeadingIds, rewriteHeadingIds } from '../../src/editor/drag-controller.js';
+import { dedupeHeadingIds, rewriteHeadingIds } from '../../src/editor/drag-controller.js';
 import {
   createSelfRefNode,
   isSelfRef,
@@ -66,12 +66,14 @@ function cardIds(node: PMNode): string[] {
 }
 
 describe('issue 4 — a copied/pasted UNEDITED linked copy is not shown as edited', () => {
-  it('freshHeadingIds re-baselines an unedited zone (ids change, edited=false)', () => {
+  it('the paste id pass re-baselines an unedited zone (ids change, edited=false)', () => {
     const original = uneditedCopy([card('A', 'a'), card('B', 'b')]);
     expect(isZoneEdited(original)).toBe(false);
     const slice = new Slice(Fragment.fromArray([original]), 0, 0);
 
-    const out = freshHeadingIds(slice);
+    // A copy: the source is still in the doc, so its ids are taken and the
+    // pasted zone's cards get new ones.
+    const out = dedupeHeadingIds(slice, schema.nodes['doc']!.create(null, [original]));
     const pasted = firstZone(out.content)!;
     // The internal card ids were genuinely rewritten (no collision with the source)…
     expect(cardIds(pasted)).not.toEqual(cardIds(original));
@@ -93,7 +95,10 @@ describe('issue 4 — a copied/pasted UNEDITED linked copy is not shown as edite
       content,
     );
     expect(isZoneEdited(edited)).toBe(true);
-    const out = freshHeadingIds(new Slice(Fragment.fromArray([edited]), 0, 0));
+    const out = dedupeHeadingIds(
+      new Slice(Fragment.fromArray([edited]), 0, 0),
+      schema.nodes['doc']!.create(null, [edited]),
+    );
     expect(isZoneEdited(firstZone(out.content)!)).toBe(true);
   });
 });

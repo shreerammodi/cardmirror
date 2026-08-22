@@ -392,6 +392,23 @@ current format starts with the `cmsrc1` prefix. The token is opaque:
   tokens. A future format change bumps the prefix, and old tokens stay
   valid.
 
+What a token survives, and what it does not:
+
+- **The line being rewritten in CardMirror, or moved.** A heading kind -
+  pocket, hat, block, tag, analytic - carries a stable id, so retyping
+  the line, or cutting and pasting the card somewhere else in the same
+  document, leaves the token resolving. Copying it does not retarget the
+  token: a copy is a new card with a new id, and the token keeps naming
+  the original.
+- **An undertag or a cite has no id**, so a token naming one resolves by
+  its text and the context around it. That survives a rewrite of nearby
+  text, but a move can lose it, and the answer is then `not-found`.
+- **Deleting the line loses it**, which is the honest answer:
+  `not-found`.
+- **A move to a DIFFERENT document loses it.** A token names one
+  document, and the routes refuse a token whose document is not the one
+  they resolve against.
+
 ## 4. The cardmirror-bridge handshake
 
 This section and section 5 are the frozen cross-app contract. Flowing

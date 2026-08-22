@@ -57,6 +57,20 @@ see `DETAILED_CHANGELOG.md`.
   External apps, and nothing changes at all if you don't use a companion
   app.
 
+### Fixed
+
+- **Cutting and pasting a card no longer loses what a companion app
+  knows about it.** Every paste used to give the pasted headings brand
+  new identities, which is right when you copy something - the copy is a
+  new card - but wrong when you move it: your nav position for that
+  section, its docx bookmark, and any line a flowing app had received
+  from you all pointed at a card the document no longer admitted to
+  having. A flowing app's next edit to that line came back "not found"
+  even though the line was on screen. A pasted card now keeps its
+  identity when the document is not already holding it - which is
+  exactly the case where you moved it - and still takes a new one when
+  it is, so copies stay separate cards.
+
 ## 1.3.0 — 2026-08-20
 
 ### Added

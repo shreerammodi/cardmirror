@@ -114,6 +114,22 @@ function readIndentFromStyle(dom: HTMLElement): number {
   return Math.max(0, Math.round(parseFloat(m[1]!) * 15));
 }
 
+/** Read a heading's stable id back out of its rendered HTML.
+ *
+ *  `toDOM` writes `data-id` on every heading, so our own markup carries
+ *  the id through a clipboard round-trip; without this reader the parser
+ *  dropped it and every paste of a heading became a heading nobody had
+ *  seen before. What decides whether the pasted id is KEPT is the paste
+ *  transform (`paste-plugin.ts`), which mints a fresh one when the id is
+ *  already live in the target doc - a copy - and keeps it when it is not -
+ *  a move. This only reads what is there.
+ *
+ *  Empty means absent: `toDOM` writes `data-id=""` for a heading that has
+ *  no id yet, and external HTML has no business naming our headings. */
+function readHeadingId(dom: HTMLElement): string | null {
+  return dom.getAttribute('data-id') || null;
+}
+
 /**
  * Per-card `contain-intrinsic-height` estimate, emitted as an inline
  * style by the `card` / `analytic_unit` toDOM.
@@ -560,7 +576,10 @@ export const nodes: { [name: string]: NodeSpec } = {
     defining: true,
     parseDOM: [{
       tag: 'h1.pmd-pocket',
-      getAttrs: (dom: HTMLElement) => ({ indent: readIndentFromStyle(dom) }),
+      getAttrs: (dom: HTMLElement) => ({
+        id: readHeadingId(dom),
+        indent: readIndentFromStyle(dom),
+      }),
     }],
     toDOM: (node) => {
       const attrs: Record<string, string> = {
@@ -579,7 +598,10 @@ export const nodes: { [name: string]: NodeSpec } = {
     defining: true,
     parseDOM: [{
       tag: 'h2.pmd-hat',
-      getAttrs: (dom: HTMLElement) => ({ indent: readIndentFromStyle(dom) }),
+      getAttrs: (dom: HTMLElement) => ({
+        id: readHeadingId(dom),
+        indent: readIndentFromStyle(dom),
+      }),
     }],
     toDOM: (node) => {
       const attrs: Record<string, string> = {
@@ -599,6 +621,7 @@ export const nodes: { [name: string]: NodeSpec } = {
     parseDOM: [{
       tag: 'h3.pmd-block',
       getAttrs: (dom: HTMLElement) => ({
+        id: readHeadingId(dom),
         indent: readIndentFromStyle(dom),
         // Default is restart (true); only a "continue" block carries the attr.
         numRestart: dom.getAttribute('data-num-restart') !== 'false',
@@ -680,7 +703,10 @@ export const nodes: { [name: string]: NodeSpec } = {
     defining: true,
     parseDOM: [{
       tag: 'h4.pmd-tag',
-      getAttrs: (dom: HTMLElement) => ({ indent: readIndentFromStyle(dom) }),
+      getAttrs: (dom: HTMLElement) => ({
+        id: readHeadingId(dom),
+        indent: readIndentFromStyle(dom),
+      }),
     }],
     toDOM: (node) => {
       const attrs: Record<string, string> = {
@@ -737,7 +763,10 @@ export const nodes: { [name: string]: NodeSpec } = {
     defining: true,
     parseDOM: [{
       tag: 'p.pmd-analytic',
-      getAttrs: (dom: HTMLElement) => ({ indent: readIndentFromStyle(dom) }),
+      getAttrs: (dom: HTMLElement) => ({
+        id: readHeadingId(dom),
+        indent: readIndentFromStyle(dom),
+      }),
     }],
     toDOM: (node) => {
       const attrs: Record<string, string> = {

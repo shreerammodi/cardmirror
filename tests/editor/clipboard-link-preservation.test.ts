@@ -10,7 +10,7 @@ import { EditorState } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { DOMSerializer, DOMParser as PMDOMParser, Fragment, type Node as PMNode } from 'prosemirror-model';
 import { schema, newHeadingId } from '../../src/schema/index.js';
-import { freshHeadingIds } from '../../src/editor/drag-controller.js';
+import { dedupeHeadingIds } from '../../src/editor/drag-controller.js';
 import { createSelfRefNode, isSelfRef, flattenSelfRefsInSlice } from '../../src/editor/self-transclusion.js';
 import { createTransclusionNode, isTransclusionNode, SELF_SOURCE_REF } from '../../src/editor/transclusion.js';
 import {
@@ -131,10 +131,10 @@ describe('same-doc paste keeps the link; cross-doc flattens', () => {
     const clipboard = flattenSelfRefsInSlice(original, docA, newHeadingId);
     rememberLinkedCopy(original, viewA, clipboard);
 
-    // Same-doc paste path: recall → freshHeadingIds (what transformPasted does).
+    // Same-doc paste path: recall then settle ids (what transformPasted does).
     const restored = recallLinkedCopy(viewA, clipboardRoundTrip(clipboard))!;
     expect(restored).toBe(original);
-    const pastedContent = freshHeadingIds(restored);
+    const pastedContent = dedupeHeadingIds(restored, docA);
     // The live view and the linked copy both survive with their links intact.
     expect(hasSelfRef(pastedContent.content), 'live view kept').toBe(true);
     expect(hasZoneWithSource(pastedContent.content, SELF_SOURCE_REF), 'copy link kept').toBe(true);

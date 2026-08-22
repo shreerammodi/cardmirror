@@ -537,16 +537,44 @@ export function rewriteHeadingIds(slice: Slice): Slice {
   );
 }
 
-/** Assign a fresh `newHeadingId()` to EVERY id-bearing node, regardless
- *  of its current value (including the default `null`). Used by paste:
- *  PM's clipboard parser drops `data-id` (our `parseDOM.getAttrs` only
- *  reads `indent`), so pasted pockets/hats/blocks/tags arrive with
- *  `id: null` — and the nav pane keys expand/collapse, jump, and the
- *  1/2/3/4 level filter off the id, so id-less headings are inert.
- *  Filling ids on paste keeps the workspace id-uniqueness invariant
- *  (ARCHITECTURE §4 / §12) the same way the copy paths do. */
-export function freshHeadingIds(slice: Slice): Slice {
-  return mapSliceIds(slice, (node) => !!node.attrs && 'id' in node.attrs);
+/** Every heading id `doc` currently holds, mirrored subtrees included:
+ *  uniqueness is a property of the whole document. */
+function liveHeadingIds(doc: PMNode): Set<string> {
+  const ids = new Set<string>();
+  doc.descendants((node) => {
+    const id = node.attrs?.['id'];
+    if (typeof id === 'string' && id) ids.add(id);
+    return true;
+  });
+  return ids;
+}
+
+/** Keep a pasted heading's id when `doc` does not already hold it, and
+ *  mint a fresh one when it does. Used by paste.
+ *
+ *  That one test separates a MOVE from a COPY without having to be told
+ *  which happened: content that was cut is gone from the doc, so its ids
+ *  are free and the pasted headings are the same headings they were -
+ *  which is what keeps a nav position, a docx bookmark, and an outside
+ *  app's provenance token pointing at a line the user only moved. Content
+ *  that was copied is still there, so its ids are taken and the paste
+ *  gets new ones, which is the id-uniqueness invariant (ARCHITECTURE §4 /
+ *  §12) the copy paths hold to as well.
+ *
+ *  An id-less heading is stamped either way: the nav pane keys
+ *  expand/collapse, jump, and the 1/2/3/4 level filter off the id, so a
+ *  heading without one is inert. A second pasted heading carrying an id
+ *  the first one just kept is minted too - the slice has to come out
+ *  unique against itself, not only against the doc. */
+export function dedupeHeadingIds(slice: Slice, doc: PMNode): Slice {
+  const taken = liveHeadingIds(doc);
+  return mapSliceIds(slice, (node) => {
+    if (!node.attrs || !('id' in node.attrs)) return false;
+    const id = node.attrs['id'];
+    if (typeof id !== 'string' || !id || taken.has(id)) return true;
+    taken.add(id);
+    return false;
+  });
 }
 
 function mapSliceIds(slice: Slice, assign: (node: PMNode) => boolean): Slice {

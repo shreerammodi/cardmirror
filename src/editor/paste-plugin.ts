@@ -50,7 +50,7 @@ import {
 } from 'prosemirror-model';
 import type { EditorView } from 'prosemirror-view';
 import { schema, newHeadingId } from '../schema/index.js';
-import { freshHeadingIds } from './drag-controller.js';
+import { dedupeHeadingIds } from './drag-controller.js';
 import { condenseBranchC, condenseMerge } from './condense.js';
 import { buildImageNodeFromBlob, insertImageNode } from './image-insert.js';
 import { fragmentHasZone, flattenZonesInSlice, enclosingZonePos } from './transclusion.js';
@@ -458,23 +458,25 @@ export function buildPastePlugin(ctx: PastePluginCtx): Plugin<PluginState> {
       },
     },
     props: {
-      // Stamp every pasted heading with a fresh unique id. The clipboard
-      // parser drops `data-id` (our `parseDOM.getAttrs` reads only
-      // `indent`), so headings arrive with `id: null`; the nav pane keys
-      // expand/collapse, jump, and the 1/2/3/4 level filter off the id,
-      // so id-less pasted pockets/hats/blocks/tags would be inert. Runs
+      // Settle every pasted heading's id: kept when this document does not
+      // already hold it, freshly minted when it does (`dedupeHeadingIds`).
+      // A cut and pasted heading is the same heading in a new place, so its
+      // id travels with it and everything keyed off that id - the nav pane's
+      // expand/collapse, jump, the 1/2/3/4 level filter, a docx bookmark, an
+      // outside app's provenance token - keeps pointing at the line the user
+      // moved; a copy collides with its own source and gets a new one. Runs
       // inside PM's `parseFromClipboard`, before `handlePaste` sees the
-      // slice, so the split / card-body paths below also get fresh ids.
+      // slice, so the split / card-body paths below get settled ids too.
       //
       // Layout-table unwrap runs in the same hook so head-detect /
       // card-body fitting downstream see content that's already been
       // lifted out of any single-cell wrapping table.
       transformPasted(slice, view) {
         // Same-doc paste of our own live view / linked copy: restore the link-
-        // bearing original (fresh heading ids so the pasted cards don't collide
-        // with the source — freshHeadingIds leaves the source-ref attrs alone, so
-        // the link survives). A cross-doc / external paste falls through and gets
-        // the flattened clipboard content.
+        // bearing original. The id pass leaves the source-ref attrs alone, so
+        // the link survives; the cards themselves collide with the still-live
+        // source and are minted fresh. A cross-doc / external paste falls
+        // through and gets the flattened clipboard content.
         //
         // EXCEPT when the paste lands INSIDE a live zone: a nested transclusion
         // would stack two rails updating from different sources. There we skip the
@@ -485,10 +487,14 @@ export function buildPastePlugin(ctx: PastePluginCtx): Plugin<PluginState> {
         if (!intoZone) {
           const linked = recallLinkedCopy(view, slice);
           if (linked) {
-            return healHeadlessContainersInSlice(freshHeadingIds(unwrapSingleCellTables(linked)));
+            return healHeadlessContainersInSlice(
+              dedupeHeadingIds(unwrapSingleCellTables(linked), view.state.doc),
+            );
           }
         }
-        const out = healHeadlessContainersInSlice(freshHeadingIds(unwrapSingleCellTables(slice)));
+        const out = healHeadlessContainersInSlice(
+          dedupeHeadingIds(unwrapSingleCellTables(slice), view.state.doc),
+        );
         if (!fragmentHasZone(out.content)) return out;
         // Any zone content on the clipboard pastes as a PLAIN cached copy (its
         // cards), never a live link. A partial in-zone copy shouldn't drag the
@@ -616,7 +622,9 @@ export function buildPastePlugin(ctx: PastePluginCtx): Plugin<PluginState> {
         // wants, so compute it once, lazily.
         let reparsed: Slice | null | undefined;
         const getReparsed = (): Slice | null => {
-          if (reparsed === undefined) reparsed = reparseClipboardStructuralSlice(event);
+          if (reparsed === undefined) {
+            reparsed = reparseClipboardStructuralSlice(event, view.state.doc);
+          }
           return reparsed;
         };
 
@@ -1180,12 +1188,15 @@ function fitBlocks(
  * head flattened to inline content (it can, when fitting the slice to a
  * `card_body`'s `inline*` rule), so `tryPasteSplitContainer` can still recover
  * the true structure. Re-applies the plugin's `transformPasted` normalization
- * (fresh heading ids + single-cell-table unwrap), which the raw re-parse
- * bypasses. Returns null when there's no HTML or no DOM (headless).
+ * (heading-id dedupe against `doc` + single-cell-table unwrap), which the raw
+ * re-parse bypasses. Returns null when there's no HTML or no DOM (headless).
  *
  * Exported for tests.
  */
-export function reparseClipboardStructuralSlice(event: ClipboardEvent): Slice | null {
+export function reparseClipboardStructuralSlice(
+  event: ClipboardEvent,
+  doc: PMNode,
+): Slice | null {
   if (typeof document === 'undefined') return null;
   const html = event.clipboardData?.getData('text/html') ?? '';
   if (!html) return null;
@@ -1193,5 +1204,5 @@ export function reparseClipboardStructuralSlice(event: ClipboardEvent): Slice | 
   wrap.innerHTML = html;
   const parsed = PMDOMParser.fromSchema(schema).parseSlice(wrap);
   if (parsed.content.childCount === 0) return null;
-  return freshHeadingIds(unwrapSingleCellTables(parsed));
+  return dedupeHeadingIds(unwrapSingleCellTables(parsed), doc);
 }

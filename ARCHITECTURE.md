@@ -140,13 +140,18 @@ guarded) plus in-document linked copies. On export every copy freezes to a plain
 snapshot (no transclusion identity in the docx). Pushing a source file's *live*
 edits into its copies over a sync layer is a deliberate non-goal.
 
-IDs are reassigned on every path that brings content *in* — paste,
-drag-copy, send-to-speech, import — so duplicating a section never
-duplicates an id. The id serializes to `data-id` in our HTML but is
-deliberately not read back by `parseDOM`, so clipboard/import content
-arrives id-less and gets a fresh one. In docx it round-trips as a
-bracketing `<w:bookmarkStart>`/`<w:bookmarkEnd>` pair — Word's native
-mechanism for stable named locations, well tolerated by Verbatim.
+IDs are reassigned on every path that DUPLICATES content — drag-copy,
+send-to-speech, import — so copying a section never duplicates an id.
+Paste is the one path that asks first: the id serializes to `data-id` in
+our HTML and is read back by `parseDOM`, and a pasted heading keeps its
+id when the target document does not already hold it, taking a fresh one
+when it does. That single test tells a move from a copy without being
+told which happened — cut content's ids are free, copied content's are
+taken — which is what lets a cut-and-pasted line keep its nav position,
+its docx bookmark, and any provenance token an outside app holds on it.
+In docx the id round-trips as a bracketing
+`<w:bookmarkStart>`/`<w:bookmarkEnd>` pair — Word's native mechanism for
+stable named locations, well tolerated by Verbatim.
 
 ### Card numbering (display-only)
 
