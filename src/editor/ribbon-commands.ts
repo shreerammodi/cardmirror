@@ -4849,6 +4849,7 @@ export type RibbonCommandId =
   // Arm/disarm Morph mode (the Sensel control-surface interpreter).
   // No default key — bind via Settings, or run from the command bar.
   | 'toggleMorphMode'
+  | 'toggleVimMode'
   // Open an earlier state of a co-edited document as its own unsaved
   // copy, from the session-history file. No default key.
   | 'recoverPreviousVersion'
@@ -5114,6 +5115,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'switchWindow',
   'openJournalsFolder',
   'toggleMorphMode',
+  'toggleVimMode',
   'recoverPreviousVersion',
   'cycleTheme',
   'cycleTimerPreset',
@@ -5343,6 +5345,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   switchWindow: 'Switch Window',
   openJournalsFolder: 'Open Crash-Recovery Journals Folder',
   toggleMorphMode: 'Toggle Morph Mode',
+  toggleVimMode: 'Toggle Vim Mode',
   recoverPreviousVersion: 'Recover Previous Version',
   cycleTheme: 'Cycle Theme (Light → Dark → System)',
   cycleTimerPreset: 'Cycle Timer Preset (College → High School → Pomodoro)',
@@ -5402,6 +5405,7 @@ export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly st
   switchWindow: ['alt tab', 'go to window', 'jump to window', 'other window', 'window switcher', 'next window'],
   openJournalsFolder: ['crash', 'recovery', 'journal', 'restore', 'lost work', 'autosave folder'],
   toggleMorphMode: ['morph', 'sensel', 'control surface', 'jog wheel', 'overlay'],
+  toggleVimMode: ['vim', 'vi', 'modal', 'normal mode', 'hjkl'],
   recoverPreviousVersion: ['history', 'version', 'restore', 'rollback', 'vandalism', 'session history'],
   collabStartSession: ['collaborate', 'coedit', 'co-edit', 'share session', 'live edit'],
   collabJoinSession: ['join session', 'rejoin session', 'resume session', 'recent sessions', 'share code', 'coedit'],
@@ -5831,6 +5835,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   switchWindow: 'Mod-Tab',
   openJournalsFolder: '',
   toggleMorphMode: '',
+  toggleVimMode: '',
   recoverPreviousVersion: '',
   cycleTheme: '',
   cycleTimerPreset: '',
@@ -6120,6 +6125,8 @@ export interface RibbonContext {
   openJournalsFolder: () => void;
   /** Arm/disarm Morph mode (Sensel control-surface interpreter). */
   toggleMorphMode: () => void;
+  /** Turn Vim mode (modal editing) on or off. */
+  toggleVimMode: () => void;
   /** Open an earlier state of a co-edited doc as its own unsaved copy. */
   recoverPreviousVersion: () => void;
   /** Cycle the theme setting light → dark → system → light. */
@@ -6259,6 +6266,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   switchWindow: () => {},
   openJournalsFolder: () => {},
   toggleMorphMode: () => {},
+  toggleVimMode: () => {},
   recoverPreviousVersion: () => {},
   cycleTheme: () => {},
   cycleTimerPreset: () => {},
@@ -7190,6 +7198,12 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return (_state, dispatch) => {
         if (!dispatch) return true;
         ctx.toggleMorphMode();
+        return true;
+      };
+    case 'toggleVimMode':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.toggleVimMode();
         return true;
       };
     case 'recoverPreviousVersion':

@@ -15855,6 +15855,47 @@ body.pmd-multi-doc .pmd-cardcutter-trim {
   display: flex;
   cursor: default;
 }
+
+/* Vim mode: the mode chip, and the normal-mode block cursor (an inline
+   decoration on the character after the caret). The outline is what
+   keeps the cursor visible on highlighted text, whose own background
+   paints over this one. */
+.pmd-vim-chip {
+  position: fixed;
+  bottom: calc(var(--status-bar-height) + 3.25rem);
+  right: 0.5rem;
+  z-index: 220;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.4rem 0.25rem 0.55rem;
+  font-size: 0.78rem;
+  color: var(--pmd-c-text-muted);
+  background: var(--pmd-c-surface-soft);
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px var(--pmd-c-shadow-fade);
+  user-select: none;
+}
+.pmd-vim-chip-badge { font-weight: 600; }
+.pmd-vim-chip-echo {
+  font-family: ui-monospace, monospace;
+  color: var(--pmd-c-text);
+}
+.pmd-vim-chip-off {
+  display: flex;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+}
+.pmd-vim-chip-off:hover { color: var(--pmd-c-text); }
+.pmd-vim-cursor {
+  background: color-mix(in srgb, var(--pmd-c-text) 28%, transparent);
+  outline: 1px solid var(--pmd-c-text);
+  outline-offset: -1px;
+}
 .pmd-morph-chip-gear {
   flex: 0 0 auto;
   border: none;

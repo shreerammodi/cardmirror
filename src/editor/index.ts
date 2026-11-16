@@ -287,6 +287,7 @@ import { footnotePopoverPlugin } from './footnote-popover.js';
 import { readModeCopyPlugin } from './read-mode-copy.js';
 import { wordSelectionKeymap } from './word-selection-keymap.js';
 import { morphModePlugin, toggleMorphMode } from './morph-mode.js';
+import { vimModePlugin, toggleVimMode } from './vim-mode.js';
 import { highlightFrequencyPlugin } from './highlight-frequency-plugin.js';
 import { editorDragSurface } from './drag-editor-surface.js';
 import { dragController } from './drag-controller.js';
@@ -2348,6 +2349,9 @@ const ribbonContext: RibbonContext = {
   },
   toggleMorphMode: () => {
     toggleMorphMode();
+  },
+  toggleVimMode: () => {
+    toggleVimMode();
   },
   recoverPreviousVersion: () => {
     // Mode-aware opener: three-pane mounts the recovered copy into a
@@ -5714,6 +5718,10 @@ installCutInPlaceContext({
 
 export function buildEditorPlugins(targetUid?: string | null): Plugin[] {
   const plugins: Plugin[] = [
+    // Vim mode (modal editing). Ahead of EVERYTHING that handles keys:
+    // normal mode must swallow bare keys before any keymap, recorder or
+    // input rule sees them. Inert until turned on (toggleVimMode).
+    vimModePlugin({ buildCommand: (id) => getRibbonCommand(id, ribbonContext) }),
     // First so its `editable` / read-mode tap-marker props win on the
     // mobile shell; a no-op everywhere else (the active flag is set
     // once at boot, before any view mounts).

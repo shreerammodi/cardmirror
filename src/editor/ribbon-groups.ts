@@ -225,6 +225,7 @@ export const RIBBON_GROUPS: RibbonGroup[] = [
 
       'aiCitePromptPreset10',
       'toggleMorphMode',
+      'toggleVimMode',
       'wordCountSelection',
       'openSettings',
       'cycleTheme',
